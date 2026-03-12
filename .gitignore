@@ -2,6 +2,7 @@
 debug/
 target/
 **/*.rs.bk
+Cargo.lock
 
 # macOS
 .DS_Store
@@ -13,19 +14,30 @@ target/
 .vscode/
 *.swp
 *.swo
+*~
 
 # Secrets
 .env
+.env.*
 
 # Claude Code
 .claude/
 
 # Build output
 output/
+lc_audio/
 
-# Docs (keep README.md only)
+# Private content
+prompts/
+configs/
+!configs/example_tree.yaml
+app/
+
+# Docs (keep only README_public.md and architecture docs)
 *.md
-!README.md
+!README_public.md
+!architecture.mmd
+!architecture_sequence.mmd
 
 # Misc
 test_parse.rs
