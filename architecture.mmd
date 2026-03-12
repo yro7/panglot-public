@@ -1,0 +1,521 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#2d3748', 'primaryTextColor': '#fff', 'lineColor': '#4a5568', 'secondaryColor': '#edf2f7', 'tertiaryColor': '#e2e8f0'}}}%%
+
+classDiagram
+    direction TB
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: lc_core — Traits & Foundational Types
+    %% ═══════════════════════════════════════════════════════════════
+
+    class Language {
+        <<trait · lc_core>>
+        +type PoS : Debug + Clone + Serialize + VariantNames + JsonSchema
+        +type ExtraFields : JsonSchema + Debug + Clone + Serialize
+        +iso_code() IsoLang
+        +name() &str
+        +supported_scripts() &[Script]
+        +default_script() Script
+        +extraction_directives() &str
+        +generation_directives() Option~&str~
+        +pos_descriptions() &str
+        +ipa_strategy() IpaConfig
+        +tts_strategy() TtsConfig
+    }
+
+    class CardModel {
+        <<trait · lc_core>>
+        +template_name() &str
+        +explanation() String
+        +to_fields() HashMap~String String~
+    }
+
+    class ToFields {
+        <<trait · lc_core>>
+        +to_fields() HashMap~String String~
+    }
+
+    class IntoFieldString {
+        <<trait · lc_core>>
+        +into_field_string() Option~String~
+    }
+
+    class Script {
+        <<newtype · lc_core>>
+        -inner: &'static str
+        +LATN  +HANI  +HIRA  +KANA  +CYRL
+    }
+
+    class IpaConfig {
+        <<enum · lc_core>>
+        Epitran(&'static str)
+        Custom(&'static str)
+        None
+    }
+
+    class TtsConfig {
+        <<enum · lc_core>>
+        Edge ⏐ voice: &'static str ⏐
+        None
+    }
+
+    class LexiconEntry~P~ {
+        <<lc_core>>
+        +word: String
+        +pos: P
+    }
+
+    class CardMetadata~P~ {
+        <<lc_core>>
+        +card_id: String
+        +skill_id: String
+        +pedagogical_explanation: String
+        +features: Vec~LexiconEntry~P~~
+        +ipa: Option~String~
+        +audio_file: Option~String~
+    }
+
+    class UserProfile {
+        <<lc_core>>
+        +ui_language: String
+        +linguistic_background: Vec~KnownLanguage~
+    }
+
+    class KnownLanguage {
+        <<lc_core>>
+        +iso_639_3: String
+        +level: FluencyLevel
+    }
+
+    class FluencyLevel {
+        <<enum · lc_core>>
+        Beginner
+        Intermediate
+        Advanced
+        Fluent
+        Native
+    }
+
+    class NoExtraFields {
+        <<unit struct · lc_core>>
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: langs — Language Implementations
+    %% ═══════════════════════════════════════════════════════════════
+
+    class Polish {
+        <<ZST · langs>>
+        PoS = PolishPos
+        ExtraFields = NoExtraFields
+        scripts: [LATN]
+        ipa: Epitran("pol-Latn")
+        tts: Edge("pl-PL-ZofiaNeural")
+    }
+
+    class PolishPos {
+        <<enum · langs>>
+        Noun · Verb · Adjective · Adverb
+        Pronoun · Numeral · Preposition
+        Conjunction · Particle · Interjection
+    }
+
+    class Japanese {
+        <<ZST · langs>>
+        PoS = JapanesePos
+        ExtraFields = JapaneseExtraFields
+        scripts: [HANI, HIRA, KANA]
+        ipa: None
+        tts: None
+    }
+
+    class JapanesePos {
+        <<enum · langs>>
+        Meishi · Doushi
+        IKeiyoushi · NaKeiyoushi
+        Joshi · Jodoushi · Fukushi
+        Rentaishi · Setsuzokushi
+    }
+
+    class JapaneseExtraFields {
+        <<langs>>
+        +context_disambiguation: String
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: engine — Pipeline, LLM, Card Models
+    %% ═══════════════════════════════════════════════════════════════
+
+    class LlmClient {
+        <<trait async · engine>>
+        +chat_completion(req: &LlmRequest) Result~String~
+    }
+
+    class OpenAiClient {
+        <<engine>>
+        -api_key: String
+        -base_url: String
+        -model: String
+        -client: reqwest::Client
+        +from_env() Result~Self~
+    }
+
+    class MockLlmClient {
+        <<test double · engine>>
+    }
+
+    class LlmRequest {
+        <<engine>>
+        +messages: Vec~ChatMessage~
+        +temperature: f32
+        +max_tokens: Option~u32~
+        +response_schema: Option~Value~
+    }
+
+    class ChatMessage {
+        <<engine>>
+        +role: Role
+        +content: String
+    }
+
+    class Role {
+        <<enum · engine>>
+        System · User · Assistant
+    }
+
+    %% ─── Card models ─────────────────────────
+
+    class CardModelId {
+        <<enum · engine>>
+        ClozeTest
+        WrittenComprehension
+        OralComprehension
+    }
+
+    class CommonCardFront {
+        <<engine>>
+        +translation: String
+        +ipa: Option~String~
+        +transliteration: Option~String~
+    }
+
+    class ClozeTest {
+        <<engine>>
+        +sentence: String
+        +targets: Vec~String~
+        +hint: Option~String~
+        +common: CommonCardFront
+    }
+
+    class WrittenComprehension {
+        <<engine>>
+        +text_prompt: String
+        +transcript: String
+        +common: CommonCardFront
+    }
+
+    class OralComprehension {
+        <<engine>>
+        +audio_media: String
+        +transcript: String
+        +common: CommonCardFront
+    }
+
+    class AnyCard {
+        <<enum · engine>>
+        ClozeTest(ClozeTest)
+        WrittenComprehension(WrittenComprehension)
+        OralComprehension(OralComprehension)
+        +schema_for~L~(id) Result~String~
+        +parse~L~(id, json) Result~(Self, ExtraFields)~
+        +speakable_text() Option~String~
+    }
+
+    %% ─── Skill Tree ──────────────────────────
+
+    class SkillTree~L~ {
+        <<engine>>
+        +language: L
+        +root: SkillNode
+        +find_node(id) Option~&SkillNode~
+        +get_node_path(id) Option~String~
+        +leaf_nodes() Vec~String~
+    }
+
+    class SkillNode {
+        <<engine>>
+        +id: String
+        +name: String
+        +node_instructions: Option~String~
+        +children: Vec~SkillNode~
+    }
+
+    class SkillTreeConfig {
+        <<Deserialize · engine>>
+        +language_name: String
+        +root: SkillNodeConfig
+    }
+
+    %% ─── Generation Pipeline ─────────────────
+
+    class GenerationRequest~L~ {
+        <<engine>>
+        +card_model_id: CardModelId
+        +num_cards: u32
+        +difficulty: u8
+        +user_profile: UserProfile
+        +user_prompt: Option~String~
+        +transliteration: Option~String~
+        +injected_vocabulary: Vec~LexiconEntry~
+    }
+
+    class Pipeline~L~ {
+        <<engine>>
+        +tree: SkillTree~L~
+        -llm_client: Box~dyn LlmClient~
+        -early_processors: Vec~Box~dyn EarlyPostProcessor~~
+        -late_processors: Vec~Box~dyn LatePostProcessor~~
+        -validators: Vec~Box~dyn CardValidator~~
+        +generate_deck(node_id, req, path, sem) Result~usize~
+        +generate_cards_batch(node_id, req, sem) Result~Vec~GeneratedCard~~
+    }
+
+    class GeneratedCard~P~ {
+        <<engine>>
+        +model: AnyCard
+        +metadata: CardMetadata~P~
+    }
+
+    class EarlyPostProcessor~L~ {
+        <<trait async · engine>>
+        +process(lang, card_id, model, extra) Result~EarlyPostProcessResult~
+    }
+
+    class LatePostProcessor~L~ {
+        <<trait async · engine>>
+        +process(lang, model, extra, metadata) Result~()~
+    }
+
+    class CardValidator~L~ {
+        <<trait async · engine>>
+        +validate(lang, model, extra) Result~() String~
+    }
+
+    class EarlyPostProcessResult {
+        <<engine>>
+        +ipa: Option~String~
+        +audio_file: Option~String~
+    }
+
+    class FeatureExtractionResponse~P~ {
+        <<engine>>
+        +pedagogical_explanation: String
+        +features: Vec~LexiconEntry~P~~
+    }
+
+    class TtsGenerator {
+        <<EarlyPostProcessor · engine>>
+        subprocess: edge-tts Python
+    }
+
+    class IpaGenerator {
+        <<EarlyPostProcessor · engine>>
+        subprocess: epitran Python
+    }
+
+    class GeneratorContext~L~ {
+        <<engine>>
+        +language: &L
+        +skill_node: &SkillNode
+        +node_path: &str
+        +request: &GenerationRequest~L~
+        +generate_prompt() LlmRequest
+    }
+
+    class FeatureExtractorContext~L~ {
+        <<engine>>
+        +language: &L
+        +skill_node: &SkillNode
+        +card_json: &str
+        +generate_prompt() LlmRequest
+    }
+
+    %% ─── Analysis ────────────────────────────
+
+    class LexiconTracker~P~ {
+        <<engine>>
+        +profiles: HashMap~String WordProfile~
+    }
+
+    class WordProfile~P~ {
+        <<engine>>
+        +word: String
+        +pos: P
+        +mastered_skills: HashSet~String~
+        +struggling_skills: HashSet~String~
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: anki_bridge — Deck Building & Repository
+    %% ═══════════════════════════════════════════════════════════════
+
+    class DeckBuilder~P~ {
+        <<anki_bridge>>
+        +deck_name: String
+        -cards: Vec~AnkiCardEntry~
+        +new(deck_name) Self
+        +add_card(model, metadata) Result~()~
+        +card_count() usize
+        +export_apkg(path) Result~()~
+    }
+
+    class AnkiRepository {
+        <<trait · anki_bridge>>
+        +fetch_cards() Result~Vec~RawAnkiCard~~
+    }
+
+    class RawAnkiCard {
+        <<anki_bridge>>
+        +note_id: i64
+        +card_id: i64
+        +fields: String
+        +tags: String
+        +interval: i32
+        +lapses: i32
+        +is_mature() bool
+        +is_leech() bool
+    }
+
+    class SqliteAnkiRepository {
+        <<anki_bridge>>
+        -db_path: String
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: app — Actix-web HTTP Server
+    %% ═══════════════════════════════════════════════════════════════
+
+    class AppState {
+        <<app>>
+        +pipelines: RwLock~HashMap~String AppPipeline~~
+        +generated_cards: Mutex~Vec~GeneratedCardJson~~
+        +llm_semaphore: Arc~Semaphore~
+        +post_process_semaphore: Arc~Semaphore~
+    }
+
+    class AppPipeline {
+        <<enum · app>>
+        Polish(Pipeline~Polish~)
+        Japanese(Pipeline~Japanese~)
+    }
+
+    class GeneratedCardJson {
+        <<app>>
+        +card_id: String
+        +skill_id: String
+        +skill_name: String
+        +template_name: String
+        +fields: HashMap~String String~
+        +explanation: String
+        +metadata_json: String
+    }
+
+    class HttpEndpoints {
+        <<app · actix-web>>
+        GET  /api/tree?lang=
+        POST /api/generate
+        POST /api/export
+        GET  /api/cards
+        POST /api/cards/clear
+        POST /api/preview-prompt
+        GET  /api/card-models
+        POST /api/add-node
+        GET  / → static files
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% CRATE: lc_macro — Procedural Macros
+    %% ═══════════════════════════════════════════════════════════════
+
+    class ToFieldsDerive {
+        <<proc_macro_derive · lc_macro>>
+        +to_fields_derive(TokenStream) TokenStream
+        handles serde flatten
+    }
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% RELATIONSHIPS
+    %% ═══════════════════════════════════════════════════════════════
+
+    %% Trait implementations
+    Polish ..|> Language : implements
+    Japanese ..|> Language : implements
+    OpenAiClient ..|> LlmClient : implements
+    MockLlmClient ..|> LlmClient : implements
+    TtsGenerator ..|> EarlyPostProcessor : implements
+    IpaGenerator ..|> EarlyPostProcessor : implements
+    SqliteAnkiRepository ..|> AnkiRepository : implements
+    ClozeTest ..|> CardModel : implements
+    WrittenComprehension ..|> CardModel : implements
+    OralComprehension ..|> CardModel : implements
+    ClozeTest ..|> ToFields : derives
+    WrittenComprehension ..|> ToFields : derives
+    OralComprehension ..|> ToFields : derives
+    CommonCardFront ..|> ToFields : derives
+
+    %% Associated types
+    Polish --> PolishPos : PoS =
+    Polish --> NoExtraFields : ExtraFields =
+    Japanese --> JapanesePos : PoS =
+    Japanese --> JapaneseExtraFields : ExtraFields =
+
+    %% Composition
+    ClozeTest *-- CommonCardFront : flatten
+    WrittenComprehension *-- CommonCardFront : flatten
+    OralComprehension *-- CommonCardFront : flatten
+    AnyCard *-- ClozeTest
+    AnyCard *-- WrittenComprehension
+    AnyCard *-- OralComprehension
+
+    SkillTree *-- SkillNode : root
+    SkillNode *-- SkillNode : children
+    SkillTree ..> SkillTreeConfig : loaded from YAML
+
+    Pipeline *-- SkillTree : tree
+    Pipeline o-- LlmClient : llm_client
+    Pipeline o-- EarlyPostProcessor : early_processors
+    Pipeline o-- LatePostProcessor : late_processors
+    Pipeline o-- CardValidator : validators
+
+    GeneratedCard *-- AnyCard : model
+    GeneratedCard *-- CardMetadata : metadata
+    CardMetadata *-- LexiconEntry : features
+
+    GenerationRequest *-- CardModelId
+    GenerationRequest *-- UserProfile
+    GenerationRequest o-- LexiconEntry : injected_vocabulary
+    UserProfile *-- KnownLanguage
+    KnownLanguage --> FluencyLevel
+
+    LlmRequest *-- ChatMessage : messages
+    ChatMessage --> Role
+
+    AppState *-- AppPipeline : pipelines
+    AppPipeline *-- Pipeline
+    HttpEndpoints --> AppState : uses
+
+    DeckBuilder --> CardModel : uses
+    DeckBuilder --> CardMetadata : uses
+
+    FeatureExtractionResponse *-- LexiconEntry : features
+    EarlyPostProcessResult --> EarlyPostProcessor : returned by
+
+    LexiconTracker *-- WordProfile
+    Language --> IpaConfig
+    Language --> TtsConfig
+    Language --> Script
+
+    GeneratorContext --> GenerationRequest
+    GeneratorContext --> SkillNode
+    FeatureExtractorContext --> SkillNode
+
+    ToFieldsDerive ..> ToFields : generates impl

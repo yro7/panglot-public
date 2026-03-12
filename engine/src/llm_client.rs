@@ -1,0 +1,531 @@
+use serde::{Deserialize, Serialize};
+use anyhow::Result;
+use async_trait::async_trait;
+use std::fmt;
+use std::str::FromStr;
+
+// ── Provider Enum ──
+
+/// Known LLM providers with built-in URL & API-key conventions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmProvider {
+    Google,
+    Anthropic,
+    #[serde(rename = "openai")]
+    OpenAi,
+    Custom,
+}
+
+impl LlmProvider {
+    /// Default base URL for this provider's chat-completions endpoint.
+    pub fn default_base_url(&self) -> &'static str {
+        match self {
+            Self::Google    => "https://generativelanguage.googleapis.com/v1beta/openai",
+            Self::Anthropic => "https://api.anthropic.com/v1",
+            Self::OpenAi    => "https://api.openai.com/v1",
+            Self::Custom    => "",
+        }
+    }
+
+    /// Environment variable name that holds the API key for this provider.
+    pub fn default_api_key_env(&self) -> &'static str {
+        match self {
+            Self::Google    => "GOOGLE_API_KEY",
+            Self::Anthropic => "ANTHROPIC_API_KEY",
+            Self::OpenAi    => "OPENAI_API_KEY",
+            Self::Custom    => "LLM_API_KEY",
+        }
+    }
+
+    /// Whether this provider uses the OpenAI-compatible `/chat/completions` format.
+    fn is_openai_compatible(&self) -> bool {
+        matches!(self, Self::Google | Self::OpenAi | Self::Custom)
+    }
+}
+
+impl fmt::Display for LlmProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Google    => write!(f, "google"),
+            Self::Anthropic => write!(f, "anthropic"),
+            Self::OpenAi    => write!(f, "openai"),
+            Self::Custom    => write!(f, "custom"),
+        }
+    }
+}
+
+impl FromStr for LlmProvider {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "google" | "gemini"    => Ok(Self::Google),
+            "anthropic" | "claude" => Ok(Self::Anthropic),
+            "openai" | "gpt"      => Ok(Self::OpenAi),
+            "custom"              => Ok(Self::Custom),
+            other => Err(anyhow::anyhow!(
+                "Unknown LLM provider '{}'. Expected: google, anthropic, openai, custom", other
+            )),
+        }
+    }
+}
+
+// ── Messages ──
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: Role,
+    pub content: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct LlmRequest {
+    pub messages: Vec<ChatMessage>,
+    pub temperature: f32,
+    pub max_tokens: Option<u32>,
+    pub response_schema: Option<serde_json::Value>,
+}
+
+/// Trait for LLM providers — enables mock injection in tests.
+#[async_trait]
+pub trait LlmClient: Send + Sync {
+    async fn chat_completion(&self, request: &LlmRequest) -> Result<String>;
+}
+
+// ── Provider-aware HTTP Client ──
+
+pub struct LlmHttpClient {
+    provider: LlmProvider,
+    api_key: String,
+    base_url: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl LlmHttpClient {
+    /// Build a client from a known provider.
+    /// Reads the API key from the provider's default env var (e.g. `ANTHROPIC_API_KEY`).
+    pub fn from_provider(provider: LlmProvider, model: impl Into<String>) -> Result<Self> {
+        dotenvy::dotenv().ok();
+        let env_var = provider.default_api_key_env();
+        let api_key = std::env::var(env_var)
+            .map_err(|_| anyhow::anyhow!("{} not set — add it to your .env", env_var))?;
+        Ok(Self {
+            provider,
+            api_key,
+            base_url: provider.default_base_url().to_string(),
+            model: model.into(),
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Build a fully custom client (arbitrary URL + key).
+    pub fn custom(api_key: String, base_url: String, model: String, provider: LlmProvider) -> Self {
+        Self { provider, api_key, base_url, model, client: reqwest::Client::new() }
+    }
+
+    // ── Anthropic-specific helpers ──
+
+    fn build_anthropic_payload(&self, request: &LlmRequest) -> serde_json::Value {
+        // Anthropic separates system from messages
+        let system_text: String = request.messages.iter()
+            .filter(|m| m.role == Role::System)
+            .map(|m| m.content.clone())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let messages: Vec<serde_json::Value> = request.messages.iter()
+            .filter(|m| m.role != Role::System)
+            .map(|m| serde_json::json!({
+                "role": match m.role {
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::System => unreachable!(),
+                },
+                "content": m.content,
+            }))
+            .collect();
+
+        let mut payload = serde_json::json!({
+            "model": self.model,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+            "messages": messages,
+            "temperature": request.temperature,
+        });
+
+        if !system_text.is_empty() {
+            payload["system"] = serde_json::Value::String(system_text);
+        }
+
+        // Structured output via tool_use
+        if let Some(schema) = &request.response_schema {
+            let clean_schema = Self::sanitize_schema_for_anthropic(schema);
+            payload["tools"] = serde_json::json!([{
+                "name": "structured_output",
+                "description": "Return the result as structured JSON matching this schema.",
+                "input_schema": clean_schema,
+            }]);
+            payload["tool_choice"] = serde_json::json!({
+                "type": "tool",
+                "name": "structured_output",
+            });
+        }
+
+        payload
+    }
+
+    /// Prepare a JSON Schema for Anthropic's tool `input_schema`.
+    /// Anthropic requires `"type": "object"` at the top level and rejects `$schema`/`title`.
+    /// schemars v1 may produce a root `$ref` — we inline it if so.
+    fn sanitize_schema_for_anthropic(schema: &serde_json::Value) -> serde_json::Value {
+        let mut s = schema.clone();
+
+        if let Some(obj) = s.as_object_mut() {
+            // Strip meta-keys Anthropic doesn't accept
+            obj.remove("$schema");
+            obj.remove("title");
+
+            // If root uses $ref (e.g. {"$ref": "#/$defs/MyStruct", "$defs": {...}}),
+            // resolve it by merging the referenced definition to the top level.
+            if let Some(ref_val) = obj.remove("$ref") {
+                if let Some(ref_path) = ref_val.as_str() {
+                    // Extract def name from e.g. "#/$defs/MyStruct"
+                    let def_name = ref_path
+                        .strip_prefix("#/$defs/")
+                        .or_else(|| ref_path.strip_prefix("#/definitions/"));
+
+                    if let Some(name) = def_name {
+                        // Look up the definition
+                        let resolved = obj.get("$defs")
+                            .or_else(|| obj.get("definitions"))
+                            .and_then(|defs| defs.get(name))
+                            .cloned();
+
+                        if let Some(mut def) = resolved {
+                            // Merge definition properties into root
+                            if let Some(def_obj) = def.as_object_mut() {
+                                def_obj.remove("title");
+                                for (k, v) in def_obj.iter() {
+                                    obj.insert(k.clone(), v.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Ensure type: "object" is present
+            if !obj.contains_key("type") {
+                obj.insert("type".to_string(), serde_json::json!("object"));
+            }
+        }
+
+
+        s
+    }
+
+    fn build_openai_payload(&self, request: &LlmRequest) -> serde_json::Value {
+        let mut payload = serde_json::json!({
+            "model": self.model,
+            "messages": request.messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+        });
+
+        if let Some(schema) = &request.response_schema {
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert("response_format".to_string(), serde_json::json!({
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "structured_output",
+                        "schema": schema,
+                        "strict": true,
+                    }
+                }));
+            }
+        }
+
+        payload
+    }
+
+    fn build_request(&self, request: &LlmRequest) -> reqwest::RequestBuilder {
+        if self.provider.is_openai_compatible() {
+            let payload = self.build_openai_payload(request);
+            self.client
+                .post(format!("{}/chat/completions", self.base_url))
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .json(&payload)
+        } else {
+            // Anthropic
+            let payload = self.build_anthropic_payload(request);
+            self.client
+                .post(format!("{}/messages", self.base_url))
+                .header("x-api-key", &self.api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&payload)
+        }
+    }
+
+    fn extract_content(&self, json: &serde_json::Value) -> Result<String> {
+        if self.provider.is_openai_compatible() {
+            // OpenAI format: choices[0].message.content
+            let finish_reason = json["choices"][0]["finish_reason"].as_str().unwrap_or("unknown");
+            if finish_reason != "stop" {
+                eprintln!("WARNING: LLM finish_reason='{}' — full API response:\n{}", finish_reason, serde_json::to_string_pretty(json).unwrap_or_default());
+            }
+            let usage = &json["usage"];
+            eprintln!("[LLM] tokens — prompt: {}, completion: {}, finish: {}",
+                usage["prompt_tokens"], usage["completion_tokens"], finish_reason);
+
+            json["choices"][0]["message"]["content"]
+                .as_str()
+                .map(String::from)
+                .ok_or_else(|| anyhow::anyhow!("Failed to extract content from OpenAI-compatible response"))
+        } else {
+            // Anthropic format: content[0].text or content[0].input (tool_use)
+            let stop_reason = json["stop_reason"].as_str().unwrap_or("unknown");
+            let usage = &json["usage"];
+            eprintln!("[LLM] tokens — input: {}, output: {}, stop: {}",
+                usage["input_tokens"], usage["output_tokens"], stop_reason);
+
+            // Check for tool_use blocks first (structured output)
+            if let Some(content) = json["content"].as_array() {
+                for block in content {
+                    if block["type"].as_str() == Some("tool_use") {
+                        // Return the tool input as a JSON string
+                        return Ok(serde_json::to_string(&block["input"])?);
+                    }
+                }
+                // Fallback: return text blocks
+                for block in content {
+                    if block["type"].as_str() == Some("text") {
+                        if let Some(text) = block["text"].as_str() {
+                            return Ok(text.to_string());
+                        }
+                    }
+                }
+            }
+
+            Err(anyhow::anyhow!("Failed to extract content from Anthropic response"))
+        }
+    }
+}
+
+#[async_trait]
+impl LlmClient for LlmHttpClient {
+    async fn chat_completion(&self, request: &LlmRequest) -> Result<String> {
+        let max_retries = 3;
+        let mut retries = 0;
+
+        loop {
+            let req = self.build_request(request);
+            let resp_result = req.send().await;
+
+            let resp = match resp_result {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() {
+                        r
+                    } else if (status.as_u16() == 503 || status.as_u16() == 429 || status.as_u16() == 529) && retries < max_retries {
+                        let _error_text = r.text().await.unwrap_or_default();
+                        eprintln!("LLM API returned {}. Retrying {}/{}...", status, retries + 1, max_retries);
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        retries += 1;
+                        continue;
+                    } else {
+                        let error_text = r.text().await.unwrap_or_default();
+                        return Err(anyhow::anyhow!("LLM API error ({}): {}", status, error_text));
+                    }
+                }
+                Err(e) => {
+                    if retries < max_retries {
+                        eprintln!("LLM network error: {}. Retrying {}/{}...", e, retries + 1, max_retries);
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        retries += 1;
+                        continue;
+                    }
+                    return Err(e.into());
+                },
+            };
+
+            let json: serde_json::Value = resp.json().await?;
+            return self.extract_content(&json);
+        }
+    }
+}
+
+// ── Backward-compat alias ──
+
+/// Deprecated alias — use `LlmHttpClient` instead.
+pub type OpenAiClient = LlmHttpClient;
+
+// ── Mock Client (tests) ──
+
+pub struct MockLlmClient {
+    responses: Vec<String>,
+    call_index: std::sync::Mutex<usize>,
+}
+
+impl MockLlmClient {
+    pub fn new(responses: Vec<String>) -> Self {
+        Self { responses, call_index: std::sync::Mutex::new(0) }
+    }
+
+    pub fn with_fixed_response(response: impl Into<String>) -> Self {
+        Self::new(vec![response.into()])
+    }
+}
+
+#[async_trait]
+impl LlmClient for MockLlmClient {
+    async fn chat_completion(&self, _request: &LlmRequest) -> Result<String> {
+        let mut idx = self.call_index.lock().unwrap();
+        let resp = self.responses.get(*idx).or(self.responses.last())
+            .cloned().ok_or_else(|| anyhow::anyhow!("MockLlmClient: no responses"))?;
+        *idx += 1;
+        Ok(resp)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn mock_fixed_response() {
+        let client = MockLlmClient::with_fixed_response(r#"{"sentence": "Test"}"#);
+        let req = LlmRequest { messages: vec![], temperature: 0.7, max_tokens: None, response_schema: None };
+        assert!(client.chat_completion(&req).await.unwrap().contains("Test"));
+    }
+
+    #[tokio::test]
+    async fn mock_sequential_responses() {
+        let client = MockLlmClient::new(vec!["first".into(), "second".into()]);
+        let req = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: None };
+        assert_eq!(client.chat_completion(&req).await.unwrap(), "first");
+        assert_eq!(client.chat_completion(&req).await.unwrap(), "second");
+        assert_eq!(client.chat_completion(&req).await.unwrap(), "second"); // repeats last
+    }
+
+    #[test]
+    fn provider_from_str_roundtrip() {
+        for name in &["google", "gemini", "anthropic", "claude", "openai", "gpt", "custom"] {
+            let provider: LlmProvider = name.parse().unwrap();
+            // Display should produce the canonical name
+            let canonical = provider.to_string();
+            let roundtrip: LlmProvider = canonical.parse().unwrap();
+            assert_eq!(provider, roundtrip);
+        }
+    }
+
+    #[test]
+    fn provider_base_urls_non_empty() {
+        for provider in &[LlmProvider::Google, LlmProvider::Anthropic, LlmProvider::OpenAi] {
+            assert!(!provider.default_base_url().is_empty(), "{:?} has empty base_url", provider);
+            assert!(!provider.default_api_key_env().is_empty(), "{:?} has empty env var", provider);
+        }
+    }
+
+    #[test]
+    fn sanitize_schema_produces_valid_anthropic_input() {
+        // Use a real schemars schema to test sanitization
+        #[derive(schemars::JsonSchema)]
+        #[allow(dead_code)]
+        struct TestStruct {
+            name: String,
+            value: i32,
+        }
+        let raw = serde_json::to_value(&schemars::schema_for!(TestStruct)).unwrap();
+        eprintln!("RAW schemars schema:\n{}", serde_json::to_string_pretty(&raw).unwrap());
+
+        let sanitized = LlmHttpClient::sanitize_schema_for_anthropic(&raw);
+        eprintln!("SANITIZED schema:\n{}", serde_json::to_string_pretty(&sanitized).unwrap());
+
+        let obj = sanitized.as_object().unwrap();
+        assert_eq!(obj.get("type").and_then(|v| v.as_str()), Some("object"),
+            "top-level type must be 'object'");
+        assert!(!obj.contains_key("$schema"), "must not contain $schema");
+        assert!(!obj.contains_key("title"), "must not contain title");
+        assert!(!obj.contains_key("$ref"), "must not contain $ref at top level");
+        assert!(obj.contains_key("properties"), "must have properties after $ref resolution");
+    }
+    #[tokio::test]
+    #[ignore] // Run manually with: cargo test test_anthropic_api_schemas -- --ignored --nocapture
+    async fn test_anthropic_api_schemas() {
+        dotenvy::dotenv().ok();
+        let api_key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY not set");
+        let client = reqwest::Client::new();
+        
+        // 1. Array type properties {"type": ["string", "null"]}
+        let array_type_schema = serde_json::json!({
+            "type": "object",
+            "properties": { "test": { "type": ["string", "null"] } }
+        });
+        
+        // 2. $defs schema (which FeatureExtractionResponse uses)
+        let defs_schema = serde_json::json!({
+            "type": "object",
+            "$defs": { "MyDef": { "type": "string" } },
+            "properties": { "test": { "$ref": "#/$defs/MyDef" } }
+        });
+        
+        // 3. Raw FeatureExtractionResponse schema cleaned by our function
+        let raw = serde_json::to_value(&schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<langs::PolishMorphology>)).unwrap();
+        let sanitized = LlmHttpClient::sanitize_schema_for_anthropic(&raw);
+
+        for (name, schema) in [
+            ("Array type", array_type_schema), 
+            ("$defs schema", defs_schema),
+            ("Sanitized FeatureExtractionResponse", sanitized)
+        ] {
+            let payload = serde_json::json!({
+                "model": "claude-3-haiku-20240307",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 100,
+                "tools": [{
+                    "name": "structured_output",
+                    "description": "test",
+                    "input_schema": schema
+                }],
+                "tool_choice": {
+                    "type": "tool",
+                    "name": "structured_output"
+                }
+            });
+            
+            let res = client.post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .json(&payload)
+                .send()
+                .await.unwrap();
+                
+            let text = res.text().await.unwrap();
+            eprintln!("Test: {}\nResult: {}\n", name, text);
+        }
+    }
+
+    #[test]
+    fn dump_build_anthropic_payload() {
+        let client = LlmHttpClient::custom("key".into(), "url".into(), "model".into(), LlmProvider::Anthropic);
+        
+        let schema1 = crate::card_models::AnyCard::schema_json_value::<langs::Polish>(crate::card_models::CardModelId::ClozeTest);
+        let req1 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(schema1) };
+        let payload1 = client.build_anthropic_payload(&req1);
+        eprintln!("PAYLOAD 1 (CardModel):\n{}", serde_json::to_string_pretty(&payload1.get("tools")).unwrap());
+
+        let raw2 = serde_json::to_value(&schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<langs::PolishMorphology>)).unwrap();
+        let req2 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(raw2) };
+        let payload2 = client.build_anthropic_payload(&req2);
+        eprintln!("PAYLOAD 2 (FeatureExt):\n{}", serde_json::to_string_pretty(&payload2.get("tools")).unwrap());
+    }
+}
