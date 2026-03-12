@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "core",
+    "engine",
+    "anki_bridge",
+    "langs",
+    "app",
+    "lc_macro",
+    "codegen",
+]
+resolver = "2"

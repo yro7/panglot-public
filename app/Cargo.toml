@@ -1,0 +1,37 @@
+[package]
+name = "panglot"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "panglot"
+path = "src/main.rs"
+
+[dependencies]
+lc_core = { path = "../core" }
+engine = { path = "../engine" }
+langs = { path = "../langs" }
+anki_bridge = { path = "../anki_bridge" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+actix-web = "4"
+actix-files = "0.6"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+strum = { version = "0.26", features = ["derive"] }
+anyhow = "1.0.102"
+dotenvy = "0.15"
+parking_lot = "0.12"
+schemars = "1.2.1"
+shellexpand = "3"
+chrono = "0.4"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", features = ["json"] }
+dashmap = "6"
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+static_assertions = "1.1"

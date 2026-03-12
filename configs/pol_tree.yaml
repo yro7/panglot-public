@@ -1,0 +1,53 @@
+language_name: Polish
+root:
+  id: root
+  name: Polski
+  children:
+    - id: cases
+      name: Przypadki (Cases)
+      children:
+
+        - id: accusative
+          name: Biernik (Accusative)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the accusative case (Biernik).
+            Create a sentence where the student must fill in a noun in the accusative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+          children: []
+        - id: genitive
+          name: Dopełniacz (Genitive)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the genitive case (Dopełniacz).
+            Create a sentence where the student must fill in a noun in the genitive form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+          children: []
+        - id: locative
+          name: Miejscownik (Locative)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the locative case (Miejscownik).
+            Create a sentence where the student must fill in a noun in the locative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+          children: []
+        - id: dative
+          name: Celownik (Dative)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the dative case (Celownik).
+            Create a sentence where the student must fill in a noun in the Celownik form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+          children: []
+        - id: instrumental
+          name: Narzędnik (Instrumental)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the instrumental case (Narzędnik).
+            Create a sentence where the student must fill in a noun in the instrumental form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+          children: []
+
+    - id: vocabulary
+      name: Słownictwo (Vocabulary)
+      children:
+        - id: greetings
+          name: Powitania (Greetings)
+          node_instructions: >
+            Generate an exercise about common Polish greetings and polite expressions.
+          children: []
+        - id: daily_life
+          name: Życie codzienne (Daily Life)
+          node_instructions: >
+            Generate an exercise about daily life vocabulary (food, transport, shopping, etc.).
+          children: []

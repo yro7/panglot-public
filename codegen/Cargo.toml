@@ -1,0 +1,15 @@
+[package]
+name = "lc-codegen"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "lc-codegen"
+path = "src/main.rs"
+
+[dependencies]
+engine = { path = "../engine" }
+isolang = { version = "2.4.0", features = ["english_names"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+dotenvy = "0.15"

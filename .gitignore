@@ -1,0 +1,32 @@
+# Cargo
+debug/
+target/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets
+.env
+
+# Claude Code
+.claude/
+
+# Build output
+output/
+
+# Docs (keep README.md only)
+*.md
+!README.md
+
+# Misc
+test_parse.rs
+""
