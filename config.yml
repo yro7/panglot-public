@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────
+# Panglot — Global Configuration
+# ─────────────────────────────────────────────────────────────
+
+# ── Server ───────────────────────────────────────────────────
+server:
+  host: "127.0.0.1"
+  port: 8080
+  static_path: "app/static"      # chemin vers les fichiers statiques
+
+# ── LLM ──────────────────────────────────────────────────────
+llm:
+  # Provider actif : "google", "anthropic", "openai", "custom"
+  # Pour switcher, changez JUSTE cette valeur.
+  provider: "google"
+
+  # Modeles par provider (le premier de la liste du provider choisi est utilise)
+  models:
+    google:
+      - "gemini-2.5-flash"
+      - "gemini-2.5-pro"
+    anthropic:
+      - "claude-sonnet-4-6"
+      - "claude-opus-4-6"
+      - "claude-haiku-4-5"
+    openai:
+      - "gpt-4o"
+      - "gpt-4o-mini"
+
+  # Overrides optionnels (uniquement si provider = "custom") :
+  # base_url: "https://my-custom-endpoint.com/v1"
+  # api_key_env: "MY_CUSTOM_API_KEY"
+
+  retry:
+    max_retries: 3
+    delay_secs: 2                # delai entre les retries
+
+  concurrency:
+    max_llm_calls: 10            # semaphore LLM (appels paralleles max)
+    max_post_process: 10          # fallback si available_parallelism echoue
+
+# ── LLM — Parametres par call ────────────────────────────────
+generator:
+  temperature: 0.8
+  max_tokens: 40000
+
+feature_extractor:
+  temperature: 0.0
+  max_tokens: 80000
+
+# ── Defaults — Valeurs par defaut des requetes API ───────────
+defaults:
+  language: "pol"
+  card_model: "ClozeTest"
+  card_count_generate: 3         # /api/generate
+  card_count_export: 5           # /api/export
+  difficulty: 5                  # 1–10
+  user_language: "English"       # langue de l'interface / explications
+
+# ── Paths — Chemins de fichiers ──────────────────────────────
+paths:
+  output_dir: "output"           # dossier de sortie des .apkg
+  audio_staging_dir: "lc_audio"  # sous-dossier tmp pour l'audio TTS
+  skill_trees_dir: "configs"    # auto-scan des *_tree.yaml
+  # anki_connect_url: "http://127.0.0.1:8765"
+  # Default is http://127.0.0.1:8765 if omitted. Required for fetching known vocabulary.
+
+# ── Auth — Supabase Auth Cloud ─────────────────────────────
+# Set enabled: true and configure SUPABASE_URL + SUPABASE_ANON_KEY in .env
+auth:
+  enabled: true

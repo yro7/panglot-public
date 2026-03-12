@@ -1,0 +1,59 @@
+language_name: Arabic
+root:
+  id: root
+  name: العربية (Arabic)
+  children:
+    - id: writing_system
+      name: الكتابة (Writing System)
+      children:
+        - id: alphabet
+          name: الحروف (Alphabet)
+          node_instructions: >
+            Generate an exercise focusing on recognizing and connecting Arabic letters in their isolated, initial, medial, and final forms.
+          children: []
+        - id: tashkeel
+          name: التشكيل (Diacritics)
+          node_instructions: >
+            Generate an exercise focused on identifying and pronouncing short vowels (Fatha, Kasra, Damma), Sukun, and Shadda.
+          children: []
+    - id: grammar
+      name: القواعد (Grammar)
+      children:
+        - id: definiteness
+          name: المعرفة والنكرة (Definiteness)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the use of the definite article (Al- / ال) and sun/moon letters.
+          children: []
+        - id: idafa
+          name: الإضافة (Genitive Construct)
+          node_instructions: >
+            Generate an exercise focused on forming the Idafa structure. Create a sentence requiring two nouns connected in a possessive relationship.
+          children: []
+        - id: cases
+          name: الإعراب (Noun Cases)
+          node_instructions: >
+            Generate an exercise focusing on the three grammatical cases: Nominative (Marfu'), Accusative (Mansub), and Genitive (Majrur).
+          children: []
+        - id: past_verbs
+          name: الفعل الماضي (Past Tense Verbs)
+          node_instructions: >
+            Generate a verb conjugation exercise for the past tense (Al-Madi) based on different pronouns.
+          children: []
+        - id: present_verbs
+          name: الفعل المضارع (Present Tense Verbs)
+          node_instructions: >
+            Generate a verb conjugation exercise for the present tense (Al-Mudari') based on different pronouns.
+          children: []
+    - id: vocabulary
+      name: المفردات (Vocabulary)
+      children:
+        - id: greetings
+          name: التحيات (Greetings)
+          node_instructions: >
+            Generate an exercise about common Arabic greetings, farewells, and polite expressions.
+          children: []
+        - id: daily_life
+          name: الحياة اليومية (Daily Life)
+          node_instructions: >
+            Generate an exercise about daily life vocabulary (food, transport, shopping, family members, etc.).
+          children: []

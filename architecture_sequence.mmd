@@ -1,0 +1,101 @@
+sequenceDiagram
+    title Panglot — Card Generation Pipeline
+
+    actor User
+    participant App as App (Actix-web :8080)
+    participant State as AppState
+    participant Pipe as Pipeline~L~
+    participant GenCtx as GeneratorContext
+    participant LLM as OpenAiClient → Gemini
+    participant Parse as AnyCard::parse~L~
+    participant Val as CardValidator
+    participant FeatCtx as FeatureExtractorContext
+    participant TTS as TtsGenerator (edge-tts)
+    participant IPA as IpaGenerator (epitran)
+    participant Late as LatePostProcessor
+    participant Deck as DeckBuilder~P~
+
+    Note over User,Deck: ══ HTTP POST /api/generate or /api/export ══
+
+    User ->>+ App: POST /api/generate<br/>{ language, node_id, card_model_id,<br/>  difficulty, user_profile, user_prompt }
+    App ->> State: dispatch_pipeline!(language)
+    State ->>+ Pipe: generate_cards_batch(node_id, req, llm_sem, pp_sem)
+
+    Note over Pipe,LLM: ── Step 1: Build Prompt ──
+    Pipe ->> GenCtx: new(language, skill_node, node_path, request)
+    GenCtx ->> GenCtx: generate_prompt()<br/>• Language directives<br/>• Skill path + node instructions<br/>• Difficulty & user profile<br/>• JSON schema for card model
+    GenCtx -->> Pipe: LlmRequest
+
+    Note over Pipe,LLM: ── Step 2: LLM Call 1 — Content Generation ──
+    Pipe ->>+ LLM: chat_completion(request)<br/>temperature: 0.8<br/>response_schema: CardModel + ExtraFields
+    LLM -->>- Pipe: JSON response (array of cards)
+
+    Note over Pipe,Val: ── Step 3: Parse & Validate ──
+    loop For each card in JSON array
+        Pipe ->> Parse: parse~L~(card_model_id, json_str)
+        Parse -->> Pipe: (AnyCard, L::ExtraFields)
+        Pipe ->> Val: validate(language, model, extra)
+        alt Validation fails
+            Val -->> Pipe: Err(feedback_message)
+            Note over Pipe,LLM: ── Step 4: Retry with feedback ──
+            Pipe ->> LLM: chat_completion(original + feedback)
+            LLM -->> Pipe: Corrected JSON
+            Pipe ->> Parse: re-parse
+        else Validation passes
+            Val -->> Pipe: Ok(())
+        end
+    end
+
+    Note over Pipe,IPA: ── Step 5: Parallel Processing (per card) ──
+
+    par Feature Extraction (LLM Call 2)
+        Pipe ->> FeatCtx: new(language, skill_node, card_json)
+        FeatCtx ->> FeatCtx: generate_prompt()<br/>• Extraction directives<br/>• PoS descriptions<br/>• Card content
+        FeatCtx -->> Pipe: LlmRequest
+        Pipe ->>+ LLM: chat_completion(request)<br/>temperature: 0.0
+        LLM -->>- Pipe: FeatureExtractionResponse<br/>{ pedagogical_explanation, features[] }
+    and Early Post-Processing (subprocesses)
+        Pipe ->>+ TTS: process(language, card_id, model, extra)
+        TTS ->> TTS: tokio::process::Command<br/>edge-tts → .mp3
+        TTS -->>- Pipe: EarlyPostProcessResult { audio_file }
+        Pipe ->>+ IPA: process(language, card_id, model, extra)
+        IPA ->> IPA: tokio::process::Command<br/>epitran → IPA string
+        IPA -->>- Pipe: EarlyPostProcessResult { ipa }
+    end
+
+    Note over Pipe,Late: ── Step 6: Late Post-Processing ──
+    Pipe ->> Late: process(language, model, extra, &mut metadata)
+    Late -->> Pipe: Ok(())
+
+    Note over Pipe,Deck: ── Step 7: Assemble Result ──
+    Pipe ->> Pipe: CardMetadata~P~ {<br/>  card_id: UUID,<br/>  skill_id, pedagogical_explanation,<br/>  features, ipa, audio_file<br/>}
+    Pipe -->>- App: Vec~GeneratedCard~ { model, metadata }
+
+    alt /api/generate
+        App ->> State: store cards in generated_cards
+        App -->> User: GenerateResponse { success, cards[], message }
+    else /api/export
+        App ->>+ Deck: new(deck_name)
+        loop For each GeneratedCard
+            App ->> Deck: add_card(model, metadata)
+        end
+        App ->> Deck: export_apkg(output/node_id.apkg)
+        Note over Deck: ZIP archive:<br/>• collection.anki2 (SQLite)<br/>• media JSON<br/>• audio files (0, 1, 2...)
+        Deck -->>- App: .apkg file
+        App -->> User: File download
+    end
+
+    Note over User,Deck: ══ Other Endpoints ══
+
+    User ->> App: GET /api/tree?lang=polish
+    App -->> User: SkillTree JSON (nodes hierarchy)
+
+    User ->> App: POST /api/preview-prompt
+    App -->> User: { messages[], temperature, max_tokens }
+
+    User ->> App: GET /api/card-models
+    App -->> User: [ClozeTest, WrittenComprehension, OralComprehension]
+
+    User ->> App: POST /api/add-node
+    App ->> State: find parent → append child SkillNode
+    App -->> User: Updated tree
