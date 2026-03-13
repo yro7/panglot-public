@@ -1,6 +1,10 @@
 # Panglot
 
-An open-source, LLM-powered language learning engine that generates exercises and extracts linguistic features from any language.
+An open-source, LLM-powered language learning engine that generates exercises and extracts linguistic features from any language for pedagogical purposes.
+
+The project is entirely source/target language-agnostic but still leverages the specific traits of each language to generate tailored exercises based on users' progression.
+
+The engine is compatible with Anki, you can export .apkg and import them to your local collection :) 
 
 ## Architecture
 
@@ -41,4 +45,4 @@ cargo build --release
 
 ## License
 
-MIT
+
