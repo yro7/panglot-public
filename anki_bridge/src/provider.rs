@@ -174,6 +174,9 @@ impl StorageProvider for AnkiStorageProvider {
                 deck_id: did.to_string(),
                 name,
                 card_count: ids.len(),
+                new_count: 0,
+                learning_count: 0,
+                review_count: 0,
                 is_lc: !lc_ids.is_empty(),
             });
         }
@@ -360,8 +363,8 @@ mod tests {
 
         async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
             Ok(vec![
-                DeckInfo { deck_id: "1".to_string(), name: "Polish::Grammar".to_string(), card_count: 42, is_lc: true },
-                DeckInfo { deck_id: "2".to_string(), name: "Polish::Vocabulary".to_string(), card_count: 128, is_lc: false },
+                DeckInfo { deck_id: "1".to_string(), name: "Polish::Grammar".to_string(), card_count: 42, new_count: 0, learning_count: 0, review_count: 0, is_lc: true },
+                DeckInfo { deck_id: "2".to_string(), name: "Polish::Vocabulary".to_string(), card_count: 128, new_count: 0, learning_count: 0, review_count: 0, is_lc: false },
             ])
         }
 

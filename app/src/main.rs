@@ -1137,11 +1137,31 @@ async fn get_study_session(
 ) -> impl Responder {
     let deck_id = path.into_inner();
     let db = data.db_for(&auth);
+    let algorithm = data.srs_for(&auth);
+    let now = chrono::Utc::now().timestamp_millis();
+
     match db.get_due_cards_for_deck(&deck_id, 20).await {
-        Ok(cards) => HttpResponse::Ok().json(serde_json::json!({
-            "success": true,
-            "cards": cards
-        })),
+        Ok(cards) => {
+            let mut enhanced_cards = Vec::with_capacity(cards.len());
+            for mut card in cards {
+                let history = db.get_review_history(&card.id).await.unwrap_or_default();
+                let choices = algorithm.preview_choices(&history, now);
+
+                let mut card_json = serde_json::to_value(&card).unwrap();
+                card_json["next_intervals"] = serde_json::json!({
+                    "again": choices.again.interval_days,
+                    "hard": choices.hard.interval_days,
+                    "good": choices.good.interval_days,
+                    "easy": choices.easy.interval_days,
+                });
+                enhanced_cards.push(card_json);
+            }
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "success": true,
+                "cards": enhanced_cards
+            }))
+        },
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "message": format!("Failed to fetch due cards: {}", e)
