@@ -50,7 +50,7 @@ impl Script {
 
     /// Returns the 4-character ISO 15924 code.
     pub fn code(&self) -> &'static str {
-        self.0
+        self.0 /// TODO
     }
 
     /// Constructs a `Script` from any valid ISO 15924 code string.

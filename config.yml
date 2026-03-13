@@ -60,7 +60,7 @@ defaults:
 # ── Paths — Chemins de fichiers ──────────────────────────────
 paths:
   output_dir: "output"           # dossier de sortie des .apkg
-  audio_staging_dir: "lc_audio"  # sous-dossier tmp pour l'audio TTS
+  audio_staging_dir: "panglot_audio"  # sous-dossier tmp pour l'audio TTS
   skill_trees_dir: "configs"    # auto-scan des *_tree.yaml
   # anki_connect_url: "http://127.0.0.1:8765"
   # Default is http://127.0.0.1:8765 if omitted. Required for fetching known vocabulary.

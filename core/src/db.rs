@@ -657,15 +657,26 @@ impl StorageProvider for LocalStorageProvider {
     }
 
     async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().timestamp_millis();
         let records = sqlx::query(
             r#"
-            SELECT d.id, d.full_path, COUNT(c.id) as card_count
+            SELECT 
+                d.id, 
+                d.full_path, 
+                COUNT(c.id) as card_count,
+                SUM(CASE WHEN r.interval_days = 0 THEN 1 ELSE 0 END) as new_count,
+                SUM(CASE WHEN r.interval_days > 0 AND r.interval_days < 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as learning_count,
+                SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as review_count
             FROM decks d
             LEFT JOIN cards c ON d.id = c.deck_id
+            LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
             WHERE d.user_id = ?
             GROUP BY d.id
             "#
         )
+        .bind(now)
+        .bind(now)
+        .bind(&self.user_id)
         .bind(&self.user_id)
         .fetch_all(&self.pool)
         .await?;
@@ -676,6 +687,9 @@ impl StorageProvider for LocalStorageProvider {
                 deck_id: r.get("id"),
                 name: r.get("full_path"), // We use full path internally for names representing hierarchy
                 card_count: r.get::<i64, _>("card_count") as usize,
+                new_count: r.get::<Option<i64>, _>("new_count").unwrap_or(0) as usize,
+                learning_count: r.get::<Option<i64>, _>("learning_count").unwrap_or(0) as usize,
+                review_count: r.get::<Option<i64>, _>("review_count").unwrap_or(0) as usize,
                 is_lc: true, // Native DB decks are always LC decks
             }
         }).collect();

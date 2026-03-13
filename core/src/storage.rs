@@ -43,6 +43,12 @@ pub struct DeckInfo {
     pub name: String,
     /// Total number of cards in the deck.
     pub card_count: usize,
+    /// Number of new cards (Nouvelles).
+    pub new_count: usize,
+    /// Number of learning cards (En cours).
+    pub learning_count: usize,
+    /// Number of review cards (À réviser).
+    pub review_count: usize,
     /// Indicates whether the deck contains explicitly LC-generated cards.
     pub is_lc: bool,
 }

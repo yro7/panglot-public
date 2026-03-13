@@ -400,5 +400,6 @@ mod tests {
         assert!(choices.again.due_date <= choices.hard.due_date);
         assert!(choices.hard.due_date <= choices.good.due_date);
         assert!(choices.good.due_date <= choices.easy.due_date);
+
     }
 }
