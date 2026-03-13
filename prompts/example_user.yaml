@@ -1,0 +1,16 @@
+# ── Example User Messages ──
+# XML-tagged messages for the user role in LLM conversations.
+# Create your own `user.yaml` following this template.
+
+generator_user: |
+  <difficulty>{difficulty}/10</difficulty>
+  <user_request>{user_prompt}</user_request>
+
+  Respond with valid JSON only, no markdown.
+
+extractor_user: |
+  <card>
+  {card_json}
+  </card>
+
+  <target_words>{targets}</target_words>

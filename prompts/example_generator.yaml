@@ -1,0 +1,29 @@
+# ── Example Generator Prompt ──
+# This file shows the expected YAML structure for the generator prompt.
+# Create your own `generator.yaml` following this template.
+
+system_role: "You are a {language} language learning exercises generator. You generate exercises as 'card decks', of form 'front exercise' and 'back answer'."
+
+target_language: "The user is currently learning the {language} language."
+
+language_directives: "{directives}"
+
+skill_context: |
+  The user is currently working on: {node_path}
+  For this exercise, you have to :
+  {instructions}
+
+generation_params:
+  num_cards: "Number of distinct cards to generate: {num_cards}"
+  difficulty: "Difficulty (1-10): {difficulty}"
+  ui_language: "All text in 'translation' or similar fields must be written in the user's interface language: iso code 639-3 {iso}, name {name}."
+
+user_prompt: "{prompt}"
+
+injected_vocabulary: "{list}"
+
+excluded_vocabulary: "DO NOT USE THESE WORDS UNDER ANY CIRCUMSTANCES: {list}"
+
+output_single: "Return EXACTLY ONE JSON object following the provided schema."
+
+output_multiple: "Return a valid JSON array containing EXACTLY {count} distinct objects following the provided schema."
