@@ -1,0 +1,9 @@
+# ── Example Common Prompt Placeholders ──
+# Shared variables and messages used across prompts.
+# Create your own `common.yaml` following this template.
+
+no_instructions_fallback: "No specific instructions provided."
+
+conjugation_instructions: |
+  Format your response strictly as a fill-in-the-blank text.
+  Provide the root of the verb to be conjugated as a hint in the `hint` field.
