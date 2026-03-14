@@ -365,9 +365,6 @@ impl LlmClient for LlmHttpClient {
 
 // ── Backward-compat alias ──
 
-/// Deprecated alias — use `LlmHttpClient` instead.
-pub type OpenAiClient = LlmHttpClient;
-
 // ── Mock Client (tests) ──
 
 pub struct MockLlmClient {
