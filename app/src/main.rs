@@ -13,7 +13,7 @@ use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use sqlx::SqlitePool;
 
 use lc_core::traits::Language;
-use lc_core::user::UserProfile;
+use lc_core::user::UserSettings;
 use lc_core::db::DraftCard;
 use engine::card_models::CardModelId;
 use engine::llm_client::{LlmHttpClient, LlmProvider};
@@ -63,11 +63,13 @@ impl AppState {
         lc_core::db::LocalStorageProvider::for_user(self.db_pool.clone(), user.user_id.clone())
     }
 
-    /// Resolve the SRS algorithm for a given user.
-    /// For the MVP: always returns the default (SM-2).
-    /// Later: read from users.settings.srs_algorithm.
-    fn srs_for(&self, _auth: &AuthUser) -> &dyn lc_core::srs::SrsAlgorithm {
-        self.srs_registry.default()
+    /// Resolve the SRS algorithm for a given user asynchronously by fetching their settings.
+    async fn srs_for(&self, auth: &AuthUser) -> &dyn lc_core::srs::SrsAlgorithm {
+        let db = self.db_for(auth);
+        match db.get_user_settings().await {
+            Ok(settings) => self.srs_registry.get(&settings.srs_algorithm).unwrap_or(self.srs_registry.default()),
+            Err(_) => self.srs_registry.default(),
+        }
     }
 }
 
@@ -276,7 +278,7 @@ struct GenerateRequest {
     card_count: Option<u32>,
     difficulty: Option<u8>,
     user_prompt: Option<String>,
-    user_profile: UserProfile,
+    user_profile: UserSettings,
     lexicon_options: Option<engine::generator::LexiconOption>,
 }
 
@@ -300,7 +302,7 @@ struct PreviewPromptRequest {
     node_id: String,
     card_model_id: Option<String>,
     difficulty: Option<u8>,
-    user_profile: Option<UserProfile>,
+    user_profile: Option<UserSettings>,
     lexicon_options: Option<engine::generator::LexiconOption>,
 }
 
@@ -694,7 +696,7 @@ async fn export_deck(
 
     let export_result = pipeline.generate_deck_data_dyn(
         node_id, card_model_id, card_count, difficulty,
-        UserProfile::new(data.defaults.user_language.clone()),
+        UserSettings::new(data.defaults.user_language.clone()),
         body.user_prompt.clone(),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
@@ -1137,7 +1139,7 @@ async fn get_study_session(
 ) -> impl Responder {
     let deck_id = path.into_inner();
     let db = data.db_for(&auth);
-    let algorithm = data.srs_for(&auth);
+    let algorithm = data.srs_for(&auth).await;
     let now = chrono::Utc::now().timestamp_millis();
 
     match db.get_due_cards_for_deck(&deck_id, 20).await {
@@ -1183,7 +1185,7 @@ async fn submit_review(
 ) -> impl Responder {
     let _deck_id = path.into_inner();
     let rating = lc_core::srs::Rating::from_str_lossy(&body.rating);
-    let algorithm = data.srs_for(&auth);
+    let algorithm = data.srs_for(&auth).await;
     let now = now_ms();
     let db = data.db_for(&auth);
     match db.submit_review(&body.card_id, rating, algorithm, now).await {
@@ -1398,6 +1400,43 @@ async fn update_llm_config(
         "provider": provider_key,
         "model": new_model,
     }))
+}
+
+//  User Settings Endpoints
+
+async fn get_user_settings(auth: AuthUser, data: web::Data<AppState>) -> impl Responder {
+    let db = data.db_for(&auth);
+    match db.get_user_settings().await {
+        Ok(settings) => HttpResponse::Ok().json(settings),
+        Err(e) => {
+            log::error!("Failed to fetch user settings for {}: {}", auth.user_id, e);
+            HttpResponse::Ok().json(UserSettings::default())
+        }
+    }
+}
+
+async fn update_user_settings(
+    auth: AuthUser,
+    data: web::Data<AppState>,
+    body: web::Json<UserSettings>,
+) -> impl Responder {
+    let db = data.db_for(&auth);
+    let settings = body.into_inner();
+    println!("[Settings] Receiving settings update for {}: {:?}", auth.user_id, settings);
+
+    match db.update_user_settings(&settings).await {
+        Ok(_) => {
+            println!("[Settings] Update successful");
+            HttpResponse::Ok().json(serde_json::json!({"success": true}))
+        },
+        Err(e) => {
+            println!("[Settings] Update failed: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "success": false,
+                "message": format!("Failed to update user settings: {}", e)
+            }))
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════
@@ -1638,6 +1677,8 @@ async fn main() -> std::io::Result<()> {
             .route("/api/config/llm", web::put().to(update_llm_config))
             .route("/api/auth/config", web::get().to(get_auth_config))
             .route("/api/auth/login", web::post().to(post_auth_login))
+            .route("/api/user/settings", web::get().to(get_user_settings))
+            .route("/api/user/settings", web::post().to(update_user_settings))
             .service(Files::new("/", &static_path).index_file("index.html"))
     })
     .bind(&bind_addr)?

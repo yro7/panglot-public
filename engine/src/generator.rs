@@ -11,7 +11,7 @@ pub struct GenerationRequest<L: Language> {
     pub card_model_id: CardModelId,
     pub num_cards: u32,
     pub difficulty: u8,
-    pub user_profile: lc_core::user::UserProfile,
+    pub user_profile: lc_core::user::UserSettings,
     pub user_prompt: Option<String>,
     /// Reserved for roadmap: transliteration script to request from the LLM.
     pub transliteration: Option<String>,
@@ -55,7 +55,7 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 5,
             difficulty: 3,
-            user_profile: lc_core::user::UserProfile::new("French".to_string()),
+            user_profile: lc_core::user::UserSettings::new("French".to_string()),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![],

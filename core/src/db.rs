@@ -273,6 +273,30 @@ impl LocalStorageProvider {
         Ok(last_deck_id)
     }
 
+    /// Fetch user settings from the database
+    pub async fn get_user_settings(&self) -> Result<crate::user::UserSettings, sqlx::Error> {
+        let row = sqlx::query("SELECT settings FROM users WHERE id = ?")
+            .bind(&self.user_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        use sqlx::Row;
+        let settings_json: String = row.get("settings");
+        let settings = serde_json::from_str(&settings_json).unwrap_or_default();
+        Ok(settings)
+    }
+
+    /// Update user settings
+    pub async fn update_user_settings(&self, settings: &crate::user::UserSettings) -> Result<(), sqlx::Error> {
+        let settings_json = serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string());
+        sqlx::query("UPDATE users SET settings = ? WHERE id = ?")
+            .bind(settings_json)
+            .bind(&self.user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Fetches due cards for a given deck.
     pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
         let now = Utc::now().timestamp_millis();
