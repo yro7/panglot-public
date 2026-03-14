@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use lc_core::domain::CardMetadata;
 use lc_core::traits::{CardModel, Language};
-use lc_core::user::UserProfile;
+use lc_core::user::UserSettings;
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -534,7 +534,7 @@ where
         card_model_id: CardModelId,
         num_cards: u32,
         difficulty: u8,
-        user_profile: UserProfile,
+        user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> GenerationRequest<L> {
@@ -611,7 +611,7 @@ pub trait DynPipeline: Send + Sync {
 
     async fn generate_cards_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -619,7 +619,7 @@ pub trait DynPipeline: Send + Sync {
 
     async fn generate_deck_data_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -628,7 +628,7 @@ pub trait DynPipeline: Send + Sync {
     /// Single LLM call that returns both display cards and storage-ready deck data.
     async fn generate_cards_and_deck_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -636,7 +636,7 @@ pub trait DynPipeline: Send + Sync {
 
     fn preview_prompt_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        difficulty: u8, user_profile: UserProfile,
+        difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> Result<DynPromptPreview>;
 
@@ -695,7 +695,7 @@ where
 
     async fn generate_cards_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -716,7 +716,7 @@ where
 
     async fn generate_deck_data_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -727,7 +727,7 @@ where
 
     async fn generate_cards_and_deck_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserProfile,
+        num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
@@ -738,7 +738,7 @@ where
 
     fn preview_prompt_dyn(
         &self, node_id: &str, card_model_id: CardModelId,
-        difficulty: u8, user_profile: UserProfile,
+        difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> Result<DynPromptPreview> {
         let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options);
