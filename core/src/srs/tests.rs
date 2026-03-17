@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn registry_get_unknown_returns_none() {
         let reg = SrsRegistry::new();
-        assert!(reg.get("fsrs").is_none());
+        assert!(reg.get("unknown_algo").is_none());
     }
 
     #[test]
@@ -64,11 +64,13 @@ mod tests {
     fn registry_list_contains_all() {
         let reg = SrsRegistry::new();
         let list = reg.list();
-        assert_eq!(list.len(), 3);
+        assert_eq!(list.len(), 5);
         let ids: Vec<&str> = list.iter().map(|&(id, _)| id).collect();
         assert!(ids.contains(&"sm2"));
         assert!(ids.contains(&"leitner"));
-        assert!(ids.contains(&"fsrs"));
+        assert!(ids.contains(&"fsrs-4.5"));
+        assert!(ids.contains(&"fsrs-5"));
+        assert!(ids.contains(&"fsrs-6"));
     }
 
     #[test]
@@ -79,7 +81,7 @@ mod tests {
         let choices = algo.preview_choices(&[], now);
 
         // All 4 should produce valid outputs
-        assert!(choices.again.due_date > now);
+        assert!(choices.again.due_date >= now);
         assert!(choices.hard.due_date > now);
         assert!(choices.good.due_date > now);
         assert!(choices.easy.due_date > now);

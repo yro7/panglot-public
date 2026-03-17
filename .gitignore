@@ -27,18 +27,6 @@ Cargo.lock
 output/
 lc_audio/
 
-# Private content
-prompts/
-configs/
-!configs/example_tree.yaml
-app/
-
-# Docs (keep only README_public.md and architecture docs)
-*.md
-!README_public.md
-!architecture.mmd
-!architecture_sequence.mmd
-
 # Misc
 test_parse.rs
 ""
