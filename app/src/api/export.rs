@@ -51,7 +51,11 @@ pub async fn export_deck(
     let export_result = pipeline.generate_deck_data_dyn(
         node_id, card_model_id, card_count, difficulty,
         // When exporting normally, we just give a default user matching defaults
-        UserSettings::new(data.defaults.user_language.clone()),
+        UserSettings::new(
+            data.defaults.user_language.clone(),
+            data.defaults.user_settings.srs_algorithm.clone(),
+            data.defaults.user_settings.learn_ahead_minutes,
+        ),
         body.user_prompt.clone(),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
