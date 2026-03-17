@@ -96,3 +96,14 @@ pub async fn clear_cards(auth: AuthUser, data: web::Data<AppState>) -> impl Resp
         })),
     }
 }
+
+pub async fn delete_deck(auth: AuthUser, data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
+    let deck_id = path.into_inner();
+    let db = data.db_for(&auth);
+    match db.delete_deck(&deck_id).await {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true, "message": "Deck deleted"})),
+        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": format!("Failed to delete deck: {}", e)
+        })),
+    }
+}

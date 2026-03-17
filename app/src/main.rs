@@ -294,6 +294,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/languages", web::get().to(api::config::get_languages))
             .route("/api/anki-decks", web::get().to(api::decks::get_anki_decks))
             .route("/api/local-decks", web::get().to(api::decks::get_local_decks))
+            .route("/api/local-decks/{deck_id}", web::delete().to(api::decks::delete_deck))
             .route("/api/local-decks/export-apkg", web::post().to(api::decks::export_db_to_apkg))
             .route("/api/local-decks/{deck_id}/study", web::get().to(api::study::get_study_session))
             .route("/api/local-decks/{deck_id}/review", web::post().to(api::study::submit_review))
@@ -308,6 +309,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/auth/login", web::post().to(auth::post_auth_login))
             .route("/api/user/settings", web::get().to(api::config::get_user_settings))
             .route("/api/user/settings", web::post().to(api::config::update_user_settings))
+            .route("/api/audio/{filename}", web::get().to(api::audio::get_audio))
             .service(Files::new("/", &static_path).index_file("index.html"))
     })
     .bind(&bind_addr)?

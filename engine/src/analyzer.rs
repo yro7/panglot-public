@@ -340,6 +340,9 @@ mod tests {
         async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
             Ok(0)
         }
+        async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
     }
 
     fn make_card_with_metadata(
