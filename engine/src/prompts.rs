@@ -452,7 +452,7 @@ mod tests {
     use langs::Polish;
     use crate::card_models::CardModelId;
     use crate::skill_tree::{SkillNodeConfig, SkillTree};
-    use lc_core::user::UserProfile;
+    use lc_core::user::UserSettings;
 
     fn sample_tree() -> SkillTree<Polish> {
         let config = SkillNodeConfig {
@@ -539,7 +539,7 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 3,
             difficulty: 5,
-            user_profile: UserProfile::new("English".to_string()),
+            user_profile: UserSettings::new("English".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
             user_prompt: Some("Use funny sentences.".to_string()),
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -584,7 +584,7 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserProfile::new("French".to_string()),
+            user_profile: UserSettings::new("French".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -626,7 +626,7 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserProfile::new("English".to_string()),
+            user_profile: UserSettings::new("English".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),

@@ -9,10 +9,10 @@ use jsonwebtoken::DecodingKey;
 
 use lc_core::traits::Language;
 use engine::llm_client::{LlmHttpClient, LlmProvider};
-use engine::pipeline::{DynPipeline, Pipeline};
+use engine::pipeline::Pipeline;
 use engine::prompts::PromptConfig;
 use engine::python_sidecar::PythonSidecar;
-use engine::skill_tree::{SkillTree, SkillTreeConfig};
+use engine::skill_tree::{SkillNode, SkillTree, SkillTreeConfig};
 
 mod config;
 pub mod state;
@@ -20,17 +20,17 @@ pub mod auth;
 pub mod worker;
 pub mod api;
 
-use state::{AppState, LlmRuntimeConfig, now_ms};
+use state::{AppState, LanguageRuntime, LlmRuntimeConfig, now_ms};
 use auth::parse_jwk;
 
-fn build_typed_pipeline<L>(
+fn build_language_runtime<L>(
     lang: L,
     tree_config: SkillTreeConfig,
     cfg: &config::AppConfig,
     make_client: &dyn Fn(&str) -> LlmHttpClient,
     sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
     prompt_config: &PromptConfig,
-) -> Box<dyn DynPipeline>
+) -> LanguageRuntime
 where
     L: Language + Send + Sync + 'static,
     L::Morphology: std::fmt::Debug
@@ -46,29 +46,30 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     let tree = SkillTree::from_config(lang, tree_config);
+    let base_tree: SkillNode = tree.root.clone();
     let model = cfg.llm.active_model().expect("model already validated at startup");
     let client = make_client(model);
     let mut pipeline = Pipeline::new(
-        tree, Box::new(client),
+        tree.language, Box::new(client),
         cfg.generator.temperature, cfg.generator.max_tokens,
         cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
         prompt_config.clone(),
     );
     pipeline.add_early_processor(Box::new(engine::post_process::IpaGenerator::new(sidecar.clone())));
     pipeline.add_early_processor(Box::new(engine::post_process::TtsGenerator::new(sidecar.clone())));
-    Box::new(pipeline)
+    LanguageRuntime { pipeline: Box::new(pipeline), base_tree }
 }
 
-fn build_pipeline_for_iso(
+fn build_runtime_for_iso(
     iso: &str,
     tree_config: SkillTreeConfig,
     cfg: &config::AppConfig,
     make_client: &dyn Fn(&str) -> LlmHttpClient,
     sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
     prompt_config: &PromptConfig,
-) -> Option<Box<dyn DynPipeline>> {
+) -> Option<LanguageRuntime> {
     langs::dispatch_iso!(iso, lang => {
-        build_typed_pipeline(lang, tree_config, cfg, make_client, sidecar, prompt_config)
+        build_language_runtime(lang, tree_config, cfg, make_client, sidecar, prompt_config)
     })
 }
 
@@ -121,7 +122,7 @@ async fn main() -> std::io::Result<()> {
         PythonSidecar::spawn().expect("Failed to start Python sidecar")
     ));
 
-    let mut pipelines_map: std::collections::HashMap<String, Box<dyn DynPipeline>> =
+    let mut languages_map: std::collections::HashMap<String, LanguageRuntime> =
         std::collections::HashMap::new();
 
     // Helper: create an LLM client for a given model
@@ -160,10 +161,10 @@ async fn main() -> std::io::Result<()> {
             }
         };
 
-        match build_pipeline_for_iso(&iso, tree_config, &cfg, &make_client, &sidecar, &prompt_config) {
-            Some(pipeline) => {
-                println!("✅ Loaded {} ({}) skill tree from {path:?}", pipeline.language_name(), iso);
-                pipelines_map.insert(iso, pipeline);
+        match build_runtime_for_iso(&iso, tree_config, &cfg, &make_client, &sidecar, &prompt_config) {
+            Some(runtime) => {
+                println!("✅ Loaded {} ({}) skill tree from {path:?}", runtime.pipeline.language_name(), iso);
+                languages_map.insert(iso, runtime);
             }
             None => {
                 eprintln!("⚠️  No language registered for ISO code '{iso}' (from {path:?}) — skipping");
@@ -171,7 +172,7 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    if pipelines_map.is_empty() {
+    if languages_map.is_empty() {
         eprintln!("❌ No skill trees loaded! Check that {tree_dir}/*_tree.yaml files exist");
         std::process::exit(1);
     }
@@ -233,7 +234,7 @@ async fn main() -> std::io::Result<()> {
     let pool = local_db.pool.clone();
 
     let app_state = web::Data::new(AppState {
-        pipelines: RwLock::new(pipelines_map),
+        languages: RwLock::new(languages_map),
         llm_semaphore: Arc::new(Semaphore::new(max_llm_calls)),
         post_process_semaphore: Arc::new(Semaphore::new(
             std::thread::available_parallelism()
@@ -291,6 +292,9 @@ async fn main() -> std::io::Result<()> {
             .route("/api/preview-prompt", web::post().to(api::generation::preview_prompt))
             .route("/api/card-models", web::get().to(api::config::get_card_models))
             .route("/api/add-node", web::post().to(api::tree::add_node))
+            .route("/api/hide-node", web::post().to(api::tree::hide_node))
+            .route("/api/edit-node", web::post().to(api::tree::edit_node))
+            .route("/api/tree-customization", web::delete().to(api::tree::delete_customization))
             .route("/api/languages", web::get().to(api::config::get_languages))
             .route("/api/anki-decks", web::get().to(api::decks::get_anki_decks))
             .route("/api/local-decks", web::get().to(api::decks::get_local_decks))

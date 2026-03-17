@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
+use engine::skill_tree;
 use lc_core::db::DraftCard;
 use lc_core::storage::StorageProvider;
 
@@ -9,6 +10,7 @@ use super::models::{
     GenerateRequest, GenerateResponse, GeneratedCardJson,
     PreviewPromptRequest, PreviewPromptResponse, PromptMessageJson, PreviewSchemas,
 };
+use super::tree::build_user_tree;
 
 pub async fn generate_cards(
     auth: AuthUser,
@@ -25,10 +27,10 @@ pub async fn generate_cards(
     let card_count = body.card_count.unwrap_or(data.defaults.card_count_generate);
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let pipelines = data.pipelines.read().await;
+    let languages = data.languages.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(pipeline) = pipelines.get(lang) else {
+    let Some(runtime) = languages.get(lang) else {
         return HttpResponse::BadRequest().json(GenerateResponse {
             success: false,
             cards: vec![],
@@ -36,7 +38,9 @@ pub async fn generate_cards(
         });
     };
 
-    let node = match pipeline.find_node(node_id) {
+    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+
+    let node = match skill_tree::find_node(&user_tree, node_id) {
         Some(n) => n,
         None => {
             return HttpResponse::BadRequest().json(GenerateResponse {
@@ -61,8 +65,8 @@ pub async fn generate_cards(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
-    let generation_result = pipeline.generate_cards_dyn(
-        node_id, card_model_id, card_count, difficulty,
+    let generation_result = runtime.pipeline.generate_cards_dyn(
+        &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(), body.user_prompt.clone(),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
@@ -80,7 +84,7 @@ pub async fn generate_cards(
                 metadata_json: c.metadata_json,
             }).collect();
 
-            drop(pipelines);
+            drop(languages);
 
             let db = data.db_for(&auth);
             let drafts: Vec<DraftCard> = cards_json.iter().map(|c| DraftCard {
@@ -129,16 +133,18 @@ pub async fn generate_and_save(
     let card_count = body.card_count.unwrap_or(data.defaults.card_count_generate);
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let pipelines = data.pipelines.read().await;
+    let languages = data.languages.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(pipeline) = pipelines.get(lang) else {
+    let Some(runtime) = languages.get(lang) else {
         return HttpResponse::BadRequest().json(GenerateResponse {
             success: false, cards: vec![], message: format!("Language '{}' not found", lang),
         });
     };
 
-    let node = match pipeline.find_node(node_id) {
+    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+
+    let node = match skill_tree::find_node(&user_tree, node_id) {
         Some(n) => n,
         None => return HttpResponse::BadRequest().json(GenerateResponse {
             success: false, cards: vec![], message: "Node not found in tree".to_string(),
@@ -156,8 +162,8 @@ pub async fn generate_and_save(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
-    let result = pipeline.generate_cards_and_deck_dyn(
-        node_id, card_model_id, card_count, difficulty,
+    let result = runtime.pipeline.generate_cards_and_deck_dyn(
+        &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(), body.user_prompt.clone(),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
@@ -175,7 +181,7 @@ pub async fn generate_and_save(
                 metadata_json: c.metadata_json,
             }).collect();
 
-            drop(pipelines);
+            drop(languages);
 
             let db = data.db_for(&auth);
             let drafts: Vec<DraftCard> = cards_json.iter().map(|c| DraftCard {
@@ -224,6 +230,7 @@ pub async fn generate_and_save(
 }
 
 pub async fn preview_prompt(
+    auth: AuthUser,
     data: web::Data<AppState>,
     body: web::Json<PreviewPromptRequest>,
 ) -> impl Responder {
@@ -233,23 +240,25 @@ pub async fn preview_prompt(
     };
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let pipelines = data.pipelines.read().await;
+    let languages = data.languages.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(pipeline) = pipelines.get(lang) else {
+    let Some(runtime) = languages.get(lang) else {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": format!("Language '{}' not found", lang)
         }));
     };
 
-    if pipeline.find_node(&body.node_id).is_none() {
+    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+
+    if skill_tree::find_node(&user_tree, &body.node_id).is_none() {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": format!("Node not found: {}", body.node_id)
         }));
     }
 
-    let preview = match pipeline.preview_prompt_dyn(
-        &body.node_id, card_model_id, difficulty,
+    let preview = match runtime.pipeline.preview_prompt_dyn(
+        &user_tree, &body.node_id, card_model_id, difficulty,
         body.user_profile.clone().unwrap_or_default(),
         body.lexicon_options.clone(),
     ) {

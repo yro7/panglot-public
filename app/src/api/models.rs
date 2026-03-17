@@ -95,6 +95,26 @@ pub struct AddNodeResponse {
 }
 
 #[derive(Deserialize)]
+pub struct HideNodeRequest {
+    pub language: Option<String>,
+    pub node_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct EditNodeRequest {
+    pub language: Option<String>,
+    pub node_id: String,
+    pub node_name: Option<String>,
+    pub node_instructions: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteCustomizationQuery {
+    pub lang: Option<String>,
+    pub node_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct GetTreeQuery {
     pub lang: Option<String>,
 }

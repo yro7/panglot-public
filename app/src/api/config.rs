@@ -80,9 +80,9 @@ pub async fn update_llm_config(
     };
 
     {
-        let pipelines = data.pipelines.read().await;
-        for pipeline in pipelines.values() {
-            pipeline.swap_llm_client(new_client_factory()).await;
+        let languages = data.languages.read().await;
+        for rt in languages.values() {
+            rt.pipeline.swap_llm_client(new_client_factory()).await;
         }
     }
 
@@ -109,10 +109,10 @@ pub async fn get_card_models(
     query: web::Query<CardModelQuery>,
 ) -> impl Responder {
     let lang = query.lang.as_deref().unwrap_or(&data.defaults.language);
-    let pipelines = data.pipelines.read().await;
+    let languages = data.languages.read().await;
 
-    let models: Vec<String> = if let Some(pipeline) = pipelines.get(lang) {
-        pipeline.available_models().into_iter().map(|id| id.to_string()).collect()
+    let models: Vec<String> = if let Some(runtime) = languages.get(lang) {
+        runtime.pipeline.available_models().into_iter().map(|id| id.to_string()).collect()
     } else {
         CardModelId::ALL.iter().map(|id| id.to_string()).collect()
     };
@@ -121,11 +121,11 @@ pub async fn get_card_models(
 }
 
 pub async fn get_languages(data: web::Data<AppState>) -> impl Responder {
-    let pipelines = data.pipelines.read().await;
-    let languages: Vec<serde_json::Value> = pipelines.iter().map(|(iso, p)| {
-        serde_json::json!({ "iso": iso, "name": p.language_name() })
+    let languages = data.languages.read().await;
+    let list: Vec<serde_json::Value> = languages.iter().map(|(iso, rt)| {
+        serde_json::json!({ "iso": iso, "name": rt.pipeline.language_name() })
     }).collect();
-    HttpResponse::Ok().json(languages)
+    HttpResponse::Ok().json(list)
 }
 
 pub async fn get_user_settings(auth: AuthUser, data: web::Data<AppState>) -> impl Responder {

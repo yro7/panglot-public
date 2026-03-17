@@ -14,7 +14,7 @@ use crate::generator::GenerationRequest;
 use crate::llm_client::{ChatMessage, LlmClient, LlmRequest, Role};
 use crate::post_process::{EarlyPostProcessor, LatePostProcessor};
 use crate::prompts::{GeneratorContext, PromptConfig};
-use crate::skill_tree::{SkillNode, SkillTree};
+use crate::skill_tree::SkillNode;
 use crate::validation::CardValidator;
 
 use lc_core::storage::{StorageProvider, NewDeckData, NewCardEntry};
@@ -51,9 +51,11 @@ pub struct GeneratedCard<P: std::fmt::Debug + Clone + Serialize + for<'de> Deser
 /// 3. Parse + validate each card (with 1 retry on failure)
 /// 4. In parallel: extract features (Call 2) + run early post-processors (TTS/IPA)
 /// 5. Run late post-processors (with full metadata access)
-/// 6. Package into an `.apkg` file via DeckBuilder
+///
+/// The pipeline does NOT own a skill tree. The tree is injected at each call,
+/// allowing per-user overlays without shared mutable state.
 pub struct Pipeline<L: Language + Send + Sync> {
-    pub tree: SkillTree<L>,
+    pub language: L,
     llm_client: tokio::sync::RwLock<Box<dyn LlmClient>>,
     early_processors: Vec<Box<dyn EarlyPostProcessor<L>>>,
     late_processors: Vec<Box<dyn LatePostProcessor<L>>>,
@@ -81,7 +83,7 @@ where
         + Sync,
 {
     pub fn new(
-        tree: SkillTree<L>,
+        language: L,
         llm_client: Box<dyn LlmClient>,
         generator_temperature: f32,
         generator_max_tokens: u32,
@@ -90,7 +92,7 @@ where
         prompt_config: PromptConfig,
     ) -> Self {
         Self {
-            tree,
+            language,
             llm_client: tokio::sync::RwLock::new(llm_client),
             early_processors: Vec::new(),
             late_processors: Vec::new(),
@@ -106,11 +108,9 @@ where
     }
 
     /// Builds the Anki deck name from the tree path: `Language::TreePath::CardModel`
-    fn build_deck_name(&self, node_id: &str, req: &GenerationRequest<L>) -> Result<String> {
-        let tree_path = self.tree.get_node_path(node_id)
+    fn build_deck_name(&self, tree_root: &SkillNode, node_id: &str, req: &GenerationRequest<L>) -> Result<String> {
+        let tree_path = crate::skill_tree::get_node_path(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node path not found for '{}'", node_id))?;
-        // get_node_path returns "Polski > Przypadki (Cases) > Biernik (Accusative)"
-        // Convert to Anki hierarchy: "Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest"
         let deck_path = tree_path.replace(" > ", "::");
         Ok(format!("{}::{}", deck_path, req.card_model_id))
     }
@@ -120,18 +120,17 @@ where
     /// LLM invocations.
     pub async fn generate_cards_and_deck(
         &self,
+        tree_root: &SkillNode,
         target_node_id: &str,
         req: &GenerationRequest<L>,
         llm_semaphore: Arc<Semaphore>,
         post_process_semaphore: Arc<Semaphore>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)> {
-        let _node = self
-            .tree
-            .find_node(target_node_id)
+        let _node = crate::skill_tree::find_node(tree_root, target_node_id)
             .ok_or_else(|| anyhow::anyhow!("Target node not found in skill tree"))?;
 
-        let deck_name = self.build_deck_name(target_node_id, req)?;
-        let cards = self.generate_cards_batch(req, target_node_id, llm_semaphore, post_process_semaphore).await?;
+        let deck_name = self.build_deck_name(tree_root, target_node_id, req)?;
+        let cards = self.generate_cards_batch(tree_root, req, target_node_id, llm_semaphore, post_process_semaphore).await?;
 
         let mut dyn_cards = Vec::with_capacity(cards.len());
         let mut new_cards = Vec::with_capacity(cards.len());
@@ -160,7 +159,7 @@ where
             });
         }
 
-        let language_code = self.tree.language.iso_code().to_639_3().to_string();
+        let language_code = self.language.iso_code().to_639_3().to_string();
         Ok((dyn_cards, NewDeckData { name: deck_name, language_code, cards: new_cards }))
     }
 
@@ -168,19 +167,18 @@ where
     /// exported or pushed to storage by the calling application layer.
     pub async fn generate_deck_data(
         &self,
+        tree_root: &SkillNode,
         target_node_id: &str,
         req: &GenerationRequest<L>,
         llm_semaphore: Arc<Semaphore>,
         post_process_semaphore: Arc<Semaphore>,
     ) -> Result<NewDeckData> {
-        let _node = self
-            .tree
-            .find_node(target_node_id)
+        let _node = crate::skill_tree::find_node(tree_root, target_node_id)
             .ok_or_else(|| anyhow::anyhow!("Target node not found in skill tree"))?;
 
-        let deck_name = self.build_deck_name(target_node_id, req)?;
+        let deck_name = self.build_deck_name(tree_root, target_node_id, req)?;
 
-        let cards = match self.generate_cards_batch(req, target_node_id, llm_semaphore, post_process_semaphore).await {
+        let cards = match self.generate_cards_batch(tree_root, req, target_node_id, llm_semaphore, post_process_semaphore).await {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Warning: Failed to generate cards batch: {}", e);
@@ -204,7 +202,7 @@ where
             }
         }).collect();
 
-        let language_code = self.tree.language.iso_code().to_639_3().to_string();
+        let language_code = self.language.iso_code().to_639_3().to_string();
         Ok(NewDeckData {
             name: deck_name,
             language_code,
@@ -215,14 +213,17 @@ where
     /// Builds the system prompt for the content generator from the skill tree context.
     fn build_generator_system_prompt(
         &self,
+        tree_root: &SkillNode,
         req: &GenerationRequest<L>,
         skill_node_id: &str,
     ) -> Result<String> {
-        let node = self.tree.find_node(skill_node_id).ok_or_else(|| anyhow::anyhow!("Node not found"))?;
-        let path = self.tree.get_node_path(skill_node_id).ok_or_else(|| anyhow::anyhow!("Path not found"))?;
+        let node = crate::skill_tree::find_node(tree_root, skill_node_id)
+            .ok_or_else(|| anyhow::anyhow!("Node not found"))?;
+        let path = crate::skill_tree::get_node_path(tree_root, skill_node_id)
+            .ok_or_else(|| anyhow::anyhow!("Path not found"))?;
 
         Ok(GeneratorContext::builder()
-            .language(&self.tree.language)
+            .language(&self.language)
             .skill_node(node)
             .node_path(&path)
             .request(req)
@@ -234,6 +235,7 @@ where
     /// Generates a batch of cards using the dual-call LLM strategy.
     pub async fn generate_cards_batch(
         &self,
+        tree_root: &SkillNode,
         req: &GenerationRequest<L>,
         skill_node_id: &str,
         llm_semaphore: Arc<Semaphore>,
@@ -244,7 +246,7 @@ where
         }
 
         // --- Call 1: Content Generation (Batched) ---
-        let system_content = self.build_generator_system_prompt(req, skill_node_id)?;
+        let system_content = self.build_generator_system_prompt(tree_root, req, skill_node_id)?;
 
         let user_content = format!(
             "Difficulty level: {}/10.{}\n\nRespond with valid JSON only, no markdown.",
@@ -256,7 +258,7 @@ where
         );
 
         let item_schema = crate::card_models::AnyCard::schema_json_value::<L>(req.card_model_id);
-        // LLM structured outputs (Anthropic tool_use and OpenAI JSON schema) strictly require 
+        // LLM structured outputs (Anthropic tool_use and OpenAI JSON schema) strictly require
         // the top-level schema to be an object, not an array. We wrap it in a `cards` property.
         let array_schema = serde_json::json!({
             "type": "object",
@@ -303,6 +305,14 @@ where
              return Err(anyhow::anyhow!("LLM returned an object without 'cards' array"));
         };
 
+        // Pre-resolve node info for use inside the async closures
+        let skill_name = crate::skill_tree::find_node(tree_root, skill_node_id)
+            .map(|n| n.name.clone())
+            .unwrap_or_default();
+        let node_for_extraction = crate::skill_tree::find_node(tree_root, skill_node_id).cloned();
+        let node_path_for_extraction = crate::skill_tree::get_node_path(tree_root, skill_node_id)
+            .unwrap_or_default();
+
         let mut fetch_tasks = Vec::new();
 
         for value in json_array.into_iter() {
@@ -313,7 +323,7 @@ where
                  Ok(result) => result,
                  Err(feedback) => {
                      eprintln!("Card validation failed, retrying: {}", feedback);
-                     match self.retry_single_card(req, skill_node_id, &feedback, &llm_semaphore).await {
+                     match self.retry_single_card(tree_root, req, skill_node_id, &feedback, &llm_semaphore).await {
                          Ok(result) => result,
                          Err(e) => {
                              eprintln!("Card abandoned after retry: {}", e);
@@ -326,6 +336,9 @@ where
              let (any_card, extra_fields, card_json_for_extraction) = parsed;
              let llm_sem = llm_semaphore.clone();
              let pp_sem = post_process_semaphore.clone();
+             let skill_name = skill_name.clone();
+             let extraction_node = node_for_extraction.clone();
+             let extraction_path = node_path_for_extraction.clone();
 
              let future = async move {
                  let card_id_str = uuid::Uuid::new_v4().to_string();
@@ -336,12 +349,17 @@ where
                      // Feature extraction (LLM call 2, with 1 retry)
                       async {
                           let targets = any_card.targets().to_vec();
+                          let extraction_node_ref = extraction_node.as_ref();
+                          let Some(ext_node) = extraction_node_ref else {
+                              return Err(anyhow::anyhow!("Node not found for extraction"));
+                          };
                           let mut result = {
                               let _permit = llm_sem.acquire().await.unwrap();
                               let client = self.llm_client.read().await;
                               crate::feature_extractor::extract_features_via_llm(
-                                  &self.tree, client.as_ref(), req,
-                                  &card_json_for_extraction, skill_node_id, &targets,
+                                  &self.language, ext_node, &extraction_path,
+                                  client.as_ref(), req,
+                                  &card_json_for_extraction, &targets,
                                   self.extractor_temperature, self.extractor_max_tokens,
                                   None, &self.prompt_config,
                               ).await
@@ -358,8 +376,9 @@ where
                               let _permit = llm_sem.acquire().await.unwrap();
                               let client = self.llm_client.read().await;
                               result = crate::feature_extractor::extract_features_via_llm(
-                                  &self.tree, client.as_ref(), req,
-                                  &card_json_for_extraction, skill_node_id, &targets,
+                                  &self.language, ext_node, &extraction_path,
+                                  client.as_ref(), req,
+                                  &card_json_for_extraction, &targets,
                                   self.extractor_temperature, self.extractor_max_tokens,
                                   prev_attempt.as_ref(), &self.prompt_config,
                               ).await;
@@ -371,7 +390,7 @@ where
                          let _pp_permit = pp_sem.acquire().await.unwrap();
                          let mut results = Vec::new();
                          for processor in &self.early_processors {
-                             match processor.process(&self.tree.language, &card_id_str, &any_card, &extra_value).await {
+                             match processor.process(&self.language, &card_id_str, &any_card, &extra_value).await {
                                  Ok(r) => results.push(r),
                                  Err(e) => eprintln!("Early post-processing error: {}", e),
                              }
@@ -389,13 +408,9 @@ where
                      },
                  };
 
-                 let skill_name = self.tree.find_node(skill_node_id)
-                     .map(|n| n.name.clone())
-                     .unwrap_or_default();
-
                  let mut metadata = CardMetadata {
                      card_id: card_id_str,
-                     language: self.tree.language.iso_code().to_639_3().to_string(),
+                     language: self.language.iso_code().to_639_3().to_string(),
                      skill_id: skill_node_id.to_string(),
                      skill_name,
                      pedagogical_explanation,
@@ -414,7 +429,7 @@ where
 
                  // --- Late Post-Processing (sequential, after feature extraction) ---
                  for processor in &self.late_processors {
-                     if let Err(e) = processor.process(&self.tree.language, &any_card, &extra_value, &mut metadata).await {
+                     if let Err(e) = processor.process(&self.language, &any_card, &extra_value, &mut metadata).await {
                          eprintln!("Late post-processing error: {}", e);
                      }
                  }
@@ -441,7 +456,7 @@ where
 
         let extra_value = serde_json::to_value(&extra_fields).unwrap_or(serde_json::Value::Null);
         for validator in &self.validators {
-            validator.validate(&self.tree.language, &any_card, &extra_value).await?;
+            validator.validate(&self.language, &any_card, &extra_value).await?;
         }
 
         Ok((any_card, extra_fields, card_json.to_string()))
@@ -451,12 +466,13 @@ where
     /// Injects the feedback message into the prompt so the LLM can correct itself.
     async fn retry_single_card(
         &self,
+        tree_root: &SkillNode,
         req: &GenerationRequest<L>,
         skill_node_id: &str,
         feedback: &str,
         llm_semaphore: &Arc<Semaphore>,
     ) -> std::result::Result<(crate::card_models::AnyCard, L::ExtraFields, String), String> {
-        let system_content = self.build_generator_system_prompt(req, skill_node_id)
+        let system_content = self.build_generator_system_prompt(tree_root, req, skill_node_id)
             .map_err(|e| format!("Prompt generation error: {}", e))?;
 
         let user_content = format!(
@@ -507,7 +523,7 @@ where
         // Run validators on the retried card (no further retry)
         let extra_value = serde_json::to_value(&extra_fields).unwrap_or(serde_json::Value::Null);
         for validator in &self.validators {
-            validator.validate(&self.tree.language, &any_card, &extra_value).await
+            validator.validate(&self.language, &any_card, &extra_value).await
                 .map_err(|e| format!("Retry validation error: {}", e))?;
         }
 
@@ -599,18 +615,14 @@ pub struct DynPromptPreview {
 }
 
 /// Language-agnostic pipeline interface. The API layer works exclusively through this trait.
-/// Implemented automatically for all `Pipeline<L>` via blanket impl.
+/// The tree is injected at each call — the pipeline is stateless w.r.t. the skill tree.
 #[async_trait::async_trait]
 pub trait DynPipeline: Send + Sync {
     fn language_name(&self) -> &str;
     fn iso_code_str(&self) -> &str;
-    fn tree_root(&self) -> &SkillNode;
-    fn find_node(&self, id: &str) -> Option<&SkillNode>;
-    fn find_node_mut(&mut self, id: &str) -> Option<&mut SkillNode>;
-    fn get_node_path(&self, id: &str) -> Option<String>;
 
     async fn generate_cards_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
@@ -618,7 +630,7 @@ pub trait DynPipeline: Send + Sync {
     ) -> Result<Vec<DynGeneratedCard>>;
 
     async fn generate_deck_data_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
@@ -627,7 +639,7 @@ pub trait DynPipeline: Send + Sync {
 
     /// Single LLM call that returns both display cards and storage-ready deck data.
     async fn generate_cards_and_deck_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
@@ -635,7 +647,7 @@ pub trait DynPipeline: Send + Sync {
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)>;
 
     fn preview_prompt_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> Result<DynPromptPreview>;
@@ -670,38 +682,22 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     fn language_name(&self) -> &str {
-        self.tree.language.name()
+        self.language.name()
     }
 
     fn iso_code_str(&self) -> &str {
-        self.tree.language.iso_code().to_639_3()
-    }
-
-    fn tree_root(&self) -> &SkillNode {
-        &self.tree.root
-    }
-
-    fn find_node(&self, id: &str) -> Option<&SkillNode> {
-        self.tree.find_node(id)
-    }
-
-    fn find_node_mut(&mut self, id: &str) -> Option<&mut SkillNode> {
-        self.tree.find_node_mut(id)
-    }
-
-    fn get_node_path(&self, id: &str) -> Option<String> {
-        self.tree.get_node_path(id)
+        self.language.iso_code().to_639_3()
     }
 
     async fn generate_cards_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<Vec<DynGeneratedCard>> {
         let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
-        let cards = self.generate_cards_batch(&req, node_id, llm_sem, pp_sem).await?;
+        let cards = self.generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem).await?;
         Ok(cards.into_iter().map(|c| {
             let metadata_json = serde_json::to_string_pretty(&c.metadata).unwrap_or_default();
             DynGeneratedCard {
@@ -715,40 +711,40 @@ where
     }
 
     async fn generate_deck_data_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<NewDeckData> {
         let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
-        self.generate_deck_data(node_id, &req, llm_sem, pp_sem).await
+        self.generate_deck_data(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
     async fn generate_cards_and_deck_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)> {
         let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
-        self.generate_cards_and_deck(node_id, &req, llm_sem, pp_sem).await
+        self.generate_cards_and_deck(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
     fn preview_prompt_dyn(
-        &self, node_id: &str, card_model_id: CardModelId,
+        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> Result<DynPromptPreview> {
         let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options);
 
-        let node = self.tree.find_node(node_id)
+        let node = crate::skill_tree::find_node(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node '{}' not found", node_id))?;
-        let path = self.tree.get_node_path(node_id).unwrap_or_default();
+        let path = crate::skill_tree::get_node_path(tree_root, node_id).unwrap_or_default();
 
         let system_prompt_call_1 = GeneratorContext::builder()
-            .language(&self.tree.language)
+            .language(&self.language)
             .skill_node(node)
             .node_path(&path)
             .request(&req)
@@ -757,7 +753,7 @@ where
             .generate_prompt()?;
 
         let system_prompt_call_2 = crate::prompts::FeatureExtractorContext::builder()
-            .language(&self.tree.language)
+            .language(&self.language)
             .skill_node(node)
             .node_path(&path)
             .request(&req)
@@ -800,7 +796,7 @@ where
     async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<usize> {
         *self.lexicon_status.write() = LexiconStatus::Loading;
         let analyzer = LibraryAnalyzer;
-        let lang = self.tree.language.iso_code().to_639_3();
+        let lang = self.language.iso_code().to_639_3();
         match analyzer.extract_tracker_async::<L::Morphology>(provider, Some(lang)).await {
             Ok(tracker) => {
                 let count = tracker.len();
@@ -830,7 +826,7 @@ where
     }
 
     fn available_models(&self) -> Vec<CardModelId> {
-        CardModelId::available_models(&self.tree.language)
+        CardModelId::available_models(&self.language)
     }
 }
 
@@ -878,16 +874,13 @@ mod tests {
             r#"{"pedagogical_explanation": "Test", "target_features": [{"word": "książkę", "morphology": {"pos": "Noun", "lemma": "książka", "gender": "Feminine", "case": "Accusative"}}], "context_features": [{"word": "czytam", "morphology": {"pos": "Verb", "lemma": "czytać", "aspect": "Imperfective"}}]}"#.to_string(),
         ]);
 
-        let pipeline = Pipeline::new(tree, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
+        let pipeline = Pipeline::new(Polish, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
 
         let req = GenerationRequest::<langs::Polish> {
             card_model_id: crate::card_models::CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 3,
-            user_profile: lc_core::user::UserProfile {
-                ui_language: "English".to_string(),
-                linguistic_background: vec![],
-            },
+            user_profile: lc_core::user::UserSettings::default(),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![ExtractedFeature {
@@ -901,9 +894,8 @@ mod tests {
             excluded_vocabulary: vec![],
         };
 
-        let tmp = std::env::temp_dir().join("test_pipeline.apkg");
         let deck_data = pipeline
-            .generate_deck_data(acc_id, &req, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
+            .generate_deck_data(&tree.root, acc_id, &req, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
             .await
             .unwrap();
 
@@ -921,16 +913,13 @@ mod tests {
         let config = crate::prompts::PromptConfig::load(prompts_path.to_str().unwrap()).expect("Failed to load prompts");
 
         let mock = MockLlmClient::with_fixed_response("not valid json at all");
-        let pipeline = Pipeline::new(tree, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
+        let pipeline = Pipeline::new(Polish, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
 
         let req = GenerationRequest::<langs::Polish> {
             card_model_id: crate::card_models::CardModelId::ClozeTest,
             num_cards: 3,
             difficulty: 1,
-            user_profile: lc_core::user::UserProfile {
-                ui_language: "English".to_string(),
-                linguistic_background: vec![],
-            },
+            user_profile: lc_core::user::UserSettings::default(),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![],
@@ -938,7 +927,7 @@ mod tests {
         };
 
         let deck_data = pipeline
-            .generate_deck_data_dyn(acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
+            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
             .await
             .unwrap();
 
