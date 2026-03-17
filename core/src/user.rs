@@ -19,26 +19,36 @@ pub struct KnownLanguage {
 pub struct UserSettings {
     pub ui_language: String,
     pub linguistic_background: Vec<KnownLanguage>,
-    #[serde(default = "default_srs")]
+    #[serde(default = "UserSettings::default_srs")]
     pub srs_algorithm: String,
-}
-
-fn default_srs() -> String {
-    "sm2".to_string()
+    #[serde(default = "UserSettings::default_learn_ahead")]
+    pub learn_ahead_minutes: i32,
 }
 
 impl UserSettings {
-    pub fn new(ui_language: String) -> Self {
+    pub const DEFAULT_UI_LANGUAGE: &'static str = "English";
+    pub const DEFAULT_SRS: &'static str = "sm2";
+    pub const DEFAULT_LEARN_AHEAD: i32 = 20;
+
+    fn default_srs() -> String { Self::DEFAULT_SRS.to_string() }
+    fn default_learn_ahead() -> i32 { Self::DEFAULT_LEARN_AHEAD }
+
+    pub fn new(ui_language: String, srs_algorithm: String, learn_ahead_minutes: i32) -> Self {
         Self {
             ui_language,
             linguistic_background: Vec::new(),
-            srs_algorithm: default_srs(),
+            srs_algorithm,
+            learn_ahead_minutes,
         }
     }
 }
 
 impl Default for UserSettings {
     fn default() -> Self {
-        Self::new("English".to_string())
+        Self::new(
+            Self::DEFAULT_UI_LANGUAGE.to_string(),
+            Self::DEFAULT_SRS.to_string(),
+            Self::DEFAULT_LEARN_AHEAD,
+        )
     }
 }

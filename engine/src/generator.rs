@@ -55,7 +55,11 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 5,
             difficulty: 3,
-            user_profile: lc_core::user::UserSettings::new("French".to_string()),
+            user_profile: lc_core::user::UserSettings::new(
+                "French".to_string(),
+                lc_core::user::UserSettings::DEFAULT_SRS.to_string(),
+                lc_core::user::UserSettings::DEFAULT_LEARN_AHEAD,
+            ),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![],

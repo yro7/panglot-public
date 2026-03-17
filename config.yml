@@ -56,6 +56,9 @@ defaults:
   card_count_export: 5           # /api/export
   difficulty: 5                  # 1–10
   user_language: "English"       # langue de l'interface / explications
+  user_settings:
+    srs_algorithm: "sm2"         # default SRS algorithm (sm2, fsrs, leitner)
+    learn_ahead_minutes: 20      # how many minutes ahead to fetch due cards
 
 # ── Paths — Chemins de fichiers ──────────────────────────────
 paths:
