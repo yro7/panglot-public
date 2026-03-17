@@ -16,6 +16,20 @@ pub struct LocalStudyCard {
     pub metadata_json: String,
 }
 
+/// A per-user customization applied on top of the base YAML skill tree.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct UserTreeCustomization {
+    pub user_id: String,
+    pub language: String,
+    pub node_id: String,
+    pub action: String, // "add" | "hide" | "edit"
+    pub parent_id: Option<String>,
+    pub node_name: Option<String>,
+    pub node_instructions: Option<String>,
+    pub sort_order: i32,
+    pub created_at: i64,
+}
+
 /// A temporary generated card stored in DB before the user saves it to a real deck.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct DraftCard {
@@ -515,6 +529,71 @@ impl LocalStorageProvider {
             q.execute(&self.pool).await?;
         }
         Ok(())
+    }
+
+    // ── Tree customizations ──────────────────────────────────────────
+
+    /// Fetch all tree customizations for the current user and language.
+    pub async fn get_tree_customizations(&self, language: &str) -> Result<Vec<UserTreeCustomization>, sqlx::Error> {
+        let records = sqlx::query(
+            "SELECT user_id, language, node_id, action, parent_id, node_name, node_instructions, sort_order, created_at \
+             FROM user_tree_customizations WHERE user_id = ? AND language = ? ORDER BY sort_order, created_at"
+        )
+        .bind(&self.user_id)
+        .bind(language)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let customizations = records.into_iter().map(|r| {
+            use sqlx::Row;
+            UserTreeCustomization {
+                user_id: r.get("user_id"),
+                language: r.get("language"),
+                node_id: r.get("node_id"),
+                action: r.get("action"),
+                parent_id: r.get("parent_id"),
+                node_name: r.get("node_name"),
+                node_instructions: r.get("node_instructions"),
+                sort_order: r.get("sort_order"),
+                created_at: r.get("created_at"),
+            }
+        }).collect();
+
+        Ok(customizations)
+    }
+
+    /// Insert or replace a tree customization for the current user.
+    pub async fn upsert_tree_customization(&self, c: &UserTreeCustomization) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO user_tree_customizations \
+             (user_id, language, node_id, action, parent_id, node_name, node_instructions, sort_order, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&self.user_id)
+        .bind(&c.language)
+        .bind(&c.node_id)
+        .bind(&c.action)
+        .bind(&c.parent_id)
+        .bind(&c.node_name)
+        .bind(&c.node_instructions)
+        .bind(c.sort_order)
+        .bind(c.created_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Delete a single tree customization by node_id.
+    pub async fn delete_tree_customization(&self, language: &str, node_id: &str) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "DELETE FROM user_tree_customizations WHERE user_id = ? AND language = ? AND node_id = ?"
+        )
+        .bind(&self.user_id)
+        .bind(language)
+        .bind(node_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 }
 

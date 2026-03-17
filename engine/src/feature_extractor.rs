@@ -7,7 +7,7 @@ use crate::generator::GenerationRequest;
 use crate::llm_client::{ChatMessage, LlmClient, LlmRequest, Role};
 use crate::llm_utils::clean_llm_json;
 use crate::prompts::{FeatureExtractorContext, PromptConfig};
-use crate::skill_tree::SkillTree;
+use crate::skill_tree::SkillNode;
 
 /// Error returned when feature extraction parsing fails, carrying the raw LLM output.
 #[derive(Debug)]
@@ -62,12 +62,16 @@ pub struct PreviousAttempt {
 }
 
 /// Call 2: extracts morphological features from a generated card's JSON.
+///
+/// Accepts the resolved `node` and `node_path` directly so this function
+/// is agnostic to whether the tree was customized or not.
 pub async fn extract_features_via_llm<L: Language + Send + Sync>(
-    tree: &SkillTree<L>,
+    language: &L,
+    node: &SkillNode,
+    node_path: &str,
     llm_client: &dyn LlmClient,
     req: &GenerationRequest<L>,
     card_json: &str,
-    skill_node_id: &str,
     targets: &[String],
     temperature: f32,
     max_tokens: u32,
@@ -86,13 +90,10 @@ where
         + Send
         + Sync,
 {
-    let node = tree.find_node(skill_node_id).ok_or_else(|| anyhow::anyhow!("Node not found"))?;
-    let path = tree.get_node_path(skill_node_id).ok_or_else(|| anyhow::anyhow!("Path not found"))?;
-
     let system_prompt = FeatureExtractorContext::builder()
-        .language(&tree.language)
+        .language(language)
         .skill_node(node)
-        .node_path(&path)
+        .node_path(node_path)
         .request(req)
         .prompt_config(prompt_config)
         .build()
