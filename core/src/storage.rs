@@ -90,6 +90,9 @@ pub trait StorageProvider: Send + Sync {
     
     /// Pushes a newly generated deck to the storage.
     async fn save_deck(&self, deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Deletes a deck and all its associated cards and data.
+    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// A read-only provider that serves pre-fetched cards. Used to feed merged
@@ -115,6 +118,10 @@ impl StorageProvider for SnapshotProvider {
     }
 
     async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        Err("SnapshotProvider is read-only".into())
+    }
+
+    async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Err("SnapshotProvider is read-only".into())
     }
 }
