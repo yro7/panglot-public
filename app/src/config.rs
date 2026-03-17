@@ -91,6 +91,23 @@ pub struct DefaultsConfig {
     pub card_count_export: u32,
     pub difficulty: u8,
     pub user_language: String,
+    #[serde(default)]
+    pub user_settings: UserSettingsDefaultsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserSettingsDefaultsConfig {
+    pub srs_algorithm: String,
+    pub learn_ahead_minutes: i32,
+}
+
+impl Default for UserSettingsDefaultsConfig {
+    fn default() -> Self {
+        Self {
+            srs_algorithm: "sm2".to_string(),
+            learn_ahead_minutes: 20,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
