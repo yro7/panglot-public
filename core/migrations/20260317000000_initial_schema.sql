@@ -1,6 +1,5 @@
--- Panglot Database Schema
--- SQLite — source of truth for the local study DB
--- This file is documentation only. The actual schema is applied by db.rs::create_schema().
+-- Panglot Database Schema — Initial Migration
+-- SQLite — local study DB
 --
 -- Relations:
 --
@@ -14,8 +13,9 @@
 --   review_log = append-only, algorithm-agnostic (raw facts: rating + timestamp)
 --   reviews    = materialized scheduling cache, recalculable by any SRS algorithm
 --   Switching algorithm = rebuild_scheduling_cache() replays review_log history
-
-PRAGMA foreign_keys = ON;
+--
+-- Note: PRAGMA foreign_keys and journal_mode are set per-connection
+-- by the pool's after_connect callback, not here.
 
 -- ══════════════════════════════════════════
 --  USERS
