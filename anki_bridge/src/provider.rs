@@ -342,6 +342,34 @@ impl StorageProvider for AnkiStorageProvider {
         println!("  [save_deck] '{}': {} added, {} updated", deck.name, added, updated);
         Ok(added + updated)
     }
+
+    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // deck_id here is actually the deck name for AnkiStorageProvider as per fetch_decks
+        // Wait, fetch_decks sets deck_id to did.to_string().
+        // So we might need to find the name from the ID if we only have the ID.
+        // OR we can just use deck_names_result and find the name.
+        
+        let deck_names_result = self.invoke("deckNamesAndIds", serde_json::json!({})).await?;
+        let deck_map: HashMap<String, i64> = serde_json::from_value(deck_names_result)?;
+        
+        let mut target_name = None;
+        for (name, did) in deck_map {
+            if did.to_string() == deck_id {
+                target_name = Some(name);
+                break;
+            }
+        }
+
+        if let Some(name) = target_name {
+            self.invoke("deleteDecks", serde_json::json!({
+                "decks": [name],
+                "cardsToo": true
+            })).await?;
+            Ok(())
+        } else {
+            Err(format!("Deck with ID {} not found in Anki", deck_id).into())
+        }
+    }
 }
 
 // ----- Tests -----
@@ -370,6 +398,10 @@ mod tests {
 
         async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
             Ok(0)
+        }
+
+        async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
         }
     }
 
