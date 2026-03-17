@@ -10,10 +10,11 @@ lc_macro = { path = "../lc_macro" }
 isolang = { version = "2.4.0", features = ["english_names"] }
 iso15924 = "0.1.0"
 async-trait = "0.1.89"
-sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "uuid", "chrono"] }
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "uuid", "chrono", "migrate"] }
 chrono = "0.4.44"
 uuid = { version = "1.22.0", features = ["v4", "serde"] }
 serde_json = "1"
 
 [dev-dependencies]
 static_assertions = "1.1"
+tokio = { version = "1", features = ["full"] }
