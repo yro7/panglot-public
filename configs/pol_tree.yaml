@@ -11,31 +11,31 @@ root:
           name: Biernik (Accusative)
           node_instructions: >
             Generate a cloze deletion exercise focused on the accusative case (Biernik).
-            Create a sentence where the student must fill in a noun in the accusative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+            Create a sentence where the student must fill in a noun in the accusative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
           children: []
         - id: genitive
           name: Dopełniacz (Genitive)
           node_instructions: >
             Generate a cloze deletion exercise focused on the genitive case (Dopełniacz).
-            Create a sentence where the student must fill in a noun in the genitive form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+            Create a sentence where the student must fill in a noun in the genitive form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
           children: []
         - id: locative
           name: Miejscownik (Locative)
           node_instructions: >
             Generate a cloze deletion exercise focused on the locative case (Miejscownik).
-            Create a sentence where the student must fill in a noun in the locative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+            Create a sentence where the student must fill in a noun in the locative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
           children: []
         - id: dative
           name: Celownik (Dative)
           node_instructions: >
             Generate a cloze deletion exercise focused on the dative case (Celownik).
-            Create a sentence where the student must fill in a noun in the Celownik form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+            Create a sentence where the student must fill in a noun in the Celownik form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
           children: []
         - id: instrumental
           name: Narzędnik (Instrumental)
           node_instructions: >
             Generate a cloze deletion exercise focused on the instrumental case (Narzędnik).
-            Create a sentence where the student must fill in a noun in the instrumental form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun.
+            Create a sentence where the student must fill in a noun in the instrumental form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
           children: []
 
     - id: vocabulary

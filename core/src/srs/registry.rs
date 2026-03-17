@@ -18,6 +18,8 @@ impl SrsRegistry {
         registry.register(Box::new(sm2::Sm2));
         registry.register(Box::new(leitner::Leitner));
         registry.register(Box::new(fsrs::Fsrs::new()));
+        registry.register(Box::new(fsrs::Fsrs5::new()));
+        registry.register(Box::new(fsrs::Fsrs6::new()));
         registry
     }
 
