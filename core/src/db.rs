@@ -95,121 +95,16 @@ impl LocalStorageProvider {
             user_id: "default-user".to_string(),
         };
 
-        provider.create_schema().await?;
+        sqlx::migrate!("./migrations")
+            .run(&provider.pool)
+            .await
+            .map_err(|e| sqlx::Error::Protocol(format!("Migration failed: {e}")))?;
+
         provider.ensure_default_user().await?;
 
         Ok(provider)
     }
 
-    async fn create_schema(&self) -> Result<(), sqlx::Error> {
-        // Schema mirrors core/schema.sql (SSOT). Keep both in sync.
-        // Note: PRAGMA foreign_keys is handled by after_connect on the pool.
-        let statements: &[&str] = &[
-            // ── USERS ──
-            "CREATE TABLE IF NOT EXISTS users (
-                id            TEXT PRIMARY KEY,
-                display_name  TEXT NOT NULL,
-                email         TEXT,
-                settings      TEXT NOT NULL DEFAULT '{}',
-                created_at    INTEGER NOT NULL DEFAULT 0
-            )",
-
-            // ── DECKS ──
-            "CREATE TABLE IF NOT EXISTS decks (
-                id              TEXT PRIMARY KEY,
-                user_id         TEXT NOT NULL,
-                parent_id       TEXT,
-                name            TEXT NOT NULL,
-                full_path       TEXT NOT NULL,
-                target_language TEXT,
-                created_at      INTEGER NOT NULL,
-                UNIQUE(full_path, user_id),
-                FOREIGN KEY(user_id)   REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY(parent_id) REFERENCES decks(id) ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_decks_user_id ON decks(user_id)",
-
-            // ── CARDS ──
-            "CREATE TABLE IF NOT EXISTS cards (
-                id            TEXT PRIMARY KEY,
-                deck_id       TEXT NOT NULL,
-                skill_id      TEXT,
-                template_name TEXT,
-                front_html    TEXT NOT NULL,
-                back_html     TEXT NOT NULL,
-                fields_json   TEXT NOT NULL DEFAULT '{}',
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                audio_path    TEXT,
-                created_at    INTEGER NOT NULL,
-                FOREIGN KEY(deck_id) REFERENCES decks(id) ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_cards_deck_id ON cards(deck_id)",
-
-            // ── REVIEWS (scheduling cache, algorithm-agnostic) ──
-            "CREATE TABLE IF NOT EXISTS reviews (
-                card_id       TEXT NOT NULL,
-                user_id       TEXT NOT NULL,
-                due_date      INTEGER NOT NULL,
-                interval_days REAL NOT NULL DEFAULT 0,
-                PRIMARY KEY (card_id, user_id),
-                FOREIGN KEY(card_id) REFERENCES cards(id)  ON DELETE CASCADE,
-                FOREIGN KEY(user_id) REFERENCES users(id)  ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)",
-
-            // ── LEXICON ──
-            "CREATE TABLE IF NOT EXISTS lexicon (
-                id               TEXT PRIMARY KEY,
-                user_id          TEXT NOT NULL,
-                language         TEXT NOT NULL,
-                lemma            TEXT NOT NULL,
-                pos              TEXT NOT NULL,
-                morphology_json  TEXT NOT NULL DEFAULT '{}',
-                status           TEXT NOT NULL,
-                mastered_at      INTEGER,
-                UNIQUE(user_id, language, lemma, pos),
-                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_lexicon_user_id ON lexicon(user_id)",
-
-            // ── REVIEW_LOG (append-only, algorithm-agnostic history) ──
-            "CREATE TABLE IF NOT EXISTS review_log (
-                id          INTEGER PRIMARY KEY,
-                card_id     TEXT NOT NULL,
-                user_id     TEXT NOT NULL,
-                rating      INTEGER NOT NULL,
-                reviewed_at INTEGER NOT NULL,
-                FOREIGN KEY(card_id) REFERENCES cards(id)  ON DELETE CASCADE,
-                FOREIGN KEY(user_id) REFERENCES users(id)  ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_review_log_card_id ON review_log(card_id)",
-            "CREATE INDEX IF NOT EXISTS idx_review_log_user_card ON review_log(user_id, card_id)",
-
-            // ── DRAFT_CARDS (temporary generated cards, pre-save) ──
-            "CREATE TABLE IF NOT EXISTS draft_cards (
-                id              TEXT PRIMARY KEY,
-                user_id         TEXT NOT NULL,
-                skill_id        TEXT NOT NULL DEFAULT '',
-                skill_name      TEXT NOT NULL DEFAULT '',
-                template_name   TEXT NOT NULL,
-                fields_json     TEXT NOT NULL DEFAULT '{}',
-                explanation     TEXT NOT NULL DEFAULT '',
-                metadata_json   TEXT NOT NULL DEFAULT '{}',
-                created_at      INTEGER NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_draft_cards_user_id ON draft_cards(user_id)",
-            "CREATE INDEX IF NOT EXISTS idx_draft_cards_created_at ON draft_cards(created_at)",
-        ];
-
-        let mut tx = self.pool.begin().await?;
-        for stmt in statements {
-            sqlx::query(stmt).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-
-        Ok(())
-    }
 
     async fn ensure_default_user(&self) -> Result<(), sqlx::Error> {
         let now = Utc::now().timestamp_millis();
@@ -297,16 +192,23 @@ impl LocalStorageProvider {
         Ok(())
     }
 
-    /// Fetches due cards for a given deck.
+    /// Fetches due cards for a given deck, including all sub-decks recursively.
     pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
-        let now = Utc::now().timestamp_millis();
+        let settings = self.get_user_settings().await.unwrap_or_default();
+        let learn_ahead_ms = (settings.learn_ahead_minutes as i64) * 60 * 1000;
+        let now = Utc::now().timestamp_millis() + learn_ahead_ms;
         
         let records = sqlx::query(
             r#"
+            WITH RECURSIVE deck_tree(id) AS (
+                SELECT id FROM decks WHERE id = ?
+                UNION ALL
+                SELECT d.id FROM decks d JOIN deck_tree dt ON d.parent_id = dt.id
+            )
             SELECT c.id, c.front_html, c.back_html, c.template_name, c.fields_json, c.metadata_json
             FROM cards c
             JOIN reviews r ON c.id = r.card_id
-            WHERE c.deck_id = ? AND r.user_id = ? AND r.due_date <= ?
+            WHERE c.deck_id IN deck_tree AND r.user_id = ? AND r.due_date <= ?
             ORDER BY r.due_date ASC
             LIMIT ?
             "#
@@ -681,15 +583,18 @@ impl StorageProvider for LocalStorageProvider {
     }
 
     async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
-        let now = Utc::now().timestamp_millis();
+        let settings = self.get_user_settings().await.unwrap_or_default();
+        let learn_ahead_ms = (settings.learn_ahead_minutes as i64) * 60 * 1000;
+        let now = Utc::now().timestamp_millis() + learn_ahead_ms;
+        
         let records = sqlx::query(
             r#"
             SELECT 
                 d.id, 
                 d.full_path, 
                 COUNT(c.id) as card_count,
-                SUM(CASE WHEN r.interval_days = 0 THEN 1 ELSE 0 END) as new_count,
-                SUM(CASE WHEN r.interval_days > 0 AND r.interval_days < 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as learning_count,
+                SUM(CASE WHEN r.interval_days = 0 AND (SELECT COUNT(*) FROM review_log rl WHERE rl.card_id = c.id AND rl.user_id = r.user_id) = 0 THEN 1 ELSE 0 END) as new_count,
+                SUM(CASE WHEN ((r.interval_days > 0 AND r.interval_days < 1) OR (r.interval_days = 0 AND (SELECT COUNT(*) FROM review_log rl WHERE rl.card_id = c.id AND rl.user_id = r.user_id) > 0)) AND r.due_date <= ? THEN 1 ELSE 0 END) as learning_count,
                 SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as review_count
             FROM decks d
             LEFT JOIN cards c ON d.id = c.deck_id
@@ -766,5 +671,18 @@ impl StorageProvider for LocalStorageProvider {
         tx.commit().await?;
 
         Ok(added)
+    }
+
+    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("DELETE FROM decks WHERE id = ? AND user_id = ?")
+            .bind(deck_id)
+            .bind(&self.user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
     }
 }
