@@ -164,7 +164,10 @@ pub trait Language {
     }
 
     /// The default skill tree configuration for this language, embedded at compile time.
-    fn default_tree_config(&self) -> crate::skill_tree::SkillTreeConfig;
+    /// Resolved automatically from `core/trees/<iso_code>_tree.yaml`.
+    fn default_tree_config(&self) -> crate::skill_tree::SkillTreeConfig {
+        crate::skill_tree::resolve_config(self.iso_code().to_639_3())
+    }
 }
 
 /// Defines the type of card model.

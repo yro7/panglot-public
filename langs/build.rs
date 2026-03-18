@@ -80,6 +80,14 @@ fn main() {
 
     langs.sort_by(|a, b| a.mod_name.cmp(&b.mod_name));
 
+    // Verify every language has a matching tree YAML in core/trees/
+    for l in &langs {
+        let tree = format!("../core/trees/{}_tree.yaml", l.iso_lower);
+        if !Path::new(&tree).exists() {
+            panic!("missing skill-tree file for language '{}': expected {tree}", l.iso_lower);
+        }
+    }
+
     // ── Generate lang_registry.rs ──
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();

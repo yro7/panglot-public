@@ -1,0 +1,76 @@
+language_name: Mandarin Chinese
+root:
+  id: root
+  name: 汉语 (Mandarin Chinese)
+  children:
+    - id: pronunciation
+      name: 发音 (Pronunciation)
+      children:
+        - id: pinyin_tones
+          name: 拼音与声调 (Pinyin & Tones)
+          node_instructions: >
+            Generate an exercise focusing on Pinyin pronunciation and the four tones plus the neutral tone.
+            This could involve matching Pinyin to audio, identifying the correct tone for a given character, or distinguishing between similar-sounding Pinyin with different tones.
+          children: []
+        - id: initials_finals
+          name: 声母与韵母 (Initials & Finals)
+          node_instructions: >
+            Generate an exercise focusing on distinguishing between similar-sounding initials (e.g., z/zh, c/ch, s/sh) and finals (e.g., an/ang, en/eng).
+            Exercises could involve listening and selecting the correct Pinyin, or filling in missing initials/finals.
+          children: []
+    - id: characters
+      name: 汉字 (Chinese Characters)
+      children:
+        - id: basic_strokes_radicals
+          name: 基本笔画与部首 (Basic Strokes & Radicals)
+          node_instructions: >
+            Generate an exercise focusing on recognizing and identifying basic Chinese character strokes (e.g., 横, 竖, 撇, 捺) and common radicals (e.g., 亻, 木, 口, 氵).
+            This could involve matching stroke names to images or identifying radicals within characters.
+          children: []
+        - id: common_characters
+          name: 常用汉字 (Common Characters)
+          node_instructions: >
+            Generate an exercise focusing on recognizing, writing, and understanding the meaning of frequently used Chinese characters (e.g., numbers, common nouns like 人, 口, 大, 小, 天, 地).
+            Exercises could include character recognition, stroke order practice, or matching characters to meanings.
+          children: []
+    - id: grammar
+      name: 语法 (Grammar)
+      children:
+        - id: measure_words
+          name: 量词 (Measure Words)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the correct usage of common Chinese measure words (e.g., 个, 本, 杯, 块, 件).
+            Create a sentence where the student must fill in the appropriate measure word for a given noun.
+          children: []
+        - id: basic_sentence_structure
+          name: 基本句型 (Basic Sentence Structure)
+          node_instructions: >
+            Generate an exercise focused on constructing basic SVO (Subject-Verb-Object) sentences, sentences with adjectives, and simple "是...的" (shì...de) structures.
+            This could involve reordering words to form a correct sentence or translating simple English sentences into Chinese.
+          children: []
+        - id: aspect_particles
+          name: 动态助词 (Aspect Particles)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the usage of aspect particles 了 (le), 着 (zhe), and 过 (guo) to indicate completion, ongoing action, or past experience.
+            Create a sentence where the student must choose the correct particle to convey the intended aspect.
+          children: []
+        - id: word_order_adverbials
+          name: 状语语序 (Adverbial Word Order)
+          node_instructions: >
+            Generate an exercise focusing on the correct placement of adverbials (time, place, manner) before the verb in Chinese sentences.
+            This could involve reordering words or correcting sentences with misplaced adverbials.
+          children: []
+    - id: vocabulary
+      name: 词汇 (Vocabulary)
+      children:
+        - id: greetings
+          name: 问候语 (Greetings)
+          node_instructions: >
+            Generate an exercise about common Mandarin Chinese greetings (e.g., 你好, 早上好, 晚上好), farewells (再见), and polite expressions (谢谢, 对不起).
+          children: []
+        - id: daily_life
+          name: 日常生活 (Daily Life)
+          node_instructions: >
+            Generate an exercise about daily life vocabulary, including terms for food, family members, common objects, transport, and shopping.
+            This could involve matching words to pictures, translation, or cloze exercises.
+          children: []
