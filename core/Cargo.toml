@@ -14,7 +14,7 @@ sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "uuid", "chro
 chrono = "0.4.44"
 uuid = { version = "1.22.0", features = ["v4", "serde"] }
 serde_json = "1"
-serde_yaml = "0.9"
+serde_yml = "0.0.12"
 include_dir = "0.7"
 
 [dev-dependencies]

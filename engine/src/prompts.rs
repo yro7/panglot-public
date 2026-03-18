@@ -172,7 +172,7 @@ fn load_yaml<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, PromptBuilde
     let content = std::fs::read_to_string(path)
         .map_err(|e| PromptBuilderError::ConfigLoadError(format!("Failed to read {}: {}", path, e)))?;
 
-    serde_yaml::from_str(&content)
+    serde_yml::from_str(&content)
         .map_err(|e| PromptBuilderError::ConfigLoadError(format!("Failed to parse {}: {}", path, e)))
 }
 

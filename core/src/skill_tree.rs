@@ -13,7 +13,7 @@ pub fn resolve_config(iso_639_3: &str) -> SkillTreeConfig {
     let yaml = file
         .contents_utf8()
         .unwrap_or_else(|| panic!("skill-tree for '{iso_639_3}' is not valid UTF-8"));
-    serde_yaml::from_str(yaml)
+    serde_yml::from_str(yaml)
         .unwrap_or_else(|e| panic!("invalid skill-tree YAML for '{iso_639_3}': {e}"))
 }
 

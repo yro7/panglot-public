@@ -292,7 +292,7 @@ root:
       node_instructions: Generate a greeting exercise.
       children: []
 "#;
-        let config: SkillTreeConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SkillTreeConfig = serde_yml::from_str(yaml).unwrap();
         let tree = SkillTree::from_config(Polish, config);
 
         assert_eq!(tree.root.name, "Polski");
