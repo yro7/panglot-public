@@ -14,9 +14,9 @@ const EXAMPLE_RS_FILES: &[&str] = &[
 ];
 
 const EXAMPLE_TREE_FILES: &[&str] = &[
-    "langs/trees/pol_tree.yaml",
-    "langs/trees/jpn_tree.yaml",
-    "langs/trees/ara_tree.yaml",
+    "core/trees/pol_tree.yaml",
+    "core/trees/jpn_tree.yaml",
+    "core/trees/ara_tree.yaml",
 ];
 
 fn read_examples(paths: &[&str]) -> Result<String> {
@@ -72,9 +72,10 @@ The code must compile as-is when placed in the project.";
          - The struct must be named with the language name (PascalCase)\n\
          - Every morphology variant MUST have a `lemma: String` field as its first field\n\
          - Use `#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, lc_macro::MorphologyInfo)]`\n\
-         - Use `#[serde(tag = \"pos\")]` and `#[serde(rename_all = \"lowercase\")]`\n\
+         - Use `#[serde(tag = \"pos\")]` and `#[serde(rename_all = \"lowercase\")]` (NOT snake_case)\n\
          - The `iso_code()` must return `lc_core::traits::IsoLang::{iso_variant}` where the variant is the PascalCase of `{iso}`\n\
          - Choose appropriate `IpaConfig` and `TtsConfig` strategies for this language\n\
+         - For `typological_features()`, ONLY use known variants: `TypologicalFeature::Conjugation` (do NOT guess others).\n\
          - Include linguistically accurate morphological categories for this language\n\
          - Doc comments on each variant should include the native term in parentheses\n\
          - Use `type ExtraFields = NoExtraFields` unless the language truly needs disambiguation fields\n\n\
@@ -155,7 +156,7 @@ async fn main() -> Result<()> {
 
     // Check files don't already exist
     let rs_path = format!("langs/src/{iso}.rs");
-    let tree_path = format!("langs/trees/{iso}_tree.yaml");
+    let tree_path = format!("core/trees/{iso}_tree.yaml");
 
     if Path::new(&rs_path).exists() {
         bail!("{rs_path} already exists! Delete it first if you want to regenerate.");
