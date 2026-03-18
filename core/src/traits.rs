@@ -162,6 +162,9 @@ pub trait Language {
     fn tts_strategy(&self) -> TtsConfig {
         TtsConfig::None
     }
+
+    /// The default skill tree configuration for this language, embedded at compile time.
+    fn default_tree_config(&self) -> crate::skill_tree::SkillTreeConfig;
 }
 
 /// Defines the type of card model.

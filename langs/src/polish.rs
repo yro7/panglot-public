@@ -108,4 +108,9 @@ impl Language for Polish {
     fn tts_strategy(&self) -> TtsConfig {
         TtsConfig::Edge { voice: "pl-PL-ZofiaNeural" }
     }
+
+    fn default_tree_config(&self) -> lc_core::skill_tree::SkillTreeConfig {
+        const YAML: &str = include_str!("../trees/pol_tree.yaml");
+        serde_yaml::from_str(YAML).expect("embedded Polish skill tree YAML is invalid")
+    }
 }

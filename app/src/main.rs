@@ -1,4 +1,3 @@
-use std::fs;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use std::sync::Arc;
@@ -9,10 +8,9 @@ use jsonwebtoken::DecodingKey;
 
 use lc_core::traits::Language;
 use engine::llm_client::{LlmHttpClient, LlmProvider};
-use engine::pipeline::Pipeline;
+use engine::pipeline::{Pipeline, DynPipeline};
 use engine::prompts::PromptConfig;
 use engine::python_sidecar::PythonSidecar;
-use engine::skill_tree::{SkillNode, SkillTree, SkillTreeConfig};
 
 mod config;
 pub mod state;
@@ -20,17 +18,16 @@ pub mod auth;
 pub mod worker;
 pub mod api;
 
-use state::{AppState, LanguageRuntime, LlmRuntimeConfig, now_ms};
+use state::{AppState, LlmRuntimeConfig, now_ms};
 use auth::parse_jwk;
 
-fn build_language_runtime<L>(
+fn build_pipeline<L>(
     lang: L,
-    tree_config: SkillTreeConfig,
     cfg: &config::AppConfig,
     make_client: &dyn Fn(&str) -> LlmHttpClient,
     sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
     prompt_config: &PromptConfig,
-) -> LanguageRuntime
+) -> Box<dyn DynPipeline>
 where
     L: Language + Send + Sync + 'static,
     L::Morphology: std::fmt::Debug
@@ -45,32 +42,17 @@ where
         + Sync,
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
-    let tree = SkillTree::from_config(lang, tree_config);
-    let base_tree: SkillNode = tree.root.clone();
     let model = cfg.llm.active_model().expect("model already validated at startup");
     let client = make_client(model);
     let mut pipeline = Pipeline::new(
-        tree.language, Box::new(client),
+        lang, Box::new(client),
         cfg.generator.temperature, cfg.generator.max_tokens,
         cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
         prompt_config.clone(),
     );
     pipeline.add_early_processor(Box::new(engine::post_process::IpaGenerator::new(sidecar.clone())));
     pipeline.add_early_processor(Box::new(engine::post_process::TtsGenerator::new(sidecar.clone())));
-    LanguageRuntime { pipeline: Box::new(pipeline), base_tree }
-}
-
-fn build_runtime_for_iso(
-    iso: &str,
-    tree_config: SkillTreeConfig,
-    cfg: &config::AppConfig,
-    make_client: &dyn Fn(&str) -> LlmHttpClient,
-    sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
-    prompt_config: &PromptConfig,
-) -> Option<LanguageRuntime> {
-    langs::dispatch_iso!(iso, lang => {
-        build_language_runtime(lang, tree_config, cfg, make_client, sidecar, prompt_config)
-    })
+    Box::new(pipeline)
 }
 
 #[actix_web::main]
@@ -122,58 +104,25 @@ async fn main() -> std::io::Result<()> {
         PythonSidecar::spawn().expect("Failed to start Python sidecar")
     ));
 
-    let mut languages_map: std::collections::HashMap<String, LanguageRuntime> =
-        std::collections::HashMap::new();
+    let mut pipelines_map: HashMap<String, Box<dyn DynPipeline>> = HashMap::new();
 
     // Helper: create an LLM client for a given model
     let make_client = |model: &str| -> LlmHttpClient {
         LlmHttpClient::custom(api_key.clone(), base_url.clone(), model.to_string(), provider)
     };
 
-    // ── Auto-discover skill trees from *_tree.yaml files ──
-    let tree_dir = &cfg.paths.skill_trees_dir;
-    let entries = fs::read_dir(tree_dir)
-        .unwrap_or_else(|e| panic!("Cannot read skill_trees_dir '{tree_dir}': {e}"));
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let filename = match path.file_name().and_then(|f| f.to_str()) {
-            Some(f) => f.to_string(),
-            None => continue,
-        };
-        let iso = match filename.strip_suffix("_tree.yaml") {
-            Some(prefix) => prefix.to_string(),
-            None => continue,
-        };
-
-        let yaml_content = match fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("⚠️  Failed to read skill tree at {path:?}: {e}");
-                continue;
-            }
-        };
-        let tree_config: SkillTreeConfig = match serde_yaml::from_str(&yaml_content) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("⚠️  Failed to parse skill tree at {path:?}: {e}");
-                continue;
-            }
-        };
-
-        match build_runtime_for_iso(&iso, tree_config, &cfg, &make_client, &sidecar, &prompt_config) {
-            Some(runtime) => {
-                println!("✅ Loaded {} ({}) skill tree from {path:?}", runtime.pipeline.language_name(), iso);
-                languages_map.insert(iso, runtime);
-            }
-            None => {
-                eprintln!("⚠️  No language registered for ISO code '{iso}' (from {path:?}) — skipping");
-            }
+    // ── Build pipelines for all registered languages ──
+    for &iso in langs::ALL_ISO_CODES {
+        if let Some(pipeline) = langs::dispatch_iso!(iso, lang => {
+            build_pipeline(lang, &cfg, &make_client, &sidecar, &prompt_config)
+        }) {
+            println!("✅ Loaded {} ({})", pipeline.language_name(), iso);
+            pipelines_map.insert(iso.to_string(), pipeline);
         }
     }
 
-    if languages_map.is_empty() {
-        eprintln!("❌ No skill trees loaded! Check that {tree_dir}/*_tree.yaml files exist");
+    if pipelines_map.is_empty() {
+        eprintln!("❌ No languages registered!");
         std::process::exit(1);
     }
 
@@ -234,7 +183,7 @@ async fn main() -> std::io::Result<()> {
     let pool = local_db.pool.clone();
 
     let app_state = web::Data::new(AppState {
-        languages: RwLock::new(languages_map),
+        pipelines: RwLock::new(pipelines_map),
         llm_semaphore: Arc::new(Semaphore::new(max_llm_calls)),
         post_process_semaphore: Arc::new(Semaphore::new(
             std::thread::available_parallelism()

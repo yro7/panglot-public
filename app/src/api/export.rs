@@ -27,12 +27,12 @@ pub async fn export_deck(
     let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
     let output_path = format!("{}/{}.apkg", data.output_dir, node_id);
     let _ = fs::create_dir_all(&data.output_dir);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(ExportResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -40,7 +40,7 @@ pub async fn export_deck(
         });
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
 
     if skill_tree::find_node(&user_tree, node_id).is_none() {
         return HttpResponse::BadRequest().json(ExportResponse {
@@ -53,7 +53,7 @@ pub async fn export_deck(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
-    let export_result = runtime.pipeline.generate_deck_data_dyn(
+    let export_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         // When exporting normally, we just give a default user matching defaults
         UserSettings::new(
@@ -122,10 +122,10 @@ pub async fn push_to_anki(
     let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(ExportResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -133,7 +133,7 @@ pub async fn push_to_anki(
         });
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
 
     if skill_tree::find_node(&user_tree, node_id).is_none() {
         return HttpResponse::BadRequest().json(ExportResponse {
@@ -146,7 +146,7 @@ pub async fn push_to_anki(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
-    let push_result = runtime.pipeline.generate_deck_data_dyn(
+    let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.clone(),
@@ -213,10 +213,10 @@ pub async fn push_to_local_db(
     let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
     let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
 
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(ExportResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -224,7 +224,7 @@ pub async fn push_to_local_db(
         });
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
 
     if skill_tree::find_node(&user_tree, node_id).is_none() {
         return HttpResponse::BadRequest().json(ExportResponse {
@@ -237,7 +237,7 @@ pub async fn push_to_local_db(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
-    let push_result = runtime.pipeline.generate_deck_data_dyn(
+    let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.clone(),

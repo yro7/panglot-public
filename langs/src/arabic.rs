@@ -134,4 +134,9 @@ impl Language for Arabic {
     fn tts_strategy(&self) -> TtsConfig {
         TtsConfig::Edge { voice: "ar-SA-HamedNeural" }
     }
+
+    fn default_tree_config(&self) -> lc_core::skill_tree::SkillTreeConfig {
+        const YAML: &str = include_str!("../trees/ara_tree.yaml");
+        serde_yaml::from_str(YAML).expect("embedded Arabic skill tree YAML is invalid")
+    }
 }

@@ -49,9 +49,9 @@ pub async fn scan_lexicon_background(state: Arc<AppState>, anki_connect_url: Opt
 
     // Wrap the pre-fetched cards in a simple provider for load_lexicon
     let snapshot = lc_core::storage::SnapshotProvider::new(all_cards);
-    let languages = state.languages.read().await;
-    for (iso, runtime) in languages.iter() {
-        match runtime.pipeline.load_lexicon(&snapshot).await {
+    let pipelines = state.pipelines.read().await;
+    for (iso, pipeline) in pipelines.iter() {
+        match pipeline.load_lexicon(&snapshot).await {
             Ok(count) => println!("   ✅ {iso}: {count} words loaded into lexicon"),
             Err(e) => eprintln!("   ⚠️  {iso}: lexicon scan failed: {e}"),
         }

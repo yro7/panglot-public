@@ -114,7 +114,6 @@ impl Default for UserSettingsDefaultsConfig {
 pub struct PathsConfig {
     pub output_dir: String,
     pub audio_staging_dir: String,
-    pub skill_trees_dir: String,
     /// URL to the AnkiConnect add-on running locally.
     /// Default: http://localhost:8765
     pub anki_connect_url: Option<String>,

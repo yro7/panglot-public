@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use lc_core::db::UserTreeCustomization;
+use engine::pipeline::DynPipeline;
 use engine::skill_tree::{self, TreeCustomization};
 
 use crate::state::AppState;
@@ -11,17 +12,18 @@ use super::models::{
 };
 
 /// Builds the user's personalized tree: base tree + DB overlay.
-/// Returns the owned SkillNode root. If no customizations exist, clones the base tree.
+/// Returns the owned SkillNode root. If no customizations exist, returns the base tree as-is.
 pub async fn build_user_tree(
     data: &AppState,
     auth: &AuthUser,
     lang: &str,
-    base_tree: &engine::skill_tree::SkillNode,
+    pipeline: &dyn DynPipeline,
 ) -> engine::skill_tree::SkillNode {
     let db = data.db_for(auth);
     let customizations = db.get_tree_customizations(lang).await.unwrap_or_default();
+    let base_tree = pipeline.base_tree();
     if customizations.is_empty() {
-        return base_tree.clone();
+        return base_tree;
     }
     let tree_customizations: Vec<TreeCustomization> = customizations.into_iter().map(|c| TreeCustomization {
         node_id: c.node_id,
@@ -30,7 +32,7 @@ pub async fn build_user_tree(
         node_name: c.node_name,
         node_instructions: c.node_instructions,
     }).collect();
-    skill_tree::apply_customizations(base_tree, &tree_customizations)
+    skill_tree::apply_customizations(&base_tree, &tree_customizations)
 }
 
 pub async fn get_tree(
@@ -38,16 +40,16 @@ pub async fn get_tree(
     data: web::Data<AppState>,
     query: web::Query<GetTreeQuery>,
 ) -> impl Responder {
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = query.lang.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": format!("Language '{}' not found", lang)
         }));
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
     HttpResponse::Ok().json(tree_node_to_json(&user_tree))
 }
 
@@ -56,10 +58,10 @@ pub async fn add_node(
     data: web::Data<AppState>,
     body: web::Json<AddNodeRequest>,
 ) -> impl Responder {
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -67,7 +69,7 @@ pub async fn add_node(
     };
 
     // Build the user's current tree to validate against
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
 
     // Check for duplicate node_id
     if skill_tree::find_node(&user_tree, &body.node_id).is_some() {
@@ -115,10 +117,10 @@ pub async fn hide_node(
     data: web::Data<AppState>,
     body: web::Json<HideNodeRequest>,
 ) -> impl Responder {
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -126,7 +128,7 @@ pub async fn hide_node(
     };
 
     // Verify node exists in the user's current tree
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
     if skill_tree::find_node(&user_tree, &body.node_id).is_none() {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
@@ -164,10 +166,10 @@ pub async fn edit_node(
     data: web::Data<AppState>,
     body: web::Json<EditNodeRequest>,
 ) -> impl Responder {
-    let languages = data.languages.read().await;
+    let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let Some(runtime) = languages.get(lang) else {
+    let Some(pipeline) = pipelines.get(lang) else {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
             message: format!("Language '{}' not found", lang),
@@ -181,7 +183,7 @@ pub async fn edit_node(
         });
     }
 
-    let user_tree = build_user_tree(&data, &auth, lang, &runtime.base_tree).await;
+    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
     if skill_tree::find_node(&user_tree, &body.node_id).is_none() {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
