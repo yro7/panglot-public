@@ -122,7 +122,7 @@ pub struct PathsConfig {
 pub fn load_config(path: &str) -> Result<AppConfig> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("Failed to read config file '{}': {}", path, e))?;
-    let config: AppConfig = serde_yaml::from_str(&content)
+    let config: AppConfig = serde_yml::from_str(&content)
         .map_err(|e| anyhow::anyhow!("Failed to parse config file '{}': {}", path, e))?;
     Ok(config)
 }
