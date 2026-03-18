@@ -67,6 +67,7 @@ pub struct Pipeline<L: Language + Send + Sync> {
     prompt_config: PromptConfig,
     lexicon_tracker: RwLock<LexiconTracker<L::Morphology>>,
     lexicon_status: RwLock<LexiconStatus>,
+    cached_base_tree: std::sync::OnceLock<SkillNode>,
 }
 
 impl<L: Language + Send + Sync> Pipeline<L>
@@ -104,6 +105,7 @@ where
             prompt_config,
             lexicon_tracker: RwLock::new(LexiconTracker::new()),
             lexicon_status: RwLock::new(LexiconStatus::NotStarted),
+            cached_base_tree: std::sync::OnceLock::new(),
         }
     }
 
@@ -621,6 +623,9 @@ pub trait DynPipeline: Send + Sync {
     fn language_name(&self) -> &str;
     fn iso_code_str(&self) -> &str;
 
+    /// Returns the base skill tree for this language (cached after first call).
+    fn base_tree(&self) -> SkillNode;
+
     async fn generate_cards_dyn(
         &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
@@ -687,6 +692,13 @@ where
 
     fn iso_code_str(&self) -> &str {
         self.language.iso_code().to_639_3()
+    }
+
+    fn base_tree(&self) -> SkillNode {
+        self.cached_base_tree.get_or_init(|| {
+            let config = self.language.default_tree_config();
+            crate::skill_tree::build_node(config.root)
+        }).clone()
     }
 
     async fn generate_cards_dyn(

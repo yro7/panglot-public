@@ -110,6 +110,13 @@ fn main() {
     }
     code.push('\n');
 
+    // ALL_ISO_CODES constant
+    let iso_list = langs.iter()
+        .map(|l| format!("\"{}\"", l.iso_lower))
+        .collect::<Vec<_>>()
+        .join(", ");
+    code.push_str(&format!("pub const ALL_ISO_CODES: &[&str] = &[{}];\n\n", iso_list));
+
     // dispatch_iso! macro
     code.push_str("#[macro_export]\nmacro_rules! dispatch_iso {\n");
     code.push_str("    ($iso:expr, $lang:ident => $body:expr) => {\n");

@@ -14,9 +14,9 @@ const EXAMPLE_RS_FILES: &[&str] = &[
 ];
 
 const EXAMPLE_TREE_FILES: &[&str] = &[
-    "configs/pol_tree.yaml",
-    "configs/jpn_tree.yaml",
-    "configs/ara_tree.yaml",
+    "langs/trees/pol_tree.yaml",
+    "langs/trees/jpn_tree.yaml",
+    "langs/trees/ara_tree.yaml",
 ];
 
 fn read_examples(paths: &[&str]) -> Result<String> {
@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
 
     // Check files don't already exist
     let rs_path = format!("langs/src/{iso}.rs");
-    let tree_path = format!("configs/{iso}_tree.yaml");
+    let tree_path = format!("langs/trees/{iso}_tree.yaml");
 
     if Path::new(&rs_path).exists() {
         bail!("{rs_path} already exists! Delete it first if you want to regenerate.");
