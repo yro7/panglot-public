@@ -336,7 +336,12 @@ impl DeckBuilder {
             .as_secs() as i64;
 
         let model_id: i64 = 1_400_000_000_000;
-        let deck_id: i64 = 1;
+        let deck_id: i64 = {
+            use std::hash::{DefaultHasher, Hash, Hasher};
+            let mut h = DefaultHasher::new();
+            self.deck_data.name.hash(&mut h);
+            (h.finish() % 1_000_000_000_000 + 2) as i64
+        };
 
         for (i, entry) in self.deck_data.cards.iter().enumerate() {
             let note_id = now * 1000 + i as i64;
