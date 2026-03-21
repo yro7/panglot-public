@@ -209,7 +209,7 @@ impl LocalStorageProvider {
     /// Fetches due cards for a given deck, including all sub-decks recursively.
     pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
         let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = (settings.learn_ahead_minutes as i64) * 60 * 1000;
+        let learn_ahead_ms = (settings.learn_ahead_minutes.get() as i64) * 60 * 1000;
         let now = Utc::now().timestamp_millis() + learn_ahead_ms;
         
         let records = sqlx::query(
@@ -663,7 +663,7 @@ impl StorageProvider for LocalStorageProvider {
 
     async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = (settings.learn_ahead_minutes as i64) * 60 * 1000;
+        let learn_ahead_ms = (settings.learn_ahead_minutes.get() as i64) * 60 * 1000;
         let now = Utc::now().timestamp_millis() + learn_ahead_ms;
         
         let records = sqlx::query(

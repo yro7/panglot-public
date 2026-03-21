@@ -6,6 +6,9 @@ use anyhow::Result;
 use crate::card_models::AnyCard;
 use crate::python_sidecar::SharedSidecar;
 
+/// Maximum text length sent to Python sidecar (IPA/TTS).
+const MAX_SIDECAR_TEXT_LEN: usize = 5_000;
+
 // ----- Early Post-Processing (parallel with FeatureExtractor) -----
 
 /// Result of an EarlyPostProcessor — only the fields it is allowed to produce.
@@ -93,7 +96,11 @@ where L::Morphology: Send + Sync
             .or_else(|| model.speakable_text());
 
         let text = match text {
-            Some(t) => t,
+            Some(t) if t.len() <= MAX_SIDECAR_TEXT_LEN => t,
+            Some(t) => {
+                eprintln!("  [TTS] Text too long ({} bytes), truncating to {}", t.len(), MAX_SIDECAR_TEXT_LEN);
+                t[..MAX_SIDECAR_TEXT_LEN].to_string()
+            }
             None => {
                 println!("  [TTS] Skipping TTS for card {} (no speakable text)", card_id);
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
@@ -163,7 +170,11 @@ where L::Morphology: Send + Sync
             .or_else(|| model.speakable_text());
 
         let text = match text {
-            Some(t) => t,
+            Some(t) if t.len() <= MAX_SIDECAR_TEXT_LEN => t,
+            Some(t) => {
+                eprintln!("  [IPA] Text too long ({} bytes), truncating to {}", t.len(), MAX_SIDECAR_TEXT_LEN);
+                t[..MAX_SIDECAR_TEXT_LEN].to_string()
+            }
             None => {
                 println!("  [IPA] Skipping IPA for card {} (no text to transliterate)", card_id);
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });

@@ -154,7 +154,8 @@ where
                 skill_name: c.metadata.skill_name,
                 template_name: c.model.template_name().to_string(),
                 fields_json,
-                explanation: c.metadata.pedagogical_explanation.replace('\n', "<br>"),
+                explanation: lc_core::sanitize::escape_html(&c.metadata.pedagogical_explanation)
+                    .replace('\n', "<br>"),
                 ipa: c.metadata.ipa.unwrap_or_default(),
                 metadata_json: metadata_json_compact,
                 audio_path: c.metadata.audio_file,
@@ -197,7 +198,8 @@ where
                 skill_name: c.metadata.skill_name,
                 template_name: c.model.template_name().to_string(),
                 fields_json,
-                explanation: c.metadata.pedagogical_explanation.replace('\n', "<br>"),
+                explanation: lc_core::sanitize::escape_html(&c.metadata.pedagogical_explanation)
+                    .replace('\n', "<br>"),
                 ipa: c.metadata.ipa.unwrap_or_default(),
                 metadata_json,
                 audio_path: c.metadata.audio_file,
