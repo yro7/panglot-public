@@ -11,6 +11,7 @@ pub struct TreeNodeJson {
     pub name: String,
     pub is_leaf: bool,
     pub node_instructions: Option<String>,
+    #[schema(value_type = Vec<Object>)]
     pub children: Vec<TreeNodeJson>,
 }
 
