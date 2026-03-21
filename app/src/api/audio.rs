@@ -5,9 +5,15 @@ use actix_web::{web, HttpResponse};
 pub async fn get_audio(filename: web::Path<String>) -> HttpResponse {
     let filename = filename.into_inner();
 
-    // Sanitize: only allow simple filenames (no path traversal)
-    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+    // Sanitize: only allow simple filenames (no path traversal, null bytes)
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") || filename.contains('\0') {
         return HttpResponse::BadRequest().json(serde_json::json!({"error": "Invalid filename"}));
+    }
+    if filename.len() > 200 {
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "Filename too long"}));
+    }
+    if !matches!(filename.rsplit('.').next(), Some("mp3" | "wav" | "ogg")) {
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "Unsupported audio format"}));
     }
 
     let staging_dir = std::env::temp_dir().join("lc_audio");

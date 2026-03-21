@@ -24,8 +24,8 @@ pub async fn export_deck(
             success: false, message: e, file_path: None,
         }),
     };
-    let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_export);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
@@ -55,13 +55,12 @@ pub async fn export_deck(
 
     let export_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
-        // When exporting normally, we just give a default user matching defaults
         UserSettings::new(
             data.defaults.user_language.clone(),
             data.defaults.user_settings.srs_algorithm.clone(),
             data.defaults.user_settings.learn_ahead_minutes,
         ),
-        body.user_prompt.clone(),
+        body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
     ).await;
@@ -119,8 +118,8 @@ pub async fn push_to_anki(
             success: false, message: e, file_path: None,
         }),
     };
-    let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_export);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
@@ -149,7 +148,7 @@ pub async fn push_to_anki(
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
-        body.user_prompt.clone(),
+        body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
     ).await;
@@ -210,8 +209,8 @@ pub async fn push_to_local_db(
             success: false, message: e, file_path: None,
         }),
     };
-    let card_count = body.card_count.unwrap_or(data.defaults.card_count_export);
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_export);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
@@ -240,7 +239,7 @@ pub async fn push_to_local_db(
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
-        body.user_prompt.clone(),
+        body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
     ).await;

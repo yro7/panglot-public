@@ -1,10 +1,12 @@
 use actix_files::Files;
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpResponse, HttpServer};
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use std::collections::HashMap;
 
 use jsonwebtoken::DecodingKey;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use lc_core::traits::Language;
 use engine::llm_client::{LlmHttpClient, LlmProvider};
@@ -218,6 +220,40 @@ async fn main() -> std::io::Result<()> {
     println!("\n🚀 Server starting at http://{}", bind_addr);
     println!("   Open this URL in your browser to access the beta interface.\n");
 
+    #[derive(OpenApi)]
+    #[openapi(
+        info(
+            title = "Panglot API",
+            description = "Language learning card generation backend",
+            version = "0.1.0",
+        ),
+        components(schemas(
+            api::models::GenerateRequest,
+            api::models::GenerateResponse,
+            api::models::GeneratedCardJson,
+            api::models::ExportResponse,
+            api::models::PreviewPromptRequest,
+            api::models::PreviewPromptResponse,
+            api::models::PreviewSchemas,
+            api::models::PromptMessageJson,
+            api::models::AddNodeRequest,
+            api::models::AddNodeResponse,
+            api::models::HideNodeRequest,
+            api::models::EditNodeRequest,
+            api::models::ReviewOutcomeBody,
+            api::models::UpdateLlmConfigRequest,
+            api::models::TreeNodeJson,
+            lc_core::validated::CardCount,
+            lc_core::validated::Difficulty,
+            lc_core::validated::UserPrompt,
+            lc_core::validated::NodeName,
+            lc_core::validated::NodeInstructions,
+        ))
+    )]
+    struct ApiDoc;
+
+    let openapi = ApiDoc::openapi();
+
     let static_path = if std::path::Path::new(&cfg.server.static_path).exists() {
         cfg.server.static_path.clone()
     } else if std::path::Path::new("static").exists() {
@@ -228,8 +264,21 @@ async fn main() -> std::io::Result<()> {
     };
 
     HttpServer::new(move || {
+        let json_cfg = web::JsonConfig::default()
+            .limit(65_536) // 64 KB max JSON body
+            .error_handler(|err, _req| {
+                let response = HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error": "validation_error",
+                    "message": err.to_string(),
+                }));
+                actix_web::error::InternalError::from_response(err, response).into()
+            });
+
         App::new()
             .app_data(app_state.clone())
+            .app_data(json_cfg)
+            .service(SwaggerUi::new("/api/docs/{_:.*}").url("/api/docs/openapi.json", openapi.clone()))
             .route("/api/tree", web::get().to(api::tree::get_tree))
             .route("/api/generate", web::post().to(api::generation::generate_cards))
             .route("/api/generate-and-save", web::post().to(api::generation::generate_and_save))

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use lc_core::sanitize::escape_html;
 use lc_core::traits::CardModel;
 
 // ----- Concrete Card Models -----
@@ -203,10 +204,10 @@ impl CardModel for ClozeTest {
         let cloze_prompt = replace_cloze_with_blank(&self.sentence);
         let mut html = format!(
             "<div class=\"translation\">{}</div>\n<div class=\"cloze-sentence\">{}</div>",
-            self.common.translation, cloze_prompt
+            escape_html(&self.common.translation), escape_html(&cloze_prompt)
         );
         if let Some(hint) = &self.hint {
-            html.push_str(&format!("\n<div class=\"hint\">(Racine: {})</div>", hint));
+            html.push_str(&format!("\n<div class=\"hint\">(Racine: {})</div>", escape_html(hint)));
         }
         html
     }
@@ -215,7 +216,7 @@ impl CardModel for ClozeTest {
         let full_sentence = strip_cloze_tags(&self.sentence);
         format!(
             "<div class=\"translation\">{}</div>\n<div class=\"full-sentence\">{}</div>",
-            self.common.translation, full_sentence
+            escape_html(&self.common.translation), escape_html(&full_sentence)
         )
     }
 }
@@ -247,13 +248,13 @@ impl CardModel for WrittenComprehension {
     }
 
     fn front_html(&self) -> String {
-        format!("<div class=\"text-prompt\">{}</div>", self.text_prompt)
+        format!("<div class=\"text-prompt\">{}</div>", escape_html(&self.text_prompt))
     }
 
     fn back_html(&self) -> String {
         format!(
             "<div class=\"transcript\">{}</div>\n<div class=\"translation\">{}</div>",
-            self.transcript, self.common.translation
+            escape_html(&self.transcript), escape_html(&self.common.translation)
         )
     }
 }
@@ -292,7 +293,7 @@ impl CardModel for OralComprehension {
     fn back_html(&self) -> String {
         format!(
             "<div class=\"transcript\">{}</div>\n<div class=\"translation\">{}</div>",
-            self.transcript, self.common.translation
+            escape_html(&self.transcript), escape_html(&self.common.translation)
         )
     }
 }

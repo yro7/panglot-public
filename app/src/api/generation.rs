@@ -24,8 +24,8 @@ pub async fn generate_cards(
             success: false, cards: vec![], message: e,
         }),
     };
-    let card_count = body.card_count.unwrap_or(data.defaults.card_count_generate);
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_generate);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
@@ -67,7 +67,7 @@ pub async fn generate_cards(
 
     let generation_result = pipeline.generate_cards_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(), body.user_prompt.clone(),
+        body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
     ).await;
@@ -130,8 +130,8 @@ pub async fn generate_and_save(
             success: false, cards: vec![], message: e,
         }),
     };
-    let card_count = body.card_count.unwrap_or(data.defaults.card_count_generate);
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_generate);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
@@ -164,7 +164,7 @@ pub async fn generate_and_save(
 
     let result = pipeline.generate_cards_and_deck_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(), body.user_prompt.clone(),
+        body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         llm_sem, pp_sem,
     ).await;
@@ -238,7 +238,7 @@ pub async fn preview_prompt(
         Ok(id) => id,
         Err(e) => return HttpResponse::BadRequest().json(serde_json::json!({ "error": e })),
     };
-    let difficulty = body.difficulty.unwrap_or(data.defaults.difficulty);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
 
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);

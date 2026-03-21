@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::validated::LearnAheadMinutes;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FluencyLevel {
@@ -21,8 +22,8 @@ pub struct UserSettings {
     pub linguistic_background: Vec<KnownLanguage>,
     #[serde(default = "UserSettings::default_srs")]
     pub srs_algorithm: String,
-    #[serde(default = "UserSettings::default_learn_ahead")]
-    pub learn_ahead_minutes: i32,
+    #[serde(default)]
+    pub learn_ahead_minutes: LearnAheadMinutes,
 }
 
 impl UserSettings {
@@ -31,14 +32,14 @@ impl UserSettings {
     pub const DEFAULT_LEARN_AHEAD: i32 = 20;
 
     fn default_srs() -> String { Self::DEFAULT_SRS.to_string() }
-    fn default_learn_ahead() -> i32 { Self::DEFAULT_LEARN_AHEAD }
 
     pub fn new(ui_language: String, srs_algorithm: String, learn_ahead_minutes: i32) -> Self {
         Self {
             ui_language,
             linguistic_background: Vec::new(),
             srs_algorithm,
-            learn_ahead_minutes,
+            learn_ahead_minutes: LearnAheadMinutes::new(learn_ahead_minutes)
+                .unwrap_or_default(),
         }
     }
 }

@@ -94,8 +94,8 @@ pub async fn add_node(
         node_id: body.node_id.clone(),
         action: "add".to_string(),
         parent_id: Some(body.parent_id.clone()),
-        node_name: Some(body.node_name.clone()),
-        node_instructions: body.node_instructions.clone(),
+        node_name: Some(body.node_name.to_string()),
+        node_instructions: body.node_instructions.as_deref().map(String::from),
         sort_order: 0,
         created_at: crate::state::now_ms(),
     };
@@ -103,7 +103,7 @@ pub async fn add_node(
     match db.upsert_tree_customization(&customization).await {
         Ok(_) => HttpResponse::Ok().json(AddNodeResponse {
             success: true,
-            message: format!("Node '{}' added under '{}'", body.node_name, body.parent_id),
+            message: format!("Node '{}' added under '{}'", &*body.node_name, body.parent_id),
         }),
         Err(e) => HttpResponse::InternalServerError().json(AddNodeResponse {
             success: false,
@@ -198,8 +198,8 @@ pub async fn edit_node(
         node_id: body.node_id.clone(),
         action: "edit".to_string(),
         parent_id: None,
-        node_name: body.node_name.clone(),
-        node_instructions: body.node_instructions.clone(),
+        node_name: body.node_name.as_deref().map(String::from),
+        node_instructions: body.node_instructions.as_deref().map(String::from),
         sort_order: 0,
         created_at: crate::state::now_ms(),
     };
