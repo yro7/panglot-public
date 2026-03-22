@@ -56,15 +56,17 @@ impl<C: LlmClient> InstrumentedLlmClient<C> {
 impl<C: LlmClient> LlmClient for InstrumentedLlmClient<C> {
     async fn chat_completion(&self, request: &LlmRequest) -> Result<LlmResponse> {
         let response = self.inner.chat_completion(request).await?;
-        self.recorder.record(UsageEvent {
-            ctx: request.request_context.clone().unwrap_or_default(),
-            provider: self.provider.clone(),
-            model: self.model.clone(),
-            call_type: request.call_type,
-            tokens_in: response.usage.tokens_in,
-            tokens_out: response.usage.tokens_out,
-            latency_ms: response.latency_ms,
-        });
+        if let Some(ctx) = &request.request_context {
+            self.recorder.record(UsageEvent {
+                ctx: ctx.clone(),
+                provider: self.provider.clone(),
+                model: self.model.clone(),
+                call_type: request.call_type,
+                tokens_in: response.usage.tokens_in,
+                tokens_out: response.usage.tokens_out,
+                latency_ms: response.latency_ms,
+            });
+        }
         Ok(response)
     }
 }
