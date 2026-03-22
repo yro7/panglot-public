@@ -1,9 +1,12 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
 use engine::llm_client::RequestContext;
+use engine::pipeline::DynGeneratedCard;
 use engine::skill_tree;
 use lc_core::db::DraftCard;
 use lc_core::storage::StorageProvider;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 use crate::state::AppState;
 use crate::auth::AuthUser;
@@ -13,135 +16,124 @@ use super::models::{
 };
 use super::tree::build_user_tree;
 
+// ── Validated request, shared between generate_cards and generate_and_save ──
+
+struct ValidatedRequest<'a> {
+    node_id: &'a str,
+    card_model_id: CardModelId,
+    card_count: u32,
+    difficulty: u8,
+    skill_name: String,
+    user_tree: engine::skill_tree::SkillNode,
+    llm_sem: Arc<Semaphore>,
+    pp_sem: Arc<Semaphore>,
+    req_ctx: Option<RequestContext>,
+}
+
+/// Parses and validates the common parts of a generation request.
+/// Returns `Err(HttpResponse)` on validation failure so the caller can return early.
+async fn validate_request<'a>(
+    auth: &AuthUser,
+    data: &'a AppState,
+    body: &'a GenerateRequest,
+    pipeline: &dyn engine::pipeline::DynPipeline,
+    endpoint: &str,
+) -> Result<ValidatedRequest<'a>, HttpResponse> {
+    let node_id = &body.node_id;
+    let card_model_id: CardModelId = body.card_model_id.as_deref()
+        .unwrap_or(&data.defaults.card_model)
+        .parse()
+        .map_err(|e| HttpResponse::BadRequest().json(GenerateResponse {
+            success: false, cards: vec![], message: e,
+        }))?;
+    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_generate);
+    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
+    let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
+
+    let user_tree = build_user_tree(data, auth, lang, pipeline).await;
+
+    let node = skill_tree::find_node(&user_tree, node_id)
+        .ok_or_else(|| HttpResponse::BadRequest().json(GenerateResponse {
+            success: false, cards: vec![], message: "Node not found in tree".to_string(),
+        }))?;
+
+    let skill_name = node.name.clone();
+    if !node.children.is_empty() {
+        return Err(HttpResponse::BadRequest().json(GenerateResponse {
+            success: false, cards: vec![],
+            message: format!("Node '{}' is a category node — select a leaf node", node_id),
+        }));
+    }
+
+    Ok(ValidatedRequest {
+        node_id,
+        card_model_id,
+        card_count,
+        difficulty,
+        skill_name,
+        user_tree,
+        llm_sem: data.llm_semaphore.clone(),
+        pp_sem: data.post_process_semaphore.clone(),
+        req_ctx: Some(RequestContext {
+            user_id: auth.user_id.clone(),
+            request_id: uuid::Uuid::new_v4().to_string(),
+            endpoint: endpoint.into(),
+            language: Some(lang.to_string()),
+        }),
+    })
+}
+
+/// Maps DynGeneratedCard results to JSON and saves drafts.
+async fn finalize_cards(
+    dyn_cards: Vec<DynGeneratedCard>,
+    node_id: &str,
+    skill_name: &str,
+    data: &AppState,
+    auth: &AuthUser,
+) -> Vec<GeneratedCardJson> {
+    let cards_json: Vec<GeneratedCardJson> = dyn_cards.into_iter().map(|c| GeneratedCardJson {
+        card_id: c.card_id,
+        skill_id: node_id.to_string(),
+        skill_name: skill_name.to_string(),
+        template_name: c.template_name,
+        fields: c.fields,
+        explanation: c.explanation,
+        metadata_json: c.metadata_json,
+    }).collect();
+
+    let db = data.db_for(auth);
+    let drafts: Vec<DraftCard> = cards_json.iter().map(|c| DraftCard {
+        id: c.card_id.clone(),
+        skill_id: c.skill_id.clone(),
+        skill_name: c.skill_name.clone(),
+        template_name: c.template_name.clone(),
+        fields_json: serde_json::to_string(&c.fields).unwrap_or_default(),
+        explanation: c.explanation.clone(),
+        metadata_json: c.metadata_json.clone(),
+        created_at: 0,
+    }).collect();
+    if let Err(e) = db.save_drafts(&drafts).await {
+        tracing::error!(%e, "Failed to save drafts");
+    }
+
+    cards_json
+}
+
+fn generation_error(e: anyhow::Error) -> HttpResponse {
+    tracing::error!(%e, "Failed to generate cards batch");
+    HttpResponse::InternalServerError().json(GenerateResponse {
+        success: false, cards: vec![],
+        message: format!("Failed to generate cards: {}", e),
+    })
+}
+
+// ── Handlers ──
+
 pub async fn generate_cards(
     auth: AuthUser,
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
-    let node_id = &body.node_id;
-    let card_model_id: CardModelId = match body.card_model_id.as_deref().unwrap_or(&data.defaults.card_model).parse() {
-        Ok(id) => id,
-        Err(e) => return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false, cards: vec![], message: e,
-        }),
-    };
-    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_generate);
-    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
-
-    let pipelines = data.pipelines.read().await;
-    let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
-
-    let Some(pipeline) = pipelines.get(lang) else {
-        return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false,
-            cards: vec![],
-            message: format!("Language '{}' not found", lang),
-        });
-    };
-
-    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
-
-    let node = match skill_tree::find_node(&user_tree, node_id) {
-        Some(n) => n,
-        None => {
-            return HttpResponse::BadRequest().json(GenerateResponse {
-                success: false,
-                cards: vec![],
-                message: "Node not found in tree".to_string(),
-            });
-        }
-    };
-
-    let skill_name = node.name.clone();
-    let is_category = !node.children.is_empty();
-
-    if is_category {
-        return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false,
-            cards: vec![],
-            message: format!("Node '{}' is a category node — select a leaf node", node_id),
-        });
-    }
-
-    let llm_sem = data.llm_semaphore.clone();
-    let pp_sem = data.post_process_semaphore.clone();
-
-    let req_ctx = Some(RequestContext {
-        user_id: auth.user_id.clone(),
-        request_id: uuid::Uuid::new_v4().to_string(),
-        endpoint: "/api/generate".into(),
-        language: Some(lang.to_string()),
-    });
-
-    let generation_result = pipeline.generate_cards_dyn(
-        &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(),
-        req_ctx,
-        llm_sem, pp_sem,
-    ).await;
-
-    match generation_result {
-        Ok(dyn_cards) => {
-            let cards_json: Vec<GeneratedCardJson> = dyn_cards.into_iter().map(|c| GeneratedCardJson {
-                card_id: c.card_id,
-                skill_id: node_id.clone(),
-                skill_name: skill_name.clone(),
-                template_name: c.template_name,
-                fields: c.fields,
-                explanation: c.explanation,
-                metadata_json: c.metadata_json,
-            }).collect();
-
-            drop(pipelines);
-
-            let db = data.db_for(&auth);
-            let drafts: Vec<DraftCard> = cards_json.iter().map(|c| DraftCard {
-                id: c.card_id.clone(),
-                skill_id: c.skill_id.clone(),
-                skill_name: c.skill_name.clone(),
-                template_name: c.template_name.clone(),
-                fields_json: serde_json::to_string(&c.fields).unwrap_or_default(),
-                explanation: c.explanation.clone(),
-                metadata_json: c.metadata_json.clone(),
-                created_at: 0, // set by save_drafts
-            }).collect();
-            if let Err(e) = db.save_drafts(&drafts).await {
-                tracing::error!(%e, "Failed to save drafts");
-            }
-
-            HttpResponse::Ok().json(GenerateResponse {
-                success: true,
-                message: format!("Generated {} cards for '{}'", cards_json.len(), skill_name),
-                cards: cards_json,
-            })
-        }
-        Err(e) => {
-            tracing::error!(%e, "Failed to generate cards batch");
-            HttpResponse::InternalServerError().json(GenerateResponse {
-                success: false,
-                cards: vec![],
-                message: format!("Failed to generate cards: {}", e),
-            })
-        }
-    }
-}
-
-pub async fn generate_and_save(
-    auth: AuthUser,
-    data: web::Data<AppState>,
-    body: web::Json<GenerateRequest>,
-) -> impl Responder {
-    let node_id = &body.node_id;
-    let card_model_id: CardModelId = match body.card_model_id.as_deref().unwrap_or(&data.defaults.card_model).parse() {
-        Ok(id) => id,
-        Err(e) => return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false, cards: vec![], message: e,
-        }),
-    };
-    let card_count = body.card_count.map(|c| c.get()).unwrap_or(data.defaults.card_count_generate);
-    let difficulty = body.difficulty.map(|d| d.get()).unwrap_or(data.defaults.difficulty);
-
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
@@ -151,73 +143,65 @@ pub async fn generate_and_save(
         });
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
-
-    let node = match skill_tree::find_node(&user_tree, node_id) {
-        Some(n) => n,
-        None => return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false, cards: vec![], message: "Node not found in tree".to_string(),
-        }),
+    let req = match validate_request(&auth, &data, &body, pipeline.as_ref(), "/api/generate").await {
+        Ok(r) => r,
+        Err(resp) => return resp,
     };
 
-    let skill_name = node.name.clone();
-    if !node.children.is_empty() {
-        return HttpResponse::BadRequest().json(GenerateResponse {
-            success: false, cards: vec![],
-            message: format!("Node '{}' is a category node — select a leaf node", node_id),
-        });
+    let result = pipeline.generate_cards_dyn(
+        &req.user_tree, req.node_id, req.card_model_id, req.card_count, req.difficulty,
+        body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
+        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem,
+    ).await;
+
+    match result {
+        Ok(dyn_cards) => {
+            let skill_name = req.skill_name.clone();
+            drop(pipelines);
+            let cards_json = finalize_cards(dyn_cards, req.node_id, &skill_name, &data, &auth).await;
+            HttpResponse::Ok().json(GenerateResponse {
+                success: true,
+                message: format!("Generated {} cards for '{}'", cards_json.len(), skill_name),
+                cards: cards_json,
+            })
+        }
+        Err(e) => generation_error(e),
     }
+}
 
-    let llm_sem = data.llm_semaphore.clone();
-    let pp_sem = data.post_process_semaphore.clone();
+pub async fn generate_and_save(
+    auth: AuthUser,
+    data: web::Data<AppState>,
+    body: web::Json<GenerateRequest>,
+) -> impl Responder {
+    let pipelines = data.pipelines.read().await;
+    let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
-    let req_ctx = Some(RequestContext {
-        user_id: auth.user_id.clone(),
-        request_id: uuid::Uuid::new_v4().to_string(),
-        endpoint: "/api/generate-and-save".into(),
-        language: Some(lang.to_string()),
-    });
+    let Some(pipeline) = pipelines.get(lang) else {
+        return HttpResponse::BadRequest().json(GenerateResponse {
+            success: false, cards: vec![], message: format!("Language '{}' not found", lang),
+        });
+    };
+
+    let req = match validate_request(&auth, &data, &body, pipeline.as_ref(), "/api/generate-and-save").await {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
 
     let result = pipeline.generate_cards_and_deck_dyn(
-        &user_tree, node_id, card_model_id, card_count, difficulty,
+        &req.user_tree, req.node_id, req.card_model_id, req.card_count, req.difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(),
-        req_ctx,
-        llm_sem, pp_sem,
+        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem,
     ).await;
 
     match result {
         Ok((dyn_cards, deck_data)) => {
-            let cards_json: Vec<GeneratedCardJson> = dyn_cards.into_iter().map(|c| GeneratedCardJson {
-                card_id: c.card_id,
-                skill_id: node_id.clone(),
-                skill_name: skill_name.clone(),
-                template_name: c.template_name,
-                fields: c.fields,
-                explanation: c.explanation,
-                metadata_json: c.metadata_json,
-            }).collect();
-
+            let skill_name = req.skill_name.clone();
             drop(pipelines);
+            let cards_json = finalize_cards(dyn_cards, req.node_id, &skill_name, &data, &auth).await;
 
             let db = data.db_for(&auth);
-            let drafts: Vec<DraftCard> = cards_json.iter().map(|c| DraftCard {
-                id: c.card_id.clone(),
-                skill_id: c.skill_id.clone(),
-                skill_name: c.skill_name.clone(),
-                template_name: c.template_name.clone(),
-                fields_json: serde_json::to_string(&c.fields).unwrap_or_default(),
-                explanation: c.explanation.clone(),
-                metadata_json: c.metadata_json.clone(),
-                created_at: 0,
-            }).collect();
-            if let Err(e) = db.save_drafts(&drafts).await {
-                tracing::error!(%e, "Failed to save drafts");
-            }
-
-            // Save to local DB
-            let card_count = deck_data.cards.len();
-            let save_msg = if card_count > 0 {
+            let save_msg = if !deck_data.cards.is_empty() {
                 match db.save_deck(&deck_data).await {
                     Ok(saved) => format!(" — saved {} cards to local DB", saved),
                     Err(e) => {
@@ -236,13 +220,7 @@ pub async fn generate_and_save(
                 cards: cards_json,
             })
         }
-        Err(e) => {
-            tracing::error!(%e, "Failed to generate cards batch");
-            HttpResponse::InternalServerError().json(GenerateResponse {
-                success: false, cards: vec![],
-                message: format!("Failed to generate cards: {}", e),
-            })
-        }
+        Err(e) => generation_error(e),
     }
 }
 
