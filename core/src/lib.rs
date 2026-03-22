@@ -7,6 +7,7 @@ pub mod srs;
 pub mod skill_tree;
 pub mod validated;
 pub mod sanitize;
+pub mod usage_analytics;
 
 #[cfg(test)]
 mod type_assertions;
