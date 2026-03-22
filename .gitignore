@@ -19,6 +19,8 @@ Cargo.lock
 # Secrets
 .env
 .env.*
+.db
+.db.*
 
 # Claude Code
 .claude/
