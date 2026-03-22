@@ -123,6 +123,15 @@ impl Default for CallType {
     fn default() -> Self { Self::Generation }
 }
 
+impl fmt::Display for CallType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Generation => write!(f, "Generation"),
+            Self::Extraction => write!(f, "Extraction"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LlmRequest {
     pub messages: Vec<ChatMessage>,

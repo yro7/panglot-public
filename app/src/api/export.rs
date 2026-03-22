@@ -3,7 +3,6 @@ use engine::card_models::CardModelId;
 use engine::llm_client::RequestContext;
 use engine::skill_tree;
 use std::fs;
-use lc_core::user::UserSettings;
 use anki_bridge::DeckBuilder;
 use anki_bridge::AnkiStorageProvider;
 use lc_core::storage::StorageProvider;
@@ -63,11 +62,7 @@ pub async fn export_deck(
 
     let export_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
-        UserSettings::new(
-            data.defaults.user_language.clone(),
-            data.defaults.user_settings.srs_algorithm.clone(),
-            data.defaults.user_settings.learn_ahead_minutes,
-        ),
+        body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         req_ctx,

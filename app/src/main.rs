@@ -257,6 +257,8 @@ async fn main() -> std::io::Result<()> {
             lc_core::validated::UserPrompt,
             lc_core::validated::NodeName,
             lc_core::validated::NodeInstructions,
+            api::usage::UsageSummary,
+            api::usage::PeriodUsage,
         ))
     )]
     struct ApiDoc;
