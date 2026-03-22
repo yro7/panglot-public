@@ -20,7 +20,7 @@ Cargo.lock
 .env
 .env.*
 .db
-.db.*
+*.db
 
 # Claude Code
 .claude/
