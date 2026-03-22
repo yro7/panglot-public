@@ -12,7 +12,7 @@ BACK:
 - latency monitoring :
 tracing + latencyreport
 
-
+- queueing des requêtes? pour éviter de se faire kill par les providers
 
 
 

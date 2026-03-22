@@ -9,6 +9,7 @@ pub mod post_process;
 pub mod prompts;
 pub mod python_sidecar;
 pub mod skill_tree;
+pub mod usage;
 pub mod validation;
 
 #[cfg(test)]

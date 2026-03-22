@@ -88,7 +88,7 @@ impl AnkiStorageProvider {
                     if retries >= max_retries {
                         return Err(Box::new(e));
                     }
-                    eprintln!("AnkiConnect network error (retry {}/{} in {}ms): {}", retries + 1, max_retries, delay.as_millis(), e);
+                    tracing::warn!(retry = retries + 1, max_retries, delay_ms = delay.as_millis() as u64, %e, "AnkiConnect network error");
                     tokio::time::sleep(delay).await;
                     retries += 1;
                     delay *= 2; // exponential backoff
@@ -191,7 +191,7 @@ impl StorageProvider for AnkiStorageProvider {
             self.invoke("modelNames", serde_json::json!({})).await?
         )?;
         if !model_names.iter().any(|n| n == MODEL_NAME) {
-            println!("  [save_deck] Creating '{}' note model in Anki", MODEL_NAME);
+            tracing::info!(model = MODEL_NAME, "Creating note model in Anki");
             self.invoke("createModel", serde_json::json!({
                 "modelName": MODEL_NAME,
                 "inOrderFields": MODEL_FIELDS,
@@ -209,7 +209,7 @@ impl StorageProvider for AnkiStorageProvider {
             )?;
             for &field in MODEL_FIELDS {
                 if !existing_fields.iter().any(|f| f == field) {
-                    println!("  [save_deck] Adding missing field '{}' to model", field);
+                    tracing::info!(field, "Adding missing field to Anki model");
                     self.invoke("modelFieldAdd", serde_json::json!({
                         "modelName": MODEL_NAME,
                         "fieldName": field,
@@ -218,7 +218,7 @@ impl StorageProvider for AnkiStorageProvider {
             }
 
             // Update styling and templates to match current code
-            println!("  [save_deck] Updating '{}' model styling & templates", MODEL_NAME);
+            tracing::info!(model = MODEL_NAME, "Updating model styling & templates");
             self.invoke("updateModelStyling", serde_json::json!({
                 "model": {
                     "name": MODEL_NAME,
@@ -256,13 +256,13 @@ impl StorageProvider for AnkiStorageProvider {
                     .to_string();
 
                 if file_path.exists() {
-                    println!("  [save_deck] Storing media '{}'", filename);
+                    tracing::debug!(filename, "Storing media in Anki");
                     self.invoke("storeMediaFile", serde_json::json!({
                         "filename": &filename,
                         "path": audio_path,
                     })).await?;
                 } else {
-                    eprintln!("  [save_deck] WARNING: Audio file not found at '{}' — skipping", audio_path);
+                    tracing::warn!(%audio_path, "Audio file not found, skipping");
                 }
                 format!("[sound:{}]", filename)
             } else {
@@ -339,7 +339,7 @@ impl StorageProvider for AnkiStorageProvider {
             }
         }
 
-        println!("  [save_deck] '{}': {} added, {} updated", deck.name, added, updated);
+        tracing::info!(deck = %deck.name, added, updated, "Anki save_deck complete");
         Ok(added + updated)
     }
 

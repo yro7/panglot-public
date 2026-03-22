@@ -23,6 +23,7 @@ futures = "0.3.32"
 regex = "1"
 parking_lot = "0.12"
 isolang = { version = "2.4.0", features = ["english_names"] }
+tracing = "0.1"
 
 [dev-dependencies]
 static_assertions = "1.1"

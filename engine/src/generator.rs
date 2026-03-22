@@ -3,6 +3,7 @@ use lc_core::traits::Language;
 use serde::{Deserialize, Serialize};
 
 use crate::card_models::CardModelId;
+use crate::llm_client::RequestContext;
 
 // ----- Generation Request -----
 
@@ -17,6 +18,8 @@ pub struct GenerationRequest<L: Language> {
     pub transliteration: Option<String>,
     pub injected_vocabulary: Vec<ExtractedFeature<L::Morphology>>,
     pub excluded_vocabulary: Vec<ExtractedFeature<L::Morphology>>,
+    /// Billing/tracing context set by HTTP handlers, propagated to LlmRequest.
+    pub request_context: Option<RequestContext>,
 }
 
 // ----- Lexicon Options -----
@@ -64,6 +67,7 @@ mod tests {
             transliteration: None,
             injected_vocabulary: vec![],
             excluded_vocabulary: vec![],
+            request_context: None,
         };
         assert_eq!(req.card_model_id, CardModelId::ClozeTest);
     }

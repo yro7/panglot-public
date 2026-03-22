@@ -184,7 +184,7 @@ where
         let cards = match self.generate_cards_batch(tree_root, req, target_node_id, llm_semaphore, post_process_semaphore).await {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("Warning: Failed to generate cards batch: {}", e);
+                tracing::warn!(%e, "Failed to generate cards batch");
                 Vec::new()
             }
         };
@@ -283,18 +283,20 @@ where
             temperature: self.generator_temperature,
             max_tokens: Some(self.generator_max_tokens),
             response_schema: Some(array_schema),
+            request_context: req.request_context.clone(),
+            call_type: crate::llm_client::CallType::Generation,
         };
 
         let raw_json = {
             let _permit = llm_semaphore.acquire().await.unwrap();
             let client = self.llm_client.read().await;
-            client.chat_completion(&content_request).await?
+            client.chat_completion(&content_request).await?.content
         };
-        println!("--- DEBUG RAW LLM CONTENT OUTPUT ---\n{}\n----------------------------------", raw_json);
+        tracing::debug!(raw_len = raw_json.len(), "Raw LLM content output");
 
         let cleaned_json = clean_llm_json(&raw_json);
 
-        println!("--- DEBUG LLM CONTENT OUTPUT ---\n{}\n----------------------------------", cleaned_json);
+        tracing::debug!(cleaned_len = cleaned_json.len(), "Cleaned LLM content output");
 
         // --- Parse the wrapper object and extract the array of cards ---
         let mut parsed_root: serde_json::Value = serde_json::from_str(cleaned_json)?;
@@ -326,11 +328,11 @@ where
              let parsed = match self.parse_and_validate(req, &card_json_str).await {
                  Ok(result) => result,
                  Err(feedback) => {
-                     eprintln!("Card validation failed, retrying: {}", feedback);
+                     tracing::warn!(%feedback, "Card validation failed, retrying");
                      match self.retry_single_card(tree_root, req, skill_node_id, &feedback, &llm_semaphore).await {
                          Ok(result) => result,
                          Err(e) => {
-                             eprintln!("Card abandoned after retry: {}", e);
+                             tracing::error!(%e, "Card abandoned after retry");
                              continue;
                          }
                      }
@@ -375,7 +377,7 @@ where
                                       raw_response: pe.raw_response.clone(),
                                       error: pe.error_message.clone(),
                                   });
-                              eprintln!("[Extraction] First attempt failed, retrying with error feedback...");
+                              tracing::warn!("Feature extraction first attempt failed, retrying with error feedback");
                               tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                               let _permit = llm_sem.acquire().await.unwrap();
                               let client = self.llm_client.read().await;
@@ -396,7 +398,7 @@ where
                          for processor in &self.early_processors {
                              match processor.process(&self.language, &card_id_str, &any_card, &extra_value).await {
                                  Ok(r) => results.push(r),
-                                 Err(e) => eprintln!("Early post-processing error: {}", e),
+                                 Err(e) => tracing::error!(%e, "Early post-processing error"),
                              }
                          }
                          results
@@ -407,7 +409,7 @@ where
                  let (pedagogical_explanation, target_features, context_features, multiword_expressions) = match extracted {
                      Ok(resp) => (resp.pedagogical_explanation, resp.target_features, resp.context_features, resp.multiword_expressions),
                      Err(e) => {
-                         eprintln!("⚠ [Extraction] FAILED (even after retry) for card — explanation will be empty. Error: {}", e);
+                         tracing::error!(%e, "Feature extraction FAILED (even after retry) — explanation will be empty");
                          (String::new(), Vec::new(), Vec::new(), Vec::new())
                      },
                  };
@@ -434,7 +436,7 @@ where
                  // --- Late Post-Processing (sequential, after feature extraction) ---
                  for processor in &self.late_processors {
                      if let Err(e) = processor.process(&self.language, &any_card, &extra_value, &mut metadata).await {
-                         eprintln!("Late post-processing error: {}", e);
+                         tracing::error!(%e, "Late post-processing error");
                      }
                  }
 
@@ -498,6 +500,8 @@ where
             temperature: self.generator_temperature,
             max_tokens: Some(self.generator_max_tokens),
             response_schema: Some(item_schema),
+            request_context: req.request_context.clone(),
+            call_type: crate::llm_client::CallType::Generation,
         };
 
         let raw_json = {
@@ -505,6 +509,7 @@ where
             let client = self.llm_client.read().await;
             client.chat_completion(&retry_request).await
                 .map_err(|e| format!("Retry LLM call failed: {}", e))?
+                .content
         };
 
         let cleaned = clean_llm_json(&raw_json);
@@ -557,6 +562,7 @@ where
         user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
     ) -> GenerationRequest<L> {
         let mut injected_vocabulary = Vec::new();
         let mut excluded_vocabulary = Vec::new();
@@ -593,6 +599,7 @@ where
             transliteration: None,
             injected_vocabulary,
             excluded_vocabulary,
+            request_context,
         }
     }
 }
@@ -633,6 +640,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<Vec<DynGeneratedCard>>;
 
@@ -641,6 +649,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<NewDeckData>;
 
@@ -650,6 +659,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)>;
 
@@ -708,9 +718,10 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<Vec<DynGeneratedCard>> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
         let cards = self.generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem).await?;
         Ok(cards.into_iter().map(|c| {
             let metadata_json = serde_json::to_string_pretty(&c.metadata).unwrap_or_default();
@@ -729,9 +740,10 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<NewDeckData> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
         self.generate_deck_data(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
@@ -740,9 +752,10 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options);
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
         self.generate_cards_and_deck(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
@@ -751,7 +764,7 @@ where
         difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
     ) -> Result<DynPromptPreview> {
-        let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options);
+        let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options, None);
 
         let node = crate::skill_tree::find_node(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node '{}' not found", node_id))?;
@@ -906,6 +919,7 @@ mod tests {
                 },
             }],
             excluded_vocabulary: vec![],
+            request_context: None,
         };
 
         let deck_data = pipeline
@@ -938,10 +952,11 @@ mod tests {
             transliteration: None,
             injected_vocabulary: vec![],
             excluded_vocabulary: vec![],
+            request_context: None,
         };
 
         let deck_data = pipeline
-            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
+            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
             .await
             .unwrap();
 
