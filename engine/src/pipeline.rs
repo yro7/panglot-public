@@ -15,6 +15,7 @@ use crate::llm_client::{ChatMessage, LlmClient, LlmRequest, Role};
 use crate::post_process::{EarlyPostProcessor, LatePostProcessor};
 use crate::prompts::{GeneratorContext, PromptConfig};
 use crate::skill_tree::SkillNode;
+use crate::usage::{PostProcessEvent, PostProcessType, UsageRecorder};
 use crate::validation::CardValidator;
 
 use lc_core::storage::{StorageProvider, NewDeckData, NewCardEntry};
@@ -65,6 +66,7 @@ pub struct Pipeline<L: Language + Send + Sync> {
     extractor_temperature: f32,
     extractor_max_tokens: u32,
     prompt_config: PromptConfig,
+    usage_recorder: Option<UsageRecorder>,
     lexicon_tracker: RwLock<LexiconTracker<L::Morphology>>,
     lexicon_status: RwLock<LexiconStatus>,
     cached_base_tree: std::sync::OnceLock<SkillNode>,
@@ -103,6 +105,7 @@ where
             extractor_temperature,
             extractor_max_tokens,
             prompt_config,
+            usage_recorder: None,
             lexicon_tracker: RwLock::new(LexiconTracker::new()),
             lexicon_status: RwLock::new(LexiconStatus::NotStarted),
             cached_base_tree: std::sync::OnceLock::new(),
@@ -394,10 +397,42 @@ where
                      // Early post-processors (TTS, IPA — subprocesses)
                      async {
                          let _pp_permit = pp_sem.acquire().await.unwrap();
+                         let speakable = any_card.speakable_text();
+                         let input_chars = speakable.as_ref().map(|t| t.len() as u32).unwrap_or(0);
+                         let lang_code = self.language.iso_code().to_639_3().to_string();
+
                          let mut results = Vec::new();
                          for processor in &self.early_processors {
+                             let pp_start = std::time::Instant::now();
                              match processor.process(&self.language, &card_id_str, &any_card, &extra_value).await {
-                                 Ok(r) => results.push(r),
+                                 Ok(r) => {
+                                     if let (Some(recorder), Some(ctx)) = (&self.usage_recorder, &req.request_context) {
+                                         let latency_ms = pp_start.elapsed().as_millis() as u64;
+                                         if r.ipa.is_some() {
+                                             recorder.record_post_process(PostProcessEvent {
+                                                 user_id: ctx.user_id.clone(),
+                                                 request_id: ctx.request_id.clone(),
+                                                 language: Some(lang_code.clone()),
+                                                 process_type: PostProcessType::Ipa,
+                                                 input_chars,
+                                                 latency_ms,
+                                                 success: true,
+                                             });
+                                         }
+                                         if r.audio_file.is_some() {
+                                             recorder.record_post_process(PostProcessEvent {
+                                                 user_id: ctx.user_id.clone(),
+                                                 request_id: ctx.request_id.clone(),
+                                                 language: Some(lang_code.clone()),
+                                                 process_type: PostProcessType::Tts,
+                                                 input_chars,
+                                                 latency_ms,
+                                                 success: true,
+                                             });
+                                         }
+                                     }
+                                     results.push(r);
+                                 }
                                  Err(e) => tracing::error!(%e, "Early post-processing error"),
                              }
                          }
@@ -537,6 +572,11 @@ where
         }
 
         Ok((any_card, extra_fields, card_json))
+    }
+
+    /// Set the usage recorder for tracking post-processing operations.
+    pub fn set_usage_recorder(&mut self, recorder: UsageRecorder) {
+        self.usage_recorder = Some(recorder);
     }
 
     /// Add an early post-processor (runs in parallel with feature extraction).

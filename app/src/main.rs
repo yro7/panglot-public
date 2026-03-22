@@ -18,6 +18,7 @@ mod config;
 pub mod state;
 pub mod auth;
 pub mod billing;
+pub mod usage_analytics_impl;
 pub mod worker;
 pub mod api;
 
@@ -58,6 +59,7 @@ where
         cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
         prompt_config.clone(),
     );
+    pipeline.set_usage_recorder(recorder.clone());
     pipeline.add_early_processor(Box::new(engine::post_process::IpaGenerator::new(sidecar.clone())));
     pipeline.add_early_processor(Box::new(engine::post_process::TtsGenerator::new(sidecar.clone())));
     Box::new(pipeline)
@@ -324,6 +326,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/user/settings", web::get().to(api::config::get_user_settings))
             .route("/api/user/settings", web::post().to(api::config::update_user_settings))
             .route("/api/usage/summary", web::get().to(api::usage::get_usage_summary))
+            .route("/api/usage/details", web::get().to(api::usage::get_usage_details))
             .route("/api/audio/{filename}", web::get().to(api::audio::get_audio))
             .service(Files::new("/", &static_path).index_file("index.html"))
     })

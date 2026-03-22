@@ -2082,6 +2082,7 @@ dependencies = [
  "actix-web",
  "anki_bridge",
  "anyhow",
+ "async-trait",
  "chrono",
  "dashmap",
  "dotenvy",
