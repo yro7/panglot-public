@@ -33,7 +33,7 @@ impl PythonSidecar {
         let stdin = child.stdin.take().expect("stdin was piped");
         let stdout = child.stdout.take().expect("stdout was piped");
 
-        println!("[Sidecar] Python sidecar started (pid: {:?})", child.id());
+        tracing::info!(pid = ?child.id(), "Python sidecar started");
 
         Ok(Self {
             child,
@@ -115,7 +115,7 @@ impl PythonSidecar {
         let _ = self.stdin.flush().await;
         let _ = self.child.wait().await;
 
-        println!("[Sidecar] Python sidecar stopped.");
+        tracing::info!("Python sidecar stopped");
         Ok(())
     }
 

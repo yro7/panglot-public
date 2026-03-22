@@ -136,9 +136,11 @@ where
         temperature,
         max_tokens: Some(max_tokens),
         response_schema: Some(schema),
+        request_context: req.request_context.clone(),
+        call_type: crate::llm_client::CallType::Extraction,
     };
 
-    let response = llm_client.chat_completion(&request).await?;
+    let response = llm_client.chat_completion(&request).await?.content;
     let cleaned = clean_llm_json(&response);
     let normalized = crate::llm_utils::normalize_pos_tags(cleaned);
 
@@ -146,7 +148,7 @@ where
         Ok(parsed) => parsed,
         Err(e) => {
             let err_msg = e.to_string();
-            eprintln!("Failed to parse feature extraction response:\nRAW:\n{}\nERROR:\n{}", normalized, err_msg);
+            tracing::warn!(error = %err_msg, "Failed to parse feature extraction response");
             return Err(ExtractionParseError {
                 raw_response: normalized,
                 error_message: err_msg,

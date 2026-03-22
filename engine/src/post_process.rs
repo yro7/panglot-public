@@ -86,7 +86,7 @@ where L::Morphology: Send + Sync
         let voice = match config {
             TtsConfig::Edge { voice } => voice,
             TtsConfig::None => {
-                println!("  [TTS] No TTS strategy configured for {}, skipping.", language.name());
+                tracing::debug!(language = language.name(), "No TTS strategy configured, skipping");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };
@@ -98,16 +98,16 @@ where L::Morphology: Send + Sync
         let text = match text {
             Some(t) if t.len() <= MAX_SIDECAR_TEXT_LEN => t,
             Some(t) => {
-                eprintln!("  [TTS] Text too long ({} bytes), truncating to {}", t.len(), MAX_SIDECAR_TEXT_LEN);
+                tracing::warn!(len = t.len(), max = MAX_SIDECAR_TEXT_LEN, "TTS text too long, truncating");
                 t[..MAX_SIDECAR_TEXT_LEN].to_string()
             }
             None => {
-                println!("  [TTS] Skipping TTS for card {} (no speakable text)", card_id);
+                tracing::debug!(card_id, "Skipping TTS (no speakable text)");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };
 
-        println!("  [TTS] Generating audio for card {} with voice '{}': \"{}\"", card_id, voice, text);
+        tracing::info!(card_id, voice, "Generating TTS audio");
 
         // Write audio to a staging directory so DeckBuilder can find it
         let staging_dir = std::env::temp_dir().join("lc_audio");
@@ -120,7 +120,7 @@ where L::Morphology: Send + Sync
         let audio_file = match self.sidecar.lock().await.request_tts(voice, &text, &output_path_str).await {
             Ok(path) => Some(path),
             Err(e) => {
-                eprintln!("  [TTS] Sidecar TTS error: {}", e);
+                tracing::error!(%e, "Sidecar TTS error");
                 None
             }
         };
@@ -156,11 +156,11 @@ where L::Morphology: Send + Sync
         let epitran_code = match config {
             IpaConfig::Epitran(code) => code,
             IpaConfig::Custom(_) => {
-                println!("  [IPA] Custom IPA strategy not yet implemented, skipping.");
+                tracing::debug!("Custom IPA strategy not yet implemented, skipping");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
             IpaConfig::None => {
-                println!("  [IPA] No IPA strategy configured for {}, skipping.", language.name());
+                tracing::debug!(language = language.name(), "No IPA strategy configured, skipping");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };
@@ -172,23 +172,23 @@ where L::Morphology: Send + Sync
         let text = match text {
             Some(t) if t.len() <= MAX_SIDECAR_TEXT_LEN => t,
             Some(t) => {
-                eprintln!("  [IPA] Text too long ({} bytes), truncating to {}", t.len(), MAX_SIDECAR_TEXT_LEN);
+                tracing::warn!(len = t.len(), max = MAX_SIDECAR_TEXT_LEN, "IPA text too long, truncating");
                 t[..MAX_SIDECAR_TEXT_LEN].to_string()
             }
             None => {
-                println!("  [IPA] Skipping IPA for card {} (no text to transliterate)", card_id);
+                tracing::debug!(card_id, "Skipping IPA (no text to transliterate)");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };
 
-        println!("  [IPA] Generating IPA for card {} with epitran '{}': \"{}\"", card_id, epitran_code, text);
+        tracing::info!(card_id, epitran_code, "Generating IPA");
 
         // Call epitran via Python sidecar
         let ipa = match self.sidecar.lock().await.request_ipa(epitran_code, &text).await {
             Ok(ipa_str) if !ipa_str.is_empty() => Some(ipa_str),
             Ok(_) => None,
             Err(e) => {
-                eprintln!("  [IPA] Sidecar IPA error: {}", e);
+                tracing::error!(%e, "Sidecar IPA error");
                 None
             }
         };

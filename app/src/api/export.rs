@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
+use engine::llm_client::RequestContext;
 use engine::skill_tree;
 use std::fs;
 use lc_core::user::UserSettings;
@@ -53,6 +54,13 @@ pub async fn export_deck(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
+    let req_ctx = Some(RequestContext {
+        user_id: auth.user_id.clone(),
+        request_id: uuid::Uuid::new_v4().to_string(),
+        endpoint: "/api/export".into(),
+        language: Some(lang.to_string()),
+    });
+
     let export_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         UserSettings::new(
@@ -62,6 +70,7 @@ pub async fn export_deck(
         ),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
+        req_ctx,
         llm_sem, pp_sem,
     ).await;
 
@@ -145,11 +154,19 @@ pub async fn push_to_anki(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
+    let req_ctx = Some(RequestContext {
+        user_id: auth.user_id.clone(),
+        request_id: uuid::Uuid::new_v4().to_string(),
+        endpoint: "/api/push-to-anki".into(),
+        language: Some(lang.to_string()),
+    });
+
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
+        req_ctx,
         llm_sem, pp_sem,
     ).await;
 
@@ -236,11 +253,19 @@ pub async fn push_to_local_db(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
+    let req_ctx = Some(RequestContext {
+        user_id: auth.user_id.clone(),
+        request_id: uuid::Uuid::new_v4().to_string(),
+        endpoint: "/api/push-local".into(),
+        language: Some(lang.to_string()),
+    });
+
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
+        req_ctx,
         llm_sem, pp_sem,
     ).await;
 

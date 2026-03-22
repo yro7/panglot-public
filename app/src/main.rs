@@ -17,6 +17,7 @@ use engine::python_sidecar::PythonSidecar;
 mod config;
 pub mod state;
 pub mod auth;
+pub mod billing;
 pub mod worker;
 pub mod api;
 
@@ -29,6 +30,8 @@ fn build_pipeline<L>(
     make_client: &dyn Fn(&str) -> LlmHttpClient,
     sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
     prompt_config: &PromptConfig,
+    recorder: &engine::usage::UsageRecorder,
+    provider: &LlmProvider,
 ) -> Box<dyn DynPipeline>
 where
     L: Language + Send + Sync + 'static,
@@ -45,9 +48,12 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     let model = cfg.llm.active_model().expect("model already validated at startup");
-    let client = make_client(model);
+    let base_client = make_client(model);
+    let instrumented = engine::usage::InstrumentedLlmClient::new(
+        base_client, recorder.clone(), provider.to_string(), model.to_string(),
+    );
     let mut pipeline = Pipeline::new(
-        lang, Box::new(client),
+        lang, Box::new(instrumented),
         cfg.generator.temperature, cfg.generator.max_tokens,
         cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
         prompt_config.clone(),
@@ -59,9 +65,12 @@ where
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init();
-    println!("🌍 Panglot — Beta Test Server");
-    println!("======================================\n");
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")))
+        .with_target(false)
+        .init();
+    tracing::info!("Panglot — Beta Test Server starting");
 
     // ── Load global config ──
     let cfg = config::load_config("config.yml")
@@ -91,9 +100,7 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or_else(|e| panic!("Config error: {}", e))
         .to_string();
 
-    println!("   Provider:         {}", provider);
-    println!("   Active model:     {}", active_model);
-    println!("   LLM base URL:     {}", base_url);
+    tracing::info!(provider = %provider, model = %active_model, base_url = %base_url, "LLM configuration loaded");
 
     // Setup Database
     let db_path = std::path::Path::new(&cfg.paths.output_dir).join("panglot.db");
@@ -106,6 +113,9 @@ async fn main() -> std::io::Result<()> {
         PythonSidecar::spawn().expect("Failed to start Python sidecar")
     ));
 
+    // ── Start billing writer (usage_logs) ──
+    let recorder = billing::start_billing_writer(local_db.pool.clone());
+
     let mut pipelines_map: HashMap<String, Box<dyn DynPipeline>> = HashMap::new();
 
     // Helper: create an LLM client for a given model
@@ -116,22 +126,22 @@ async fn main() -> std::io::Result<()> {
     // ── Build pipelines for all registered languages ──
     for &iso in langs::ALL_ISO_CODES {
         if let Some(pipeline) = langs::dispatch_iso!(iso, lang => {
-            build_pipeline(lang, &cfg, &make_client, &sidecar, &prompt_config)
+            build_pipeline(lang, &cfg, &make_client, &sidecar, &prompt_config, &recorder, &provider)
         }) {
-            println!("✅ Loaded {} ({})", pipeline.language_name(), iso);
+            tracing::info!(language = pipeline.language_name(), iso, "Loaded language pipeline");
             pipelines_map.insert(iso.to_string(), pipeline);
         }
     }
 
     if pipelines_map.is_empty() {
-        eprintln!("❌ No languages registered!");
+        tracing::error!("No languages registered!");
         std::process::exit(1);
     }
 
     // ── Resolve AnkiConnect URL ──
     let anki_connect_url = Some(config::resolve_anki_connect_url(cfg.paths.anki_connect_url.as_deref()));
     if let Some(ref url) = anki_connect_url {
-        println!("🌐 AnkiConnect URL: {}", url);
+        tracing::info!(url, "AnkiConnect URL configured");
     }
 
     let max_llm_calls = cfg.llm.concurrency.max_llm_calls;
@@ -142,7 +152,7 @@ async fn main() -> std::io::Result<()> {
         let supabase_url = std::env::var("SUPABASE_URL")
             .expect("SUPABASE_URL required when auth.enabled = true");
         let url = format!("{}/auth/v1/.well-known/jwks.json", supabase_url);
-        log::info!("Fetching JWKS from {}", url);
+        tracing::info!(%url, "Fetching JWKS");
 
         let resp: serde_json::Value = reqwest::get(&url).await
             .expect("Failed to fetch JWKS")
@@ -154,12 +164,12 @@ async fn main() -> std::io::Result<()> {
         for key in keys {
             if let Some(kid) = key["kid"].as_str() {
                 if let Some(entry) = parse_jwk(key) {
-                    log::info!("Loaded JWKS key kid={} alg={:?}", kid, entry.0);
+                    tracing::info!(kid, alg = ?entry.0, "Loaded JWKS key");
                     jwks_map.insert(kid.to_string(), entry);
                 }
             }
         }
-        log::info!("Loaded {} JWKS key(s) total", jwks_map.len());
+        tracing::info!(count = jwks_map.len(), "Loaded JWKS keys");
         (Arc::new(RwLock::new(jwks_map)), Some(url))
     } else {
         (Arc::new(RwLock::new(HashMap::new())), None)
@@ -169,11 +179,11 @@ async fn main() -> std::io::Result<()> {
     let jwt_hs256_key = if cfg.auth_enabled() {
         match std::env::var("SUPABASE_JWT_SECRET") {
             Ok(secret) => {
-                log::info!("Loaded SUPABASE_JWT_SECRET for HS256 verification");
+                tracing::info!("Loaded SUPABASE_JWT_SECRET for HS256 verification");
                 Some(DecodingKey::from_secret(secret.as_bytes()))
             }
             Err(_) => {
-                log::warn!("SUPABASE_JWT_SECRET not set — HS256 tokens will be rejected");
+                tracing::warn!("SUPABASE_JWT_SECRET not set — HS256 tokens will be rejected");
                 None
             }
         }
@@ -217,8 +227,7 @@ async fn main() -> std::io::Result<()> {
     worker::spawn_draft_cleanup(pool);
 
     let bind_addr = format!("{}:{}", cfg.server.host, cfg.server.port);
-    println!("\n🚀 Server starting at http://{}", bind_addr);
-    println!("   Open this URL in your browser to access the beta interface.\n");
+    tracing::info!(bind_addr = %bind_addr, "Server starting");
 
     #[derive(OpenApi)]
     #[openapi(
@@ -259,7 +268,7 @@ async fn main() -> std::io::Result<()> {
     } else if std::path::Path::new("static").exists() {
         "static".to_string()
     } else {
-        eprintln!("⚠️  Static files directory not found at '{}'", cfg.server.static_path);
+        tracing::warn!(path = %cfg.server.static_path, "Static files directory not found");
         cfg.server.static_path.clone()
     };
 
@@ -276,6 +285,7 @@ async fn main() -> std::io::Result<()> {
             });
 
         App::new()
+            .wrap(tracing_actix_web::TracingLogger::default())
             .app_data(app_state.clone())
             .app_data(json_cfg)
             .service(SwaggerUi::new("/api/docs/{_:.*}").url("/api/docs/openapi.json", openapi.clone()))
@@ -311,6 +321,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/auth/login", web::post().to(auth::post_auth_login))
             .route("/api/user/settings", web::get().to(api::config::get_user_settings))
             .route("/api/user/settings", web::post().to(api::config::update_user_settings))
+            .route("/api/usage/summary", web::get().to(api::usage::get_usage_summary))
             .route("/api/audio/{filename}", web::get().to(api::audio::get_audio))
             .service(Files::new("/", &static_path).index_file("index.html"))
     })

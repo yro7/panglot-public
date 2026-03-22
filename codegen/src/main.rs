@@ -91,10 +91,12 @@ The code must compile as-is when placed in the project.";
         temperature: 0.3,
         max_tokens: Some(8000),
         response_schema: None,
+        request_context: None,
+        call_type: engine::llm_client::CallType::Generation,
     };
 
     let response = client.chat_completion(&request).await?;
-    Ok(strip_code_fences(&response))
+    Ok(strip_code_fences(&response.content))
 }
 
 async fn generate_tree(client: &LlmHttpClient, iso: &str, lang_name: &str) -> Result<String> {
@@ -128,10 +130,12 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
         temperature: 0.5,
         max_tokens: Some(4000),
         response_schema: None,
+        request_context: None,
+        call_type: engine::llm_client::CallType::Generation,
     };
 
     let response = client.chat_completion(&request).await?;
-    Ok(strip_code_fences(&response))
+    Ok(strip_code_fences(&response.content))
 }
 
 fn capitalize_first(s: &str) -> String {

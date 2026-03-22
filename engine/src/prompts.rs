@@ -544,6 +544,7 @@ mod tests {
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
             excluded_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
+            request_context: None,
         };
 
         let node = tree.find_node(acc_id).unwrap();
@@ -589,6 +590,7 @@ mod tests {
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
             excluded_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
+            request_context: None,
         };
 
         let node = tree.find_node(acc_id).unwrap();
@@ -631,6 +633,7 @@ mod tests {
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
             excluded_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
+            request_context: None,
         };
 
         let node = tree.find_node(acc_id).unwrap();

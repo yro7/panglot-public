@@ -7,3 +7,4 @@ pub mod study;
 pub mod lexicon;
 pub mod config;
 pub mod audio;
+pub mod usage;

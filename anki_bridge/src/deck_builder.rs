@@ -89,7 +89,7 @@ impl DeckBuilder {
         for (card_idx, entry) in self.deck_data.cards.iter().enumerate() {
             if let Some(audio_path) = &entry.audio_path {
                 let file_path = Path::new(audio_path);
-                println!("  [DeckBuilder] Card {}: checking audio at '{}'", card_idx, audio_path);
+                tracing::debug!(card_idx, audio_path, "Checking audio file");
                 if file_path.exists() {
                     let filename = file_path
                         .file_name()
@@ -98,8 +98,7 @@ impl DeckBuilder {
                         .to_string();
 
                     let audio_bytes = fs::read(file_path)?;
-                    println!("  [DeckBuilder] Card {}: packing audio '{}' ({} bytes) as media index {}",
-                        card_idx, filename, audio_bytes.len(), media_index);
+                    tracing::debug!(card_idx, filename, bytes = audio_bytes.len(), media_index, "Packing audio into apkg");
 
                     let index_str = media_index.to_string();
                     zip.start_file(&index_str, options)?;
@@ -108,7 +107,7 @@ impl DeckBuilder {
                     media_map.insert(index_str, filename);
                     media_index += 1;
                 } else {
-                    eprintln!("  [DeckBuilder] WARNING: Audio file not found at '{}' — skipping", audio_path);
+                    tracing::warn!(audio_path, "Audio file not found, skipping");
                 }
             }
         }
@@ -412,7 +411,8 @@ impl DeckBuilder {
         // Remove if already exists
         let _ = fs::remove_file(&tmp_path);
 
-        conn.execute(&format!("VACUUM INTO '{}'", tmp_str), [])?;
+        let escaped = tmp_str.replace('\'', "''");
+        conn.execute(&format!("VACUUM INTO '{}'", escaped), [])?;
         let bytes = fs::read(&tmp_path)?;
         let _ = fs::remove_file(&tmp_path);
 

@@ -16,7 +16,7 @@ pub fn spawn_draft_cleanup(pool: SqlitePool) {
                 .execute(&pool)
                 .await
             {
-                log::warn!("Draft cleanup failed: {}", e);
+                tracing::warn!(%e, "Draft cleanup failed");
             }
         }
     });
@@ -24,27 +24,27 @@ pub fn spawn_draft_cleanup(pool: SqlitePool) {
 
 /// Background task: scans Anki + local DB and loads lexicon into each pipeline for a given user.
 pub async fn scan_lexicon_background(state: Arc<AppState>, anki_connect_url: Option<String>, user_id: String) {
-    println!("\n📚 Starting lexicon scan for user {}...", &user_id[..8.min(user_id.len())]);
+    tracing::info!(user_id_prefix = &user_id[..8.min(user_id.len())], "Starting lexicon scan");
     let mut all_cards = Vec::new();
 
     if let Some(ref url) = anki_connect_url {
         let anki = AnkiStorageProvider::new(url);
         match anki.fetch_cards().await {
             Ok(cards) => {
-                println!("   📡 Anki: fetched {} cards", cards.len());
+                tracing::info!(count = cards.len(), "Anki: fetched cards");
                 all_cards.extend(cards);
             }
-            Err(e) => eprintln!("   ⚠️  Anki fetch failed: {e}"),
+            Err(e) => tracing::warn!(%e, "Anki fetch failed"),
         }
     }
 
     let local = lc_core::db::LocalStorageProvider::for_user(state.db_pool.clone(), user_id.clone());
     match local.fetch_cards().await {
         Ok(cards) => {
-            println!("   💾 Local DB: fetched {} cards", cards.len());
+            tracing::info!(count = cards.len(), "Local DB: fetched cards");
             all_cards.extend(cards);
         }
-        Err(e) => eprintln!("   ⚠️  Local DB fetch failed: {e}"),
+        Err(e) => tracing::warn!(%e, "Local DB fetch failed"),
     }
 
     // Wrap the pre-fetched cards in a simple provider for load_lexicon
@@ -52,9 +52,9 @@ pub async fn scan_lexicon_background(state: Arc<AppState>, anki_connect_url: Opt
     let pipelines = state.pipelines.read().await;
     for (iso, pipeline) in pipelines.iter() {
         match pipeline.load_lexicon(&snapshot).await {
-            Ok(count) => println!("   ✅ {iso}: {count} words loaded into lexicon"),
-            Err(e) => eprintln!("   ⚠️  {iso}: lexicon scan failed: {e}"),
+            Ok(count) => tracing::info!(iso, count, "Words loaded into lexicon"),
+            Err(e) => tracing::warn!(iso, %e, "Lexicon scan failed"),
         }
     }
-    println!("📚 Background lexicon scan complete.");
+    tracing::info!("Background lexicon scan complete");
 }

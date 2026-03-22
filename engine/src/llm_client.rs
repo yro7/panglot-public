@@ -86,18 +86,57 @@ pub struct ChatMessage {
     pub content: String,
 }
 
+// ── Token Usage & LLM Response ──
+
+#[derive(Debug, Clone, Default)]
+pub struct TokenUsage {
+    pub tokens_in: u32,
+    pub tokens_out: u32,
+    pub cached_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LlmResponse {
+    pub content: String,
+    pub usage: TokenUsage,
+    pub latency_ms: u64,
+}
+
+// ── Request Context (for billing decorator) ──
+
+#[derive(Debug, Clone, Default)]
+pub struct RequestContext {
+    pub user_id: String,
+    pub request_id: String,
+    pub endpoint: String,
+    pub language: Option<String>,
+}
+
+/// Which pipeline step produced this LLM call.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub enum CallType {
+    Generation,
+    Extraction,
+}
+
+impl Default for CallType {
+    fn default() -> Self { Self::Generation }
+}
+
 #[derive(Debug, Clone)]
 pub struct LlmRequest {
     pub messages: Vec<ChatMessage>,
     pub temperature: f32,
     pub max_tokens: Option<u32>,
     pub response_schema: Option<serde_json::Value>,
+    pub request_context: Option<RequestContext>,
+    pub call_type: CallType,
 }
 
 /// Trait for LLM providers — enables mock injection in tests.
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn chat_completion(&self, request: &LlmRequest) -> Result<String>;
+    async fn chat_completion(&self, request: &LlmRequest) -> Result<LlmResponse>;
 }
 
 // ── Provider-aware HTTP Client ──
@@ -275,41 +314,49 @@ impl LlmHttpClient {
         }
     }
 
-    fn extract_content(&self, json: &serde_json::Value) -> Result<String> {
+    fn extract_content(&self, json: &serde_json::Value) -> Result<(String, TokenUsage)> {
         if self.provider.is_openai_compatible() {
             // OpenAI format: choices[0].message.content
             let finish_reason = json["choices"][0]["finish_reason"].as_str().unwrap_or("unknown");
             if finish_reason != "stop" {
-                eprintln!("WARNING: LLM finish_reason='{}' — full API response:\n{}", finish_reason, serde_json::to_string_pretty(json).unwrap_or_default());
+                tracing::warn!(finish_reason, "LLM non-stop finish reason");
             }
-            let usage = &json["usage"];
-            eprintln!("[LLM] tokens — prompt: {}, completion: {}, finish: {}",
-                usage["prompt_tokens"], usage["completion_tokens"], finish_reason);
+            let usage_json = &json["usage"];
+            let token_usage = TokenUsage {
+                tokens_in: usage_json["prompt_tokens"].as_u64().unwrap_or(0) as u32,
+                tokens_out: usage_json["completion_tokens"].as_u64().unwrap_or(0) as u32,
+                cached_tokens: usage_json["prompt_tokens_details"]["cached_tokens"].as_u64().map(|v| v as u32),
+            };
+            tracing::info!(tokens_in = token_usage.tokens_in, tokens_out = token_usage.tokens_out, finish_reason, "LLM response (OpenAI)");
 
-            json["choices"][0]["message"]["content"]
+            let content = json["choices"][0]["message"]["content"]
                 .as_str()
                 .map(String::from)
-                .ok_or_else(|| anyhow::anyhow!("Failed to extract content from OpenAI-compatible response"))
+                .ok_or_else(|| anyhow::anyhow!("Failed to extract content from OpenAI-compatible response"))?;
+            Ok((content, token_usage))
         } else {
             // Anthropic format: content[0].text or content[0].input (tool_use)
             let stop_reason = json["stop_reason"].as_str().unwrap_or("unknown");
-            let usage = &json["usage"];
-            eprintln!("[LLM] tokens — input: {}, output: {}, stop: {}",
-                usage["input_tokens"], usage["output_tokens"], stop_reason);
+            let usage_json = &json["usage"];
+            let token_usage = TokenUsage {
+                tokens_in: usage_json["input_tokens"].as_u64().unwrap_or(0) as u32,
+                tokens_out: usage_json["output_tokens"].as_u64().unwrap_or(0) as u32,
+                cached_tokens: usage_json["cache_read_input_tokens"].as_u64().map(|v| v as u32),
+            };
+            tracing::info!(tokens_in = token_usage.tokens_in, tokens_out = token_usage.tokens_out, stop_reason, "LLM response (Anthropic)");
 
             // Check for tool_use blocks first (structured output)
             if let Some(content) = json["content"].as_array() {
                 for block in content {
                     if block["type"].as_str() == Some("tool_use") {
-                        // Return the tool input as a JSON string
-                        return Ok(serde_json::to_string(&block["input"])?);
+                        return Ok((serde_json::to_string(&block["input"])?, token_usage));
                     }
                 }
                 // Fallback: return text blocks
                 for block in content {
                     if block["type"].as_str() == Some("text") {
                         if let Some(text) = block["text"].as_str() {
-                            return Ok(text.to_string());
+                            return Ok((text.to_string(), token_usage));
                         }
                     }
                 }
@@ -322,9 +369,18 @@ impl LlmHttpClient {
 
 #[async_trait]
 impl LlmClient for LlmHttpClient {
-    async fn chat_completion(&self, request: &LlmRequest) -> Result<String> {
+    async fn chat_completion(&self, request: &LlmRequest) -> Result<LlmResponse> {
+        let span = tracing::info_span!("llm_call",
+            provider = %self.provider,
+            model = %self.model,
+            tokens_in = tracing::field::Empty,
+            tokens_out = tracing::field::Empty,
+        );
+        let _enter = span.enter();
+
         let max_retries = 3;
         let mut retries = 0;
+        let start = std::time::Instant::now();
 
         loop {
             let req = self.build_request(request);
@@ -337,7 +393,7 @@ impl LlmClient for LlmHttpClient {
                         r
                     } else if (status.as_u16() == 503 || status.as_u16() == 429 || status.as_u16() == 529) && retries < max_retries {
                         let _error_text = r.text().await.unwrap_or_default();
-                        eprintln!("LLM API returned {}. Retrying {}/{}...", status, retries + 1, max_retries);
+                        tracing::warn!(status = %status, retry = retries + 1, max_retries, "LLM API returned retryable status");
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         retries += 1;
                         continue;
@@ -348,7 +404,7 @@ impl LlmClient for LlmHttpClient {
                 }
                 Err(e) => {
                     if retries < max_retries {
-                        eprintln!("LLM network error: {}. Retrying {}/{}...", e, retries + 1, max_retries);
+                        tracing::warn!(error = %e, retry = retries + 1, max_retries, "LLM network error, retrying");
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         retries += 1;
                         continue;
@@ -357,8 +413,12 @@ impl LlmClient for LlmHttpClient {
                 },
             };
 
+            let latency_ms = start.elapsed().as_millis() as u64;
             let json: serde_json::Value = resp.json().await?;
-            return self.extract_content(&json);
+            let (content, usage) = self.extract_content(&json)?;
+            span.record("tokens_in", usage.tokens_in);
+            span.record("tokens_out", usage.tokens_out);
+            return Ok(LlmResponse { content, usage, latency_ms });
         }
     }
 }
@@ -384,12 +444,12 @@ impl MockLlmClient {
 
 #[async_trait]
 impl LlmClient for MockLlmClient {
-    async fn chat_completion(&self, _request: &LlmRequest) -> Result<String> {
+    async fn chat_completion(&self, _request: &LlmRequest) -> Result<LlmResponse> {
         let mut idx = self.call_index.lock().unwrap();
         let resp = self.responses.get(*idx).or(self.responses.last())
             .cloned().ok_or_else(|| anyhow::anyhow!("MockLlmClient: no responses"))?;
         *idx += 1;
-        Ok(resp)
+        Ok(LlmResponse { content: resp, usage: TokenUsage::default(), latency_ms: 0 })
     }
 }
 
@@ -397,20 +457,27 @@ impl LlmClient for MockLlmClient {
 mod tests {
     use super::*;
 
+    fn test_request() -> LlmRequest {
+        LlmRequest {
+            messages: vec![], temperature: 0.7, max_tokens: None,
+            response_schema: None, request_context: None, call_type: CallType::Generation,
+        }
+    }
+
     #[tokio::test]
     async fn mock_fixed_response() {
         let client = MockLlmClient::with_fixed_response(r#"{"sentence": "Test"}"#);
-        let req = LlmRequest { messages: vec![], temperature: 0.7, max_tokens: None, response_schema: None };
-        assert!(client.chat_completion(&req).await.unwrap().contains("Test"));
+        let resp = client.chat_completion(&test_request()).await.unwrap();
+        assert!(resp.content.contains("Test"));
     }
 
     #[tokio::test]
     async fn mock_sequential_responses() {
         let client = MockLlmClient::new(vec!["first".into(), "second".into()]);
-        let req = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: None };
-        assert_eq!(client.chat_completion(&req).await.unwrap(), "first");
-        assert_eq!(client.chat_completion(&req).await.unwrap(), "second");
-        assert_eq!(client.chat_completion(&req).await.unwrap(), "second"); // repeats last
+        let req = test_request();
+        assert_eq!(client.chat_completion(&req).await.unwrap().content, "first");
+        assert_eq!(client.chat_completion(&req).await.unwrap().content, "second");
+        assert_eq!(client.chat_completion(&req).await.unwrap().content, "second"); // repeats last
     }
 
     #[test]
@@ -516,12 +583,12 @@ mod tests {
         let client = LlmHttpClient::custom("key".into(), "url".into(), "model".into(), LlmProvider::Anthropic);
         
         let schema1 = crate::card_models::AnyCard::schema_json_value::<langs::Polish>(crate::card_models::CardModelId::ClozeTest);
-        let req1 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(schema1) };
+        let req1 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(schema1), request_context: None, call_type: CallType::Generation };
         let payload1 = client.build_anthropic_payload(&req1);
         eprintln!("PAYLOAD 1 (CardModel):\n{}", serde_json::to_string_pretty(&payload1.get("tools")).unwrap());
 
         let raw2 = serde_json::to_value(&schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<langs::PolishMorphology>)).unwrap();
-        let req2 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(raw2) };
+        let req2 = LlmRequest { messages: vec![], temperature: 0.0, max_tokens: None, response_schema: Some(raw2), request_context: None, call_type: CallType::Extraction };
         let payload2 = client.build_anthropic_payload(&req2);
         eprintln!("PAYLOAD 2 (FeatureExt):\n{}", serde_json::to_string_pretty(&payload2.get("tools")).unwrap());
     }

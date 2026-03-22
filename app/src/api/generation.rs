@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
+use engine::llm_client::RequestContext;
 use engine::skill_tree;
 use lc_core::db::DraftCard;
 use lc_core::storage::StorageProvider;
@@ -65,10 +66,18 @@ pub async fn generate_cards(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
+    let req_ctx = Some(RequestContext {
+        user_id: auth.user_id.clone(),
+        request_id: uuid::Uuid::new_v4().to_string(),
+        endpoint: "/api/generate".into(),
+        language: Some(lang.to_string()),
+    });
+
     let generation_result = pipeline.generate_cards_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
+        req_ctx,
         llm_sem, pp_sem,
     ).await;
 
@@ -98,7 +107,7 @@ pub async fn generate_cards(
                 created_at: 0, // set by save_drafts
             }).collect();
             if let Err(e) = db.save_drafts(&drafts).await {
-                log::error!("Failed to save drafts: {}", e);
+                tracing::error!(%e, "Failed to save drafts");
             }
 
             HttpResponse::Ok().json(GenerateResponse {
@@ -108,7 +117,7 @@ pub async fn generate_cards(
             })
         }
         Err(e) => {
-            eprintln!("Failed to generate cards batch: {}", e);
+            tracing::error!(%e, "Failed to generate cards batch");
             HttpResponse::InternalServerError().json(GenerateResponse {
                 success: false,
                 cards: vec![],
@@ -162,10 +171,18 @@ pub async fn generate_and_save(
     let llm_sem = data.llm_semaphore.clone();
     let pp_sem = data.post_process_semaphore.clone();
 
+    let req_ctx = Some(RequestContext {
+        user_id: auth.user_id.clone(),
+        request_id: uuid::Uuid::new_v4().to_string(),
+        endpoint: "/api/generate-and-save".into(),
+        language: Some(lang.to_string()),
+    });
+
     let result = pipeline.generate_cards_and_deck_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
+        req_ctx,
         llm_sem, pp_sem,
     ).await;
 
@@ -195,7 +212,7 @@ pub async fn generate_and_save(
                 created_at: 0,
             }).collect();
             if let Err(e) = db.save_drafts(&drafts).await {
-                log::error!("Failed to save drafts: {}", e);
+                tracing::error!(%e, "Failed to save drafts");
             }
 
             // Save to local DB
@@ -204,7 +221,7 @@ pub async fn generate_and_save(
                 match db.save_deck(&deck_data).await {
                     Ok(saved) => format!(" — saved {} cards to local DB", saved),
                     Err(e) => {
-                        eprintln!("Failed to save deck to local DB: {}", e);
+                        tracing::error!(%e, "Failed to save deck to local DB");
                         format!(" — failed to save to local DB: {}", e)
                     }
                 }
@@ -220,7 +237,7 @@ pub async fn generate_and_save(
             })
         }
         Err(e) => {
-            eprintln!("Failed to generate cards batch: {}", e);
+            tracing::error!(%e, "Failed to generate cards batch");
             HttpResponse::InternalServerError().json(GenerateResponse {
                 success: false, cards: vec![],
                 message: format!("Failed to generate cards: {}", e),
