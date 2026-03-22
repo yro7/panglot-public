@@ -387,48 +387,44 @@ impl LlmClient for LlmHttpClient {
         );
         let _enter = span.enter();
 
-        let max_retries = 3;
-        let mut retries = 0;
         let start = std::time::Instant::now();
 
-        loop {
-            let req = self.build_request(request);
-            let resp_result = req.send().await;
+        let backoff_config = backoff::ExponentialBackoffBuilder::new()
+            .with_initial_interval(std::time::Duration::from_secs(1))
+            .with_multiplier(2.0)
+            .with_randomization_factor(0.25)
+            .with_max_elapsed_time(Some(std::time::Duration::from_secs(30)))
+            .build();
 
-            let resp = match resp_result {
+        let resp = backoff::future::retry(backoff_config, || async {
+            let req = self.build_request(request);
+            match req.send().await {
                 Ok(r) => {
                     let status = r.status();
                     if status.is_success() {
-                        r
-                    } else if (status.as_u16() == 503 || status.as_u16() == 429 || status.as_u16() == 529) && retries < max_retries {
+                        Ok(r)
+                    } else if matches!(status.as_u16(), 429 | 503 | 529) {
                         let _error_text = r.text().await.unwrap_or_default();
-                        tracing::warn!(status = %status, retry = retries + 1, max_retries, "LLM API returned retryable status");
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        retries += 1;
-                        continue;
+                        tracing::warn!(%status, "LLM API returned retryable status");
+                        Err(backoff::Error::transient(anyhow::anyhow!("LLM API retryable error ({})", status)))
                     } else {
                         let error_text = r.text().await.unwrap_or_default();
-                        return Err(anyhow::anyhow!("LLM API error ({}): {}", status, error_text));
+                        Err(backoff::Error::permanent(anyhow::anyhow!("LLM API error ({}): {}", status, error_text)))
                     }
                 }
                 Err(e) => {
-                    if retries < max_retries {
-                        tracing::warn!(error = %e, retry = retries + 1, max_retries, "LLM network error, retrying");
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        retries += 1;
-                        continue;
-                    }
-                    return Err(e.into());
-                },
-            };
+                    tracing::warn!(error = %e, "LLM network error, retrying");
+                    Err(backoff::Error::transient(anyhow::anyhow!(e)))
+                }
+            }
+        }).await?;
 
-            let latency_ms = start.elapsed().as_millis() as u64;
-            let json: serde_json::Value = resp.json().await?;
-            let (content, usage) = self.extract_content(&json)?;
-            span.record("tokens_in", usage.tokens_in);
-            span.record("tokens_out", usage.tokens_out);
-            return Ok(LlmResponse { content, usage, latency_ms });
-        }
+        let latency_ms = start.elapsed().as_millis() as u64;
+        let json: serde_json::Value = resp.json().await?;
+        let (content, usage) = self.extract_content(&json)?;
+        span.record("tokens_in", usage.tokens_in);
+        span.record("tokens_out", usage.tokens_out);
+        Ok(LlmResponse { content, usage, latency_ms })
     }
 }
 
