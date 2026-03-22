@@ -132,8 +132,15 @@ impl LocalStorageProvider {
         Ok(())
     }
 
-    /// Recursively creates parent decks if they don't exist based on a "A::B::C" path format
-    async fn get_or_create_deck_hierarchy(&self, full_path: &str, language_code: &str) -> Result<String, sqlx::Error> {
+    /// Recursively creates parent decks if they don't exist based on a "A::B::C" path format.
+    /// Uses INSERT OR IGNORE to avoid SELECT-then-INSERT race and reduce round-trips.
+    async fn get_or_create_deck_hierarchy(
+        &self,
+        full_path: &str,
+        language_code: &str,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<String, sqlx::Error> {
+        use sqlx::Row;
         let parts: Vec<&str> = full_path.split("::").collect();
         let mut current_parent_id: Option<String> = None;
         let mut current_path = String::new();
@@ -148,35 +155,29 @@ impl LocalStorageProvider {
                 current_path = format!("{}::{}", current_path, part);
             }
 
-            // Check if deck exists
+            let deck_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT OR IGNORE INTO decks (id, user_id, parent_id, name, full_path, target_language, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(&deck_id)
+            .bind(&self.user_id)
+            .bind(&current_parent_id)
+            .bind(part)
+            .bind(&current_path)
+            .bind(language_code)
+            .bind(now)
+            .execute(&mut **tx)
+            .await?;
+
+            // Always fetch the actual ID (may be ours or pre-existing)
             let row = sqlx::query("SELECT id FROM decks WHERE full_path = ? AND user_id = ?")
                 .bind(&current_path)
                 .bind(&self.user_id)
-                .fetch_optional(&self.pool)
+                .fetch_one(&mut **tx)
                 .await?;
-
-            if let Some(record) = row {
-                use sqlx::Row;
-                last_deck_id = record.get::<String, _>("id");
-                current_parent_id = Some(last_deck_id.clone());
-            } else {
-                let deck_id = Uuid::new_v4().to_string();
-                sqlx::query(
-                    "INSERT INTO decks (id, user_id, parent_id, name, full_path, target_language, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-                )
-                .bind(&deck_id)
-                .bind(&self.user_id)
-                .bind(&current_parent_id)
-                .bind(part)
-                .bind(&current_path)
-                .bind(language_code)
-                .bind(now)
-                .execute(&self.pool)
-                .await?;
-                
-                last_deck_id = deck_id.clone();
-                current_parent_id = Some(deck_id);
-            }
+            last_deck_id = row.get::<String, _>("id");
+            current_parent_id = Some(last_deck_id.clone());
         }
 
         Ok(last_deck_id)
@@ -602,42 +603,26 @@ impl StorageProvider for LocalStorageProvider {
     async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
         let records = sqlx::query(
             r#"
-            SELECT c.id as card_id, c.front_html, c.metadata_json, r.interval_days
+            SELECT
+                c.id as card_id,
+                c.front_html,
+                c.metadata_json,
+                r.interval_days,
+                COALESCE(lapse_counts.cnt, 0) as lapses
             FROM cards c
             JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
+            LEFT JOIN (
+                SELECT card_id, COUNT(*) as cnt
+                FROM review_log
+                WHERE rating = 1 AND user_id = ?
+                GROUP BY card_id
+            ) lapse_counts ON c.id = lapse_counts.card_id
             "#
         )
         .bind(&self.user_id)
+        .bind(&self.user_id)
         .fetch_all(&self.pool)
         .await?;
-
-        // Batch query for lapses (rating=1 count per card)
-        let card_ids: Vec<String> = records.iter().map(|r| {
-            use sqlx::Row;
-            r.get::<String, _>("card_id")
-        }).collect();
-
-        let mut lapses_map: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-        if !card_ids.is_empty() {
-            for chunk in card_ids.chunks(500) {
-                let placeholders = vec!["?"; chunk.len()].join(",");
-                let sql = format!(
-                    "SELECT card_id, COUNT(*) as cnt FROM review_log WHERE rating = 1 AND user_id = ? AND card_id IN ({}) GROUP BY card_id",
-                    placeholders
-                );
-                let mut q = sqlx::query(&sql).bind(&self.user_id);
-                for id in chunk {
-                    q = q.bind(id);
-                }
-                let lapse_rows = q.fetch_all(&self.pool).await?;
-                for row in lapse_rows {
-                    use sqlx::Row;
-                    let cid: String = row.get("card_id");
-                    let cnt: i64 = row.get("cnt");
-                    lapses_map.insert(cid, cnt as i32);
-                }
-            }
-        }
 
         let mut cards = Vec::new();
         for rec in records {
@@ -646,7 +631,7 @@ impl StorageProvider for LocalStorageProvider {
             let metadata: String = rec.get("metadata_json");
             let fields = format!("{}\x1f{}", rec.get::<String, _>("front_html"), metadata);
             let interval_days: f64 = rec.get("interval_days");
-            let lapses = lapses_map.get(&card_id).copied().unwrap_or(0);
+            let lapses: i64 = rec.get("lapses");
 
             cards.push(StoredCard {
                 note_id: card_id.clone(),
@@ -654,7 +639,7 @@ impl StorageProvider for LocalStorageProvider {
                 fields,
                 tags: String::new(),
                 interval_days,
-                lapses,
+                lapses: lapses as i32,
             });
         }
 
@@ -668,24 +653,38 @@ impl StorageProvider for LocalStorageProvider {
         
         let records = sqlx::query(
             r#"
-            SELECT 
-                d.id, 
-                d.full_path, 
+            WITH review_counts AS (
+                SELECT card_id, COUNT(*) as review_count
+                FROM review_log
+                WHERE user_id = ?
+                GROUP BY card_id
+            )
+            SELECT
+                d.id,
+                d.full_path,
                 COUNT(c.id) as card_count,
-                SUM(CASE WHEN r.interval_days = 0 AND (SELECT COUNT(*) FROM review_log rl WHERE rl.card_id = c.id AND rl.user_id = r.user_id) = 0 THEN 1 ELSE 0 END) as new_count,
-                SUM(CASE WHEN ((r.interval_days > 0 AND r.interval_days < 1) OR (r.interval_days = 0 AND (SELECT COUNT(*) FROM review_log rl WHERE rl.card_id = c.id AND rl.user_id = r.user_id) > 0)) AND r.due_date <= ? THEN 1 ELSE 0 END) as learning_count,
-                SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as review_count
+                SUM(CASE WHEN r.interval_days = 0
+                     AND COALESCE(rc.review_count, 0) = 0
+                     THEN 1 ELSE 0 END) as new_count,
+                SUM(CASE WHEN ((r.interval_days > 0 AND r.interval_days < 1)
+                     OR (r.interval_days = 0 AND COALESCE(rc.review_count, 0) > 0))
+                     AND r.due_date <= ?
+                     THEN 1 ELSE 0 END) as learning_count,
+                SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ?
+                     THEN 1 ELSE 0 END) as review_count
             FROM decks d
             LEFT JOIN cards c ON d.id = c.deck_id
             LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
+            LEFT JOIN review_counts rc ON c.id = rc.card_id
             WHERE d.user_id = ?
             GROUP BY d.id
             "#
         )
+        .bind(&self.user_id) // CTE
         .bind(now)
         .bind(now)
-        .bind(&self.user_id)
-        .bind(&self.user_id)
+        .bind(&self.user_id) // JOIN
+        .bind(&self.user_id) // WHERE
         .fetch_all(&self.pool)
         .await?;
 
@@ -706,12 +705,12 @@ impl StorageProvider for LocalStorageProvider {
     }
 
     async fn save_deck(&self, deck_data: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        // Create hierarchy and grab target deck ID
-        let deck_id = self.get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code).await?;
         let now = Utc::now().timestamp_millis();
-        
         let mut added = 0;
         let mut tx = self.pool.begin().await?;
+
+        // Create hierarchy inside the transaction so it rolls back with card inserts on failure
+        let deck_id = self.get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx).await?;
 
         for entry in &deck_data.cards {
             let card_id = Uuid::new_v4().to_string();
