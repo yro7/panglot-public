@@ -8,6 +8,7 @@ pub mod skill_tree;
 pub mod validated;
 pub mod sanitize;
 pub mod usage_analytics;
+pub mod rate_limit;
 
 #[cfg(test)]
 mod type_assertions;
