@@ -67,6 +67,13 @@ paths:
   # anki_connect_url: "http://127.0.0.1:8765"
   # Default is http://127.0.0.1:8765 if omitted. Required for fetching known vocabulary.
 
+# ── Rate Limits ────────────────────────────────────────────
+rate_limits:
+  enabled: true
+  daily_token_limit: 10000         # max LLM tokens (in+out) per 24h
+  hourly_call_limit: 100           # max LLM calls per hour
+  daily_tts_char_limit: 50000      # max TTS characters per 24h
+
 # ── Auth — Supabase Auth Cloud ─────────────────────────────
 # Set enabled: true and configure SUPABASE_URL + SUPABASE_ANON_KEY in .env
 auth:

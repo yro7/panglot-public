@@ -19,6 +19,7 @@ pub mod state;
 pub mod auth;
 pub mod billing;
 pub mod usage_analytics_impl;
+pub mod rate_limit_impl;
 pub mod worker;
 pub mod api;
 
@@ -193,6 +194,23 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
+    // ── Rate limiter ──
+    let rate_limiter: Option<Box<dyn lc_core::rate_limit::RateLimiter>> = if cfg.rate_limits.enabled {
+        tracing::info!(
+            daily_tokens = cfg.rate_limits.daily_token_limit,
+            hourly_calls = cfg.rate_limits.hourly_call_limit,
+            daily_tts_chars = cfg.rate_limits.daily_tts_char_limit,
+            "Rate limiting enabled"
+        );
+        Some(Box::new(rate_limit_impl::SqliteRateLimiter::from_config(
+            local_db.pool.clone(),
+            &cfg.rate_limits,
+        )))
+    } else {
+        tracing::info!("Rate limiting disabled");
+        None
+    };
+
     let auth_enabled = cfg.auth_enabled();
     let pool = local_db.pool.clone();
 
@@ -223,6 +241,7 @@ async fn main() -> std::io::Result<()> {
         jwks_last_refresh: Arc::new(std::sync::atomic::AtomicI64::new(now_ms())),
         jwt_hs256_key,
         known_users: dashmap::DashSet::new(),
+        rate_limiter,
     });
 
     // ── Background task: purge old drafts every 10 min ──

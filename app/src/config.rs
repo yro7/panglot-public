@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub paths: PathsConfig,
     #[serde(default)]
     pub auth: AuthConfig,
+    #[serde(default)]
+    pub rate_limits: RateLimitConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,6 +23,25 @@ pub struct AuthConfig {
 
 impl Default for AuthConfig {
     fn default() -> Self { Self { enabled: false } }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    pub enabled: bool,
+    pub daily_token_limit: i64,
+    pub hourly_call_limit: i64,
+    pub daily_tts_char_limit: i64,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            daily_token_limit: 10_000,
+            hourly_call_limit: 100,
+            daily_tts_char_limit: 50_000,
+        }
+    }
 }
 
 impl AppConfig {

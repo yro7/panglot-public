@@ -31,6 +31,7 @@ pub struct AppState {
     pub jwks_last_refresh: Arc<AtomicI64>,
     pub jwt_hs256_key: Option<DecodingKey>,
     pub known_users: DashSet<String>,
+    pub rate_limiter: Option<Box<dyn lc_core::rate_limit::RateLimiter>>,
 }
 
 pub struct LlmRuntimeConfig {
@@ -43,6 +44,35 @@ pub struct LlmRuntimeConfig {
 impl AppState {
     pub fn db_for(&self, user: &AuthUser) -> lc_core::db::LocalStorageProvider {
         lc_core::db::LocalStorageProvider::for_user(self.db_pool.clone(), user.user_id.clone())
+    }
+
+    /// Checks rate limits for a user. Returns `Ok(())` if within limits,
+    /// or an `HttpResponse` (429 or 500) to return early.
+    pub async fn check_rate_limit(&self, user_id: &str) -> Result<(), actix_web::HttpResponse> {
+        let Some(ref limiter) = self.rate_limiter else {
+            return Ok(());
+        };
+        match limiter.check_limits(user_id).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(exceeded)) => Err(actix_web::HttpResponse::TooManyRequests().json(
+                serde_json::json!({
+                    "error": "rate_limit_exceeded",
+                    "message": exceeded.to_string(),
+                    "limit_kind": exceeded.kind,
+                    "current_usage": exceeded.current_usage,
+                    "max_allowed": exceeded.max_allowed,
+                }),
+            )),
+            Err(e) => {
+                tracing::error!(%e, "Rate limiter check failed");
+                Err(actix_web::HttpResponse::InternalServerError().json(
+                    serde_json::json!({
+                        "error": "rate_limit_check_failed",
+                        "message": "Could not verify rate limits",
+                    }),
+                ))
+            }
+        }
     }
 
     pub async fn srs_for(&self, auth: &AuthUser) -> &dyn lc_core::srs::SrsAlgorithm {

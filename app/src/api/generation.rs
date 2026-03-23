@@ -134,6 +134,9 @@ pub async fn generate_cards(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+        return resp;
+    }
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 
@@ -174,6 +177,9 @@ pub async fn generate_and_save(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+        return resp;
+    }
     let pipelines = data.pipelines.read().await;
     let lang = body.language.as_deref().unwrap_or(&data.defaults.language);
 

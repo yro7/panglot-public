@@ -17,6 +17,9 @@ pub async fn export_deck(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+        return resp;
+    }
     let node_id = &body.node_id;
     let card_model_id: CardModelId = match body.card_model_id.as_deref().unwrap_or(&data.defaults.card_model).parse() {
         Ok(id) => id,
@@ -107,6 +110,9 @@ pub async fn push_to_anki(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+        return resp;
+    }
     let Some(ref anki_url) = data.anki_connect_url else {
         return HttpResponse::BadRequest().json(ExportResponse {
             success: false,
@@ -214,6 +220,9 @@ pub async fn push_to_local_db(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+        return resp;
+    }
     let node_id = &body.node_id;
     let card_model_id: CardModelId = match body.card_model_id.as_deref().unwrap_or(&data.defaults.card_model).parse() {
         Ok(id) => id,
