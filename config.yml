@@ -71,7 +71,7 @@ paths:
 rate_limits:
   enabled: true
   free:
-    daily_token_limit: -100000        # max LLM tokens (in+out) per 24h
+    daily_token_limit: 100000        # max LLM tokens (in+out) per 24h
     hourly_call_limit: 100           # max LLM calls per hour
     daily_tts_char_limit: 50000      # max TTS characters per 24h
   premium:
