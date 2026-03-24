@@ -197,9 +197,10 @@ async fn main() -> std::io::Result<()> {
     // ── Rate limiter ──
     let rate_limiter: Option<Box<dyn lc_core::rate_limit::RateLimiter>> = if cfg.rate_limits.enabled {
         tracing::info!(
-            daily_tokens = cfg.rate_limits.daily_token_limit,
-            hourly_calls = cfg.rate_limits.hourly_call_limit,
-            daily_tts_chars = cfg.rate_limits.daily_tts_char_limit,
+            free_daily_tokens = cfg.rate_limits.free.daily_token_limit,
+            free_hourly_calls = cfg.rate_limits.free.hourly_call_limit,
+            free_daily_tts_chars = cfg.rate_limits.free.daily_tts_char_limit,
+            premium_daily_tokens = cfg.rate_limits.premium.daily_token_limit,
             "Rate limiting enabled"
         );
         Some(Box::new(rate_limit_impl::SqliteRateLimiter::from_config(
@@ -213,6 +214,13 @@ async fn main() -> std::io::Result<()> {
 
     let auth_enabled = cfg.auth_enabled();
     let pool = local_db.pool.clone();
+
+    let admin_user_ids: std::collections::HashSet<String> = std::env::var("PANGLOT_ADMIN_IDS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
     let app_state = web::Data::new(AppState {
         pipelines: RwLock::new(pipelines_map),
@@ -237,6 +245,7 @@ async fn main() -> std::io::Result<()> {
         db_pool: pool.clone(),
         srs_registry: lc_core::srs::SrsRegistry::new(),
         auth_enabled,
+        admin_user_ids,
         jwks_keys,
         jwks_url,
         jwks_last_refresh: Arc::new(std::sync::atomic::AtomicI64::new(now_ms())),

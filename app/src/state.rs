@@ -37,6 +37,7 @@ pub struct AppState {
     pub db_pool: SqlitePool,
     pub srs_registry: SrsRegistry,
     pub auth_enabled: bool,
+    pub admin_user_ids: std::collections::HashSet<String>,
     pub jwks_keys: Arc<RwLock<HashMap<String, (Algorithm, DecodingKey)>>>,
     pub jwks_url: Option<String>,
     pub jwks_last_refresh: Arc<AtomicI64>,
@@ -59,21 +60,27 @@ impl AppState {
 
     /// Checks rate limits for a user. Returns `Ok(())` if within limits,
     /// or an `HttpResponse` (429 or 500) to return early.
-    pub async fn check_rate_limit(&self, user_id: &str) -> Result<(), actix_web::HttpResponse> {
+    pub async fn check_rate_limit(&self, user_id: &str, role: crate::auth::UserRole) -> Result<(), actix_web::HttpResponse> {
+        if role.is_admin() {
+            return Ok(());
+        }
+
         let Some(ref limiter) = self.rate_limiter else {
             return Ok(());
         };
-        match limiter.check_limits(user_id).await {
+        match limiter.check_limits(user_id, role.is_premium_or_above()).await {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(exceeded)) => Err(actix_web::HttpResponse::TooManyRequests().json(
-                serde_json::json!({
-                    "error": "rate_limit_exceeded",
-                    "message": exceeded.to_string(),
-                    "limit_kind": exceeded.kind,
-                    "current_usage": exceeded.current_usage,
-                    "max_allowed": exceeded.max_allowed,
-                }),
-            )),
+            Ok(Err(exceeded)) => {
+                Err(actix_web::HttpResponse::TooManyRequests().json(
+                    serde_json::json!({
+                        "error": "rate_limit_exceeded",
+                        "message": exceeded.to_string(),
+                        "limit_kind": exceeded.kind,
+                        "current_usage": exceeded.current_usage,
+                        "max_allowed": exceeded.max_allowed,
+                    }),
+                ))
+            },
             Err(e) => {
                 tracing::error!(%e, "Rate limiter check failed");
                 Err(actix_web::HttpResponse::InternalServerError().json(

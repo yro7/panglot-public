@@ -55,7 +55,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 pub trait RateLimiter: Send + Sync {
     /// Check all configured limits for a user.
     /// Returns `Ok(Ok(()))` if all limits pass, or `Ok(Err(...))` with the first exceeded limit.
-    async fn check_limits(&self, user_id: &str) -> Result<std::result::Result<(), RateLimitExceeded>>;
+    async fn check_limits(&self, user_id: &str, is_premium: bool) -> Result<std::result::Result<(), RateLimitExceeded>>;
 
     /// Get current usage for a specific limit kind and period.
     async fn get_current_usage(

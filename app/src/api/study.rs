@@ -10,6 +10,10 @@ pub async fn get_study_session(
 ) -> impl Responder {
     let deck_id = path.into_inner();
     let db = data.db_for(&auth);
+    if !db.verify_deck_ownership(&deck_id).await.unwrap_or(false) {
+        return HttpResponse::NotFound().json(serde_json::json!({"error": "Deck not found"}));
+    }
+
     let algorithm = data.srs_for(&auth).await;
     let now = chrono::Utc::now().timestamp_millis();
 
@@ -48,11 +52,15 @@ pub async fn submit_review(
     path: web::Path<String>,
     body: web::Json<ReviewOutcomeBody>,
 ) -> impl Responder {
-    let _deck_id = path.into_inner();
+    let deck_id = path.into_inner();
+    let db = data.db_for(&auth);
+    if !db.verify_deck_ownership(&deck_id).await.unwrap_or(false) {
+        return HttpResponse::NotFound().json(serde_json::json!({"error": "Deck not found"}));
+    }
+
     let rating = lc_core::srs::Rating::from_str_lossy(&body.rating);
     let algorithm = data.srs_for(&auth).await;
     let now = now_ms();
-    let db = data.db_for(&auth);
     match db.submit_review(&body.card_id, rating, algorithm, now).await {
         Ok(output) => HttpResponse::Ok().json(serde_json::json!({
             "success": true,

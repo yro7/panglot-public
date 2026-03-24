@@ -18,7 +18,7 @@ pub async fn export_deck(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
-    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id, auth.role).await {
         return resp;
     }
     let node_id = &body.node_id;
@@ -113,7 +113,7 @@ pub async fn push_to_anki(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
-    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id, auth.role).await {
         return resp;
     }
     let Some(ref anki_url) = data.anki_connect_url else {
@@ -225,7 +225,7 @@ pub async fn push_to_local_db(
     data: web::Data<AppState>,
     body: web::Json<GenerateRequest>,
 ) -> impl Responder {
-    if let Err(resp) = data.check_rate_limit(&auth.user_id).await {
+    if let Err(resp) = data.check_rate_limit(&auth.user_id, auth.role).await {
         return resp;
     }
     let node_id = &body.node_id;

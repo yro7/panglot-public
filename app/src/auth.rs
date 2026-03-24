@@ -75,9 +75,52 @@ pub async fn refresh_jwks(state: &AppState) -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UserRole {
+    Free,
+    Premium,
+    Admin,
+}
+
+impl UserRole {
+    pub fn from_claims(claims: &serde_json::Value) -> Self {
+        claims.get("app_metadata")
+            .and_then(|m| m.get("role"))
+            .and_then(|r| r.as_str())
+            .map(|r| match r {
+                "admin" => Self::Admin,
+                "premium" => Self::Premium,
+                _ => Self::Free,
+            })
+            .unwrap_or(Self::Free)
+    }
+
+    pub fn is_admin(&self) -> bool { *self == Self::Admin }
+    pub fn is_premium_or_above(&self) -> bool { *self >= Self::Premium }
+}
+
 pub struct AuthUser {
     pub user_id: String,
     pub claims: Option<serde_json::Value>,
+    pub role: UserRole,
+}
+
+pub struct AdminUser(pub AuthUser);
+
+impl actix_web::FromRequest for AdminUser {
+    type Error = actix_web::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, payload: &mut actix_web::dev::Payload) -> Self::Future {
+        let auth_future = AuthUser::from_request(req, payload);
+        Box::pin(async move {
+            let auth = auth_future.await?;
+            if !auth.role.is_admin() {
+                return Err(actix_web::error::ErrorForbidden("Forbidden - Admin access required"));
+            }
+            Ok(AdminUser(auth))
+        })
+    }
 }
 
 impl actix_web::FromRequest for AuthUser {
@@ -91,7 +134,11 @@ impl actix_web::FromRequest for AuthUser {
                 .ok_or_else(|| actix_web::error::ErrorInternalServerError("AppState missing"))?;
 
             if !state.auth_enabled {
-                return Ok(AuthUser { user_id: "default-user".into(), claims: None });
+                return Ok(AuthUser { 
+                    user_id: "default-user".into(), 
+                    claims: None,
+                    role: UserRole::Admin, 
+                });
             }
 
             let token = req.headers().get("Authorization")
@@ -147,6 +194,11 @@ impl actix_web::FromRequest for AuthUser {
                 .ok_or_else(|| actix_web::error::ErrorUnauthorized("Missing sub"))?
                 .to_string();
 
+            let mut role = UserRole::from_claims(&data.claims);
+            if state.admin_user_ids.contains(&user_id) {
+                role = UserRole::Admin;
+            }
+
             if state.known_users.insert(user_id.clone()) {
                 sqlx::query("INSERT OR IGNORE INTO users (id, display_name, email, settings, created_at) VALUES (?, 'user', NULL, '{}', ?)")
                     .bind(&user_id)
@@ -160,7 +212,7 @@ impl actix_web::FromRequest for AuthUser {
                     })?;
             }
 
-            Ok(AuthUser { user_id, claims: Some(data.claims) })
+            Ok(AuthUser { user_id, claims: Some(data.claims), role })
         })
     }
 }

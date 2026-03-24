@@ -8,41 +8,51 @@ use crate::config::RateLimitConfig;
 
 pub struct SqliteRateLimiter {
     pool: SqlitePool,
-    rules: Vec<RateLimitRule>,
+    free_rules: Vec<RateLimitRule>,
+    premium_rules: Vec<RateLimitRule>,
 }
 
 impl SqliteRateLimiter {
     pub fn from_config(pool: SqlitePool, config: &RateLimitConfig) -> Self {
-        let mut rules = Vec::new();
-        if config.daily_token_limit > 0 {
-            rules.push(RateLimitRule {
-                kind: LimitKind::LlmTokens,
-                period: TimePeriod::Last24Hours,
-                max_value: config.daily_token_limit,
-            });
+        let build_rules = |tier: &crate::config::TierLimitConfig| {
+            let mut rules = Vec::new();
+            if tier.daily_token_limit > 0 {
+                rules.push(RateLimitRule {
+                    kind: LimitKind::LlmTokens,
+                    period: TimePeriod::Last24Hours,
+                    max_value: tier.daily_token_limit,
+                });
+            }
+            if tier.hourly_call_limit > 0 {
+                rules.push(RateLimitRule {
+                    kind: LimitKind::LlmCalls,
+                    period: TimePeriod::LastHour,
+                    max_value: tier.hourly_call_limit,
+                });
+            }
+            if tier.daily_tts_char_limit > 0 {
+                rules.push(RateLimitRule {
+                    kind: LimitKind::TtsChars,
+                    period: TimePeriod::Last24Hours,
+                    max_value: tier.daily_tts_char_limit,
+                });
+            }
+            rules
+        };
+
+        Self {
+            pool,
+            free_rules: build_rules(&config.free),
+            premium_rules: build_rules(&config.premium),
         }
-        if config.hourly_call_limit > 0 {
-            rules.push(RateLimitRule {
-                kind: LimitKind::LlmCalls,
-                period: TimePeriod::LastHour,
-                max_value: config.hourly_call_limit,
-            });
-        }
-        if config.daily_tts_char_limit > 0 {
-            rules.push(RateLimitRule {
-                kind: LimitKind::TtsChars,
-                period: TimePeriod::Last24Hours,
-                max_value: config.daily_tts_char_limit,
-            });
-        }
-        Self { pool, rules }
     }
 }
 
 #[async_trait]
 impl RateLimiter for SqliteRateLimiter {
-    async fn check_limits(&self, user_id: &str) -> Result<std::result::Result<(), RateLimitExceeded>> {
-        for rule in &self.rules {
+    async fn check_limits(&self, user_id: &str, is_premium: bool) -> Result<std::result::Result<(), RateLimitExceeded>> {
+        let active_rules = if is_premium { &self.premium_rules } else { &self.free_rules };
+        for rule in active_rules {
             let usage = self.get_current_usage(user_id, rule.kind, rule.period).await?;
             if usage >= rule.max_value {
                 return Ok(Err(RateLimitExceeded {

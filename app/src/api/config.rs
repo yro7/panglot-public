@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::auth::AuthUser;
 use super::models::{UpdateLlmConfigRequest, CardModelQuery};
 
-pub async fn get_llm_config(data: web::Data<AppState>) -> impl Responder {
+pub async fn get_llm_config(_auth: AuthUser, data: web::Data<AppState>) -> impl Responder {
     let rt = data.llm_runtime.read().await;
     HttpResponse::Ok().json(serde_json::json!({
         "provider": rt.provider.to_string(),
@@ -17,6 +17,7 @@ pub async fn get_llm_config(data: web::Data<AppState>) -> impl Responder {
 }
 
 pub async fn update_llm_config(
+    _admin: crate::auth::AdminUser,
     data: web::Data<AppState>,
     body: web::Json<UpdateLlmConfigRequest>,
 ) -> impl Responder {

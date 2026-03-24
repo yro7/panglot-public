@@ -7,7 +7,7 @@ use crate::state::AppState;
 use crate::auth::AuthUser;
 use super::models::ExportResponse;
 
-pub async fn get_anki_decks(data: web::Data<AppState>) -> impl Responder {
+pub async fn get_anki_decks(_auth: AuthUser, data: web::Data<AppState>) -> impl Responder {
     let Some(ref url) = data.anki_connect_url else {
         return HttpResponse::Ok().json(serde_json::json!({
             "decks": [],
@@ -100,6 +100,10 @@ pub async fn clear_cards(auth: AuthUser, data: web::Data<AppState>) -> impl Resp
 pub async fn delete_deck(auth: AuthUser, data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let deck_id = path.into_inner();
     let db = data.db_for(&auth);
+    if !db.verify_deck_ownership(&deck_id).await.unwrap_or(false) {
+        return HttpResponse::NotFound().json(serde_json::json!({"error": "Deck not found"}));
+    }
+
     match db.delete_deck(&deck_id).await {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true, "message": "Deck deleted"})),
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({

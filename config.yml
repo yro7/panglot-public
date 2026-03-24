@@ -70,9 +70,14 @@ paths:
 # ── Rate Limits ────────────────────────────────────────────
 rate_limits:
   enabled: true
-  daily_token_limit: 10000         # max LLM tokens (in+out) per 24h
-  hourly_call_limit: 100           # max LLM calls per hour
-  daily_tts_char_limit: 50000      # max TTS characters per 24h
+  free:
+    daily_token_limit: -100000        # max LLM tokens (in+out) per 24h
+    hourly_call_limit: 100           # max LLM calls per hour
+    daily_tts_char_limit: 50000      # max TTS characters per 24h
+  premium:
+    daily_token_limit: 1000000       # max LLM tokens (in+out) per 24h
+    hourly_call_limit: 1000          # max LLM calls per hour
+    daily_tts_char_limit: 500000     # max TTS characters per 24h
 
 # ── Auth — Supabase Auth Cloud ─────────────────────────────
 # Set enabled: true and configure SUPABASE_URL + SUPABASE_ANON_KEY in .env
