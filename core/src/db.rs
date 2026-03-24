@@ -207,6 +207,18 @@ impl LocalStorageProvider {
         Ok(())
     }
 
+    /// Verify if the current user owns the specified deck.
+    pub async fn verify_deck_ownership(&self, deck_id: &str) -> Result<bool, sqlx::Error> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM decks WHERE id = ? AND user_id = ?"
+        )
+        .bind(deck_id)
+        .bind(&self.user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
+    }
+
     /// Fetches due cards for a given deck, including all sub-decks recursively.
     pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
         let settings = self.get_user_settings().await.unwrap_or_default();
@@ -216,7 +228,7 @@ impl LocalStorageProvider {
         let records = sqlx::query(
             r#"
             WITH RECURSIVE deck_tree(id) AS (
-                SELECT id FROM decks WHERE id = ?
+                SELECT id FROM decks WHERE id = ? AND user_id = ?
                 UNION ALL
                 SELECT d.id FROM decks d JOIN deck_tree dt ON d.parent_id = dt.id
             )
@@ -229,6 +241,7 @@ impl LocalStorageProvider {
             "#
         )
         .bind(deck_id)
+        .bind(&self.user_id)
         .bind(&self.user_id)
         .bind(now)
         .bind(limit)
