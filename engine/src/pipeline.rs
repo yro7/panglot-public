@@ -6,7 +6,6 @@ use lc_core::user::UserSettings;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::Semaphore;
 
 use crate::card_models::CardModelId;
@@ -20,7 +19,7 @@ use crate::validation::CardValidator;
 
 use lc_core::storage::{StorageProvider, NewDeckData, NewCardEntry};
 
-use crate::analyzer::{LexiconTracker, LibraryAnalyzer};
+use crate::analyzer::{DynLexiconTracker, LexiconTracker, LibraryAnalyzer};
 use crate::llm_utils::clean_llm_json;
 
 // ----- Lexicon Status -----
@@ -67,8 +66,6 @@ pub struct Pipeline<L: Language + Send + Sync> {
     extractor_max_tokens: u32,
     prompt_config: PromptConfig,
     usage_recorder: Option<UsageRecorder>,
-    lexicon_tracker: RwLock<LexiconTracker<L::Morphology>>,
-    lexicon_status: RwLock<LexiconStatus>,
     cached_base_tree: std::sync::OnceLock<SkillNode>,
 }
 
@@ -106,8 +103,6 @@ where
             extractor_max_tokens,
             prompt_config,
             usage_recorder: None,
-            lexicon_tracker: RwLock::new(LexiconTracker::new()),
-            lexicon_status: RwLock::new(LexiconStatus::NotStarted),
             cached_base_tree: std::sync::OnceLock::new(),
         }
     }
@@ -603,12 +598,12 @@ where
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
+        lexicon: Option<&LexiconTracker<L::Morphology>>,
     ) -> GenerationRequest<L> {
         let mut injected_vocabulary = Vec::new();
         let mut excluded_vocabulary = Vec::new();
 
-        if let Some(opt) = lexicon_options {
-            let tracker = self.lexicon_tracker.read();
+        if let (Some(opt), Some(tracker)) = (lexicon_options, lexicon) {
             let words = match opt.level {
                 crate::generator::LexiconLevel::Known => {
                     match opt.pos_filter {
@@ -682,6 +677,7 @@ pub trait DynPipeline: Send + Sync {
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>>;
 
     async fn generate_deck_data_dyn(
@@ -691,6 +687,7 @@ pub trait DynPipeline: Send + Sync {
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<NewDeckData>;
 
     /// Single LLM call that returns both display cards and storage-ready deck data.
@@ -701,20 +698,18 @@ pub trait DynPipeline: Send + Sync {
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)>;
 
     fn preview_prompt_dyn(
         &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview>;
 
-    fn lexicon_summary(&self) -> HashMap<String, usize>;
-    fn lexicon_known_words(&self, pos: Option<&str>) -> Vec<serde_json::Value>;
-    fn lexicon_all_words(&self) -> Vec<serde_json::Value>;
-    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<usize>;
-    fn lexicon_status(&self) -> LexiconStatus;
-    fn set_lexicon_status(&self, status: LexiconStatus);
+    /// Factory: builds a type-erased lexicon tracker from a storage provider.
+    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>>;
 
     /// Hot-swap the LLM client (e.g. after changing provider/model at runtime).
     async fn swap_llm_client(&self, new_client: Box<dyn LlmClient>);
@@ -760,8 +755,10 @@ where
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
+        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context, concrete);
         let cards = self.generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem).await?;
         Ok(cards.into_iter().map(|c| {
             let metadata_json = serde_json::to_string_pretty(&c.metadata).unwrap_or_default();
@@ -782,8 +779,10 @@ where
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<NewDeckData> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
+        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context, concrete);
         self.generate_deck_data(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
@@ -794,8 +793,10 @@ where
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_client::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)> {
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context);
+        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context, concrete);
         self.generate_cards_and_deck(tree_root, node_id, &req, llm_sem, pp_sem).await
     }
 
@@ -803,8 +804,10 @@ where
         &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
         difficulty: u8, user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
+        lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview> {
-        let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options, None);
+        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options, None, concrete);
 
         let node = crate::skill_tree::find_node(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node '{}' not found", node_id))?;
@@ -841,50 +844,12 @@ where
         })
     }
 
-    fn lexicon_summary(&self) -> HashMap<String, usize> {
-        self.lexicon_tracker.read().summary_by_pos()
-    }
-
-    fn lexicon_known_words(&self, pos: Option<&str>) -> Vec<serde_json::Value> {
-        let tracker = self.lexicon_tracker.read();
-        let features = match pos {
-            Some(p) => tracker.get_known_by_pos(p),
-            None => tracker.mastered_words(),
-        };
-        features.into_iter()
-            .filter_map(|f| serde_json::to_value(&f).ok())
-            .collect()
-    }
-
-    fn lexicon_all_words(&self) -> Vec<serde_json::Value> {
-        self.lexicon_tracker.read().all_words_with_status()
-    }
-
-    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<usize> {
-        *self.lexicon_status.write() = LexiconStatus::Loading;
+    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>> {
         let analyzer = LibraryAnalyzer;
         let lang = self.language.iso_code().to_639_3();
-        match analyzer.extract_tracker_async::<L::Morphology>(provider, Some(lang)).await {
-            Ok(tracker) => {
-                let count = tracker.len();
-                *self.lexicon_tracker.write() = tracker;
-                *self.lexicon_status.write() = LexiconStatus::Ready { word_count: count };
-                Ok(count)
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                *self.lexicon_status.write() = LexiconStatus::Failed { error: msg.clone() };
-                Err(anyhow::anyhow!(msg))
-            }
-        }
-    }
-
-    fn lexicon_status(&self) -> LexiconStatus {
-        self.lexicon_status.read().clone()
-    }
-
-    fn set_lexicon_status(&self, status: LexiconStatus) {
-        *self.lexicon_status.write() = status;
+        let tracker = analyzer.extract_tracker_async::<L::Morphology>(provider, Some(lang)).await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        Ok(Arc::new(tracker))
     }
 
     async fn swap_llm_client(&self, new_client: Box<dyn LlmClient>) {
@@ -996,7 +961,7 @@ mod tests {
         };
 
         let deck_data = pipeline
-            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
+            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)), None)
             .await
             .unwrap();
 

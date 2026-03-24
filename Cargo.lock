@@ -836,7 +836,6 @@ dependencies = [
  "isolang",
  "langs",
  "lc_core",
- "parking_lot",
  "regex",
  "reqwest 0.13.2",
  "schemars",
