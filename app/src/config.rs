@@ -42,6 +42,60 @@ pub struct TierLimitConfig {
 
 impl AppConfig {
     pub fn auth_enabled(&self) -> bool { self.auth.enabled }
+
+    pub fn validate(&self) -> Result<()> {
+        // 1. Validate OpenAPI constraints using core types
+        lc_core::validated::CardCount::new(self.defaults.card_count_generate)
+            .map_err(|e| anyhow::anyhow!("defaults.card_count_generate is invalid: {}", e))?;
+            
+        lc_core::validated::CardCount::new(self.defaults.card_count_export)
+            .map_err(|e| anyhow::anyhow!("defaults.card_count_export is invalid: {}", e))?;
+            
+        lc_core::validated::Difficulty::new(self.defaults.difficulty)
+            .map_err(|e| anyhow::anyhow!("defaults.difficulty is invalid: {}", e))?;
+            
+        lc_core::validated::LearnAheadMinutes::new(self.defaults.user_settings.learn_ahead_minutes)
+            .map_err(|e| anyhow::anyhow!("defaults.user_settings.learn_ahead_minutes is invalid: {}", e))?;
+
+        // 2. Validate Server bounds
+        if self.server.port == 0 {
+            anyhow::bail!("server.port cannot be 0");
+        }
+
+        // 3. Validate LLM Generator Settings
+        let validate_llm_call = |cfg: &LlmCallConfig, name: &str| -> Result<()> {
+            if cfg.temperature < 0.0 || cfg.temperature > 2.0 {
+                anyhow::bail!("{}.temperature must be between 0.0 and 2.0 (got {})", name, cfg.temperature);
+            }
+            if cfg.max_tokens == 0 {
+                anyhow::bail!("{}.max_tokens must be greater than 0", name);
+            }
+            Ok(())
+        };
+        validate_llm_call(&self.generator, "generator")?;
+        validate_llm_call(&self.feature_extractor, "feature_extractor")?;
+
+        // 4. Validate Rate Limits
+        let check_tier = |tier: &TierLimitConfig, tier_name: &str| -> Result<()> {
+            if tier.daily_token_limit < 0 {
+                anyhow::bail!("rate_limits.{}.daily_token_limit cannot be negative (got {})", tier_name, tier.daily_token_limit);
+            }
+            if tier.hourly_call_limit < 0 {
+                anyhow::bail!("rate_limits.{}.hourly_call_limit cannot be negative (got {})", tier_name, tier.hourly_call_limit);
+            }
+            if tier.daily_tts_char_limit < 0 {
+                anyhow::bail!("rate_limits.{}.daily_tts_char_limit cannot be negative (got {})", tier_name, tier.daily_tts_char_limit);
+            }
+            Ok(())
+        };
+
+        if self.rate_limits.enabled {
+            check_tier(&self.rate_limits.free, "free")?;
+            check_tier(&self.rate_limits.premium, "premium")?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,9 +195,11 @@ pub fn load_config(path: &str) -> Result<AppConfig> {
         .map_err(|e| anyhow::anyhow!("Failed to read config file '{}': {}", path, e))?;
     let config: AppConfig = serde_yml::from_str(&content)
         .map_err(|e| anyhow::anyhow!("Failed to parse config file '{}': {}", path, e))?;
+    config.validate()?;
     Ok(config)
 }
 
+/// Resolves the AnkiConnect URL. If omitted, returns the default.
 /// Resolves the AnkiConnect URL. If omitted, returns the default.
 pub fn resolve_anki_connect_url(configured: Option<&str>) -> String {
     configured
