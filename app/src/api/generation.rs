@@ -1,4 +1,5 @@
 use actix_web::{web, HttpResponse, Responder};
+use engine::analyzer::DynLexiconTracker;
 use engine::card_models::CardModelId;
 use engine::llm_client::RequestContext;
 use engine::pipeline::DynGeneratedCard;
@@ -15,6 +16,13 @@ use super::models::{
     PreviewPromptRequest, PreviewPromptResponse, PromptMessageJson, PreviewSchemas,
 };
 use super::tree::build_user_tree;
+
+/// Fetch the user's lexicon tracker for a given language (cheap Arc clone, releases lock immediately).
+pub(crate) async fn user_tracker(data: &AppState, user_id: &str, lang: &str) -> Option<Arc<dyn DynLexiconTracker>> {
+    data.user_lexicons.read().await
+        .get(user_id)
+        .and_then(|ul| ul.trackers.get(lang).cloned())
+}
 
 // ── Validated request, shared between generate_cards and generate_and_save ──
 
@@ -151,10 +159,12 @@ pub async fn generate_cards(
         Err(resp) => return resp,
     };
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let result = pipeline.generate_cards_dyn(
         &req.user_tree, req.node_id, req.card_model_id, req.card_count, req.difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem,
+        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem, tracker,
     ).await;
 
     match result {
@@ -194,10 +204,12 @@ pub async fn generate_and_save(
         Err(resp) => return resp,
     };
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let result = pipeline.generate_cards_and_deck_dyn(
         &req.user_tree, req.node_id, req.card_model_id, req.card_count, req.difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem,
+        body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem, tracker,
     ).await;
 
     match result {
@@ -258,10 +270,12 @@ pub async fn preview_prompt(
         }));
     }
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let preview = match pipeline.preview_prompt_dyn(
         &user_tree, &body.node_id, card_model_id, difficulty,
         body.user_profile.clone().unwrap_or_default(),
-        body.lexicon_options.clone(),
+        body.lexicon_options.clone(), tracker,
     ) {
         Ok(p) => p,
         Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({ "error": e.to_string() })),

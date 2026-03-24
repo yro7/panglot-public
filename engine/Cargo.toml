@@ -21,7 +21,6 @@ async-trait = "0.1.89"
 anyhow = "1.0.102"
 futures = "0.3.32"
 regex = "1"
-parking_lot = "0.12"
 isolang = { version = "2.4.0", features = ["english_names"] }
 tracing = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }

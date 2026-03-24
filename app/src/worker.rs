@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use sqlx::SqlitePool;
 use anki_bridge::AnkiStorageProvider;
+use engine::pipeline::LexiconStatus;
 use lc_core::storage::StorageProvider;
 
-use crate::state::{AppState, now_ms};
+use crate::state::{AppState, UserLexicon, now_ms};
 
 pub fn spawn_draft_cleanup(pool: SqlitePool) {
     tokio::spawn(async move {
@@ -22,7 +23,7 @@ pub fn spawn_draft_cleanup(pool: SqlitePool) {
     });
 }
 
-/// Background task: scans Anki + local DB and loads lexicon into each pipeline for a given user.
+/// Background task: scans Anki + local DB and loads lexicon into user_lexicons for a given user.
 pub async fn scan_lexicon_background(state: Arc<AppState>, anki_connect_url: Option<String>, user_id: String) {
     tracing::info!(user_id_prefix = &user_id[..8.min(user_id.len())], "Starting lexicon scan");
     let mut all_cards = Vec::new();
@@ -47,14 +48,33 @@ pub async fn scan_lexicon_background(state: Arc<AppState>, anki_connect_url: Opt
         Err(e) => tracing::warn!(%e, "Local DB fetch failed"),
     }
 
-    // Wrap the pre-fetched cards in a simple provider for load_lexicon
     let snapshot = lc_core::storage::SnapshotProvider::new(all_cards);
     let pipelines = state.pipelines.read().await;
+
+    // Collect trackers from each pipeline (factory call, no storage in pipeline)
+    let mut trackers = std::collections::HashMap::new();
+    let mut statuses = std::collections::HashMap::new();
+
     for (iso, pipeline) in pipelines.iter() {
         match pipeline.load_lexicon(&snapshot).await {
-            Ok(count) => tracing::info!(iso, count, "Words loaded into lexicon"),
-            Err(e) => tracing::warn!(iso, %e, "Lexicon scan failed"),
+            Ok(tracker) => {
+                let count = tracker.len();
+                tracing::info!(iso, count, "Words loaded into lexicon");
+                statuses.insert(iso.clone(), LexiconStatus::Ready { word_count: count });
+                trackers.insert(iso.clone(), tracker);
+            }
+            Err(e) => {
+                tracing::warn!(iso, %e, "Lexicon scan failed");
+                statuses.insert(iso.clone(), LexiconStatus::Failed { error: e.to_string() });
+            }
         }
     }
+    drop(pipelines);
+
+    // Store per-user lexicon data
+    let mut user_lexicons = state.user_lexicons.write().await;
+    user_lexicons.insert(user_id, UserLexicon { trackers, statuses });
+    drop(user_lexicons);
+
     tracing::info!("Background lexicon scan complete");
 }

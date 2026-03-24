@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
@@ -242,6 +243,55 @@ where
 impl<M: Debug + Clone + PartialEq + MorphologyInfo> Default for LexiconTracker<M> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ----- Type-erased Lexicon Tracker -----
+
+/// Language-agnostic interface for querying a lexicon tracker.
+/// Mirrors the read-only methods of `LexiconTracker<M>` without exposing `M`.
+pub trait DynLexiconTracker: Send + Sync {
+    fn summary_by_pos(&self) -> HashMap<String, usize>;
+    fn known_words(&self, pos: Option<&str>) -> Vec<serde_json::Value>;
+    fn all_words_with_status(&self) -> Vec<serde_json::Value>;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+    /// Downcast to concrete type for generation (which needs `ExtractedFeature<M>`).
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<M> DynLexiconTracker for LexiconTracker<M>
+where
+    M: Debug + Clone + PartialEq + MorphologyInfo + Serialize + Send + Sync + 'static,
+{
+    fn summary_by_pos(&self) -> HashMap<String, usize> {
+        self.summary_by_pos()
+    }
+
+    fn known_words(&self, pos: Option<&str>) -> Vec<serde_json::Value> {
+        let features = match pos {
+            Some(p) => self.get_known_by_pos(p),
+            None => self.mastered_words(),
+        };
+        features.into_iter()
+            .filter_map(|f| serde_json::to_value(&f).ok())
+            .collect()
+    }
+
+    fn all_words_with_status(&self) -> Vec<serde_json::Value> {
+        self.all_words_with_status()
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

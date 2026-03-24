@@ -2,7 +2,7 @@ use static_assertions::assert_impl_all;
 
 use langs::{Japanese, JapaneseMorphology, Polish, PolishMorphology};
 
-use crate::analyzer::{LexiconTracker, LibraryAnalyzer, WordProfile};
+use crate::analyzer::{DynLexiconTracker, LexiconTracker, LibraryAnalyzer, WordProfile};
 use crate::card_models::{
     AnyCard, CardModelId, ClozeTest, CommonCardFront, OralComprehension, WrittenComprehension,
 };
@@ -18,6 +18,7 @@ use crate::skill_tree::{SkillNode, SkillNodeConfig, SkillTree, SkillTreeConfig};
 assert_impl_all!(WordProfile<PolishMorphology>: Send, Sync);
 assert_impl_all!(LexiconTracker<PolishMorphology>: Send, Sync);
 assert_impl_all!(LibraryAnalyzer: Send, Sync);
+assert_impl_all!(LexiconTracker<PolishMorphology>: DynLexiconTracker);
 
 // ── Card Models ──
 assert_impl_all!(CardModelId: Send, Sync);

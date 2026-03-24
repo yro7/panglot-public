@@ -9,6 +9,7 @@ use lc_core::storage::StorageProvider;
 
 use crate::state::AppState;
 use crate::auth::AuthUser;
+use super::generation::user_tracker;
 use super::models::{GenerateRequest, ExportResponse};
 use super::tree::build_user_tree;
 
@@ -63,13 +64,15 @@ pub async fn export_deck(
         language: Some(lang.to_string()),
     });
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let export_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         req_ctx,
-        llm_sem, pp_sem,
+        llm_sem, pp_sem, tracker,
     ).await;
 
     match export_result {
@@ -162,13 +165,15 @@ pub async fn push_to_anki(
         language: Some(lang.to_string()),
     });
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         req_ctx,
-        llm_sem, pp_sem,
+        llm_sem, pp_sem, tracker,
     ).await;
 
     match push_result {
@@ -264,13 +269,15 @@ pub async fn push_to_local_db(
         language: Some(lang.to_string()),
     });
 
+    let tracker = user_tracker(&data, &auth.user_id, lang).await;
+
     let push_result = pipeline.generate_deck_data_dyn(
         &user_tree, node_id, card_model_id, card_count, difficulty,
         body.user_profile.clone(),
         body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(),
         req_ctx,
-        llm_sem, pp_sem,
+        llm_sem, pp_sem, tracker,
     ).await;
 
     match push_result {

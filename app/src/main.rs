@@ -216,6 +216,7 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = web::Data::new(AppState {
         pipelines: RwLock::new(pipelines_map),
+        user_lexicons: RwLock::new(HashMap::new()),
         llm_semaphore: Arc::new(Semaphore::new(max_llm_calls)),
         post_process_semaphore: Arc::new(Semaphore::new(
             std::thread::available_parallelism()

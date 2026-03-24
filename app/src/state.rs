@@ -7,14 +7,25 @@ use jsonwebtoken::{Algorithm, DecodingKey};
 use dashmap::DashSet;
 
 use lc_core::srs::SrsRegistry;
-use engine::pipeline::DynPipeline;
+use engine::analyzer::DynLexiconTracker;
+use engine::pipeline::{DynPipeline, LexiconStatus};
 use engine::llm_client::LlmProvider;
 
 use crate::config::{DefaultsConfig, LlmCallConfig, LlmConfig};
 use crate::auth::AuthUser;
 
+/// Per-user lexicon data, keyed by ISO language code.
+pub struct UserLexicon {
+    /// ISO code → type-erased tracker (Arc for cheap cloning under lock).
+    pub trackers: HashMap<String, Arc<dyn DynLexiconTracker>>,
+    /// ISO code → scan status.
+    pub statuses: HashMap<String, LexiconStatus>,
+}
+
 pub struct AppState {
     pub pipelines: RwLock<HashMap<String, Box<dyn DynPipeline>>>,
+    /// Per-user lexicon storage: user_id → UserLexicon.
+    pub user_lexicons: RwLock<HashMap<String, UserLexicon>>,
     pub llm_semaphore: Arc<Semaphore>,
     pub post_process_semaphore: Arc<Semaphore>,
     pub defaults: DefaultsConfig,
