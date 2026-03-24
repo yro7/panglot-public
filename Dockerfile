@@ -1,12 +1,12 @@
 # 1: Dependency recipe 
-FROM rust:1.85-bookworm AS planner
+FROM rust:1.88-bookworm AS planner
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # 2: Build 
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.88-bookworm AS builder
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
