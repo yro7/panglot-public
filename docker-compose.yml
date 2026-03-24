@@ -1,0 +1,25 @@
+services:
+  panglot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: panglot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - panglot-data:/app/output
+      - panglot-audio:/app/panglot_audio
+      # Optional: mount a custom config without rebuilding.
+      # - ./config.yml:/app/config.yml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  panglot-data:
+  panglot-audio:
