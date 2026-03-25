@@ -1,0 +1,95 @@
+language_name: Russian
+root:
+  id: root
+  name: Русский
+  children:
+    - id: alphabet_pronunciation
+      name: Алфавит и Произношение (Alphabet and Pronunciation)
+      children:
+        - id: cyrillic_alphabet
+          name: Кириллический Алфавит (Cyrillic Alphabet)
+          node_instructions: >
+            Generate an exercise focusing on recognizing and writing basic Cyrillic letters. Include both print and cursive forms where appropriate.
+          children: []
+        - id: stress_vowel_reduction
+          name: Ударение и Редукция Гласных (Stress and Vowel Reduction)
+          node_instructions: >
+            Generate an exercise focusing on identifying the stressed syllable in Russian words and understanding vowel reduction rules (e.g., 'o' becoming 'a' in unstressed positions).
+          children: []
+    - id: grammar
+      name: Грамматика (Grammar)
+      children:
+        - id: noun_gender_plural
+          name: Род и Множественное Число Существительных (Noun Gender and Plural)
+          node_instructions: >
+            Generate an exercise focused on identifying the gender of Russian nouns and forming their plural forms.
+          children: []
+        - id: pronouns
+          name: Местоимения (Pronouns)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the declension of personal, possessive, and demonstrative pronouns in various cases.
+          children: []
+    - id: cases
+      name: Падежи (Cases)
+      children:
+        - id: nominative
+          name: Именительный Падеж (Nominative Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the nominative case (Именительный падеж). Create sentences where the student must fill in a noun or adjective in its basic, nominative form. Include the root form as a hint.
+          children: []
+        - id: accusative
+          name: Винительный Падеж (Accusative Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the accusative case (Винительный падеж). Create sentences where the student must fill in a noun or adjective in the accusative form, paying attention to animacy. Include the root form as a hint.
+          children: []
+        - id: genitive
+          name: Родительный Падеж (Genitive Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the genitive case (Родительный падеж). Create sentences where the student must fill in a noun or adjective in the genitive form, often used for possession or negation. Include the root form as a hint.
+          children: []
+        - id: dative
+          name: Дательный Падеж (Dative Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the dative case (Дательный падеж). Create sentences where the student must fill in a noun or adjective in the dative form, often indicating the recipient. Include the root form as a hint.
+          children: []
+        - id: instrumental
+          name: Творительный Падеж (Instrumental Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the instrumental case (Творительный падеж). Create sentences where the student must fill in a noun or adjective in the instrumental form, often indicating a tool or companion. Include the root form as a hint.
+          children: []
+        - id: prepositional
+          name: Предложный Падеж (Prepositional Case)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the prepositional case (Предложный падеж). Create sentences where the student must fill in a noun or adjective in the prepositional form, always used with a preposition. Include the root form as a hint.
+          children: []
+    - id: verbs
+      name: Глаголы (Verbs)
+      children:
+        - id: verb_conjugation
+          name: Спряжение Глаголов (Verb Conjugation)
+          node_instructions: >
+            Generate an exercise focused on conjugating common Russian verbs in the present and past tenses, paying attention to conjugation types (I and II).
+          children: []
+        - id: verb_aspect
+          name: Вид Глагола (Verb Aspect)
+          node_instructions: >
+            Generate an exercise focused on distinguishing and using perfective and imperfective verb aspects. Create sentences where the student must choose the correct aspect.
+          children: []
+        - id: verbs_of_motion
+          name: Глаголы Движения (Verbs of Motion)
+          node_instructions: >
+            Generate an exercise focused on the various verbs of motion (e.g., идти, ходить, ехать, ездить), differentiating between unidirectional and multidirectional movement.
+          children: []
+    - id: vocabulary
+      name: Словарный Запас (Vocabulary)
+      children:
+        - id: greetings
+          name: Приветствия (Greetings)
+          node_instructions: >
+            Generate an exercise about common Russian greetings, farewells, and polite expressions.
+          children: []
+        - id: daily_life
+          name: Повседневная Жизнь (Daily Life)
+          node_instructions: >
+            Generate an exercise about daily life vocabulary (food, transport, shopping, family, professions, etc.).
+          children: []
