@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse};
 
 /// Serves an audio file from the TTS staging directory.
 /// GET /api/audio/{filename}
-pub async fn get_audio(_auth: crate::auth::AuthUser, filename: web::Path<String>) -> HttpResponse {
+pub async fn get_audio(filename: web::Path<String>) -> HttpResponse {
     let filename = filename.into_inner();
 
     // Sanitize: only allow simple filenames (no path traversal, null bytes)

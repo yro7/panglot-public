@@ -47,6 +47,7 @@ impl Script {
     pub const KANA: Script = Script("Kana");
     pub const HANI: Script = Script("Hani");
     pub const ARAB: Script = Script("Arab");
+    pub const HANG: Script = Script("Hang");
 
     /// Returns the 4-character ISO 15924 code.
     pub fn code(&self) -> &'static str {

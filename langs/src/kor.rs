@@ -98,7 +98,7 @@ impl Language for Korean {
     }
 
     fn supported_scripts(&self) -> &[Script] {
-        &[Script::HANG, Script::HANI] // Hangul is primary, Hanja is secondary/historical
+        &[Script::HANI] // Hangul is primary, Hanja is secondary/historical
     }
 
     fn default_script(&self) -> Script {
