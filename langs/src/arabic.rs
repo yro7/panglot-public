@@ -2,6 +2,86 @@ use serde::{Deserialize, Serialize};
 
 use lc_core::traits::{IpaConfig, Language, Script, TtsConfig};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicCase {
+    Nominative,
+    Accusative,
+    Genitive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicGender {
+    Masculine,
+    Feminine,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicNumber {
+    Singular,
+    Dual,
+    Plural,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicTense {
+    Past,
+    Present,
+    Future,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicMood {
+    Indicative,
+    Subjunctive,
+    Jussive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicVoice {
+    Active,
+    Passive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicState {
+    Construct,
+    Absolute,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicDefiniteness {
+    Definite,
+    Indefinite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicPronounType {
+    Independent,
+    Attached,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+pub enum ArabicVerbForm {
+    I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII, XIV, XV,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArabicPerson {
+    First,
+    Second,
+    Third,
+}
+
 /// A morphological feature representing a Part of Speech (PoS) in Modern Standard Arabic.
 /// The `pos` field determines the variant type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, lc_macro::MorphologyInfo)]
@@ -14,10 +94,10 @@ pub enum ArabicMorphology {
         /// The morphological pattern (wazn). Only provided if the adjective is derived.
         #[serde(skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
-        gender: String,
-        number: String,
-        case: String,
-        definiteness: String,
+        gender: ArabicGender,
+        number: ArabicNumber,
+        case: ArabicCase,
+        definiteness: ArabicDefiniteness,
     },
     /// An adposition (ADP) - replaces Preposition.
     Adposition { lemma: String },
@@ -38,18 +118,18 @@ pub enum ArabicMorphology {
         /// The morphological pattern (wazn). Only provided if the noun is derived from a root.
         #[serde(skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
-        gender: String,
-        number: String,
-        case: String,
-        state: String,
-        definiteness: String,
+        gender: ArabicGender,
+        number: ArabicNumber,
+        case: ArabicCase,
+        state: ArabicState,
+        definiteness: ArabicDefiniteness,
     },
     /// A numeral (NUM).
     Numeral {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
+        gender: ArabicGender,
+        number: ArabicNumber,
+        case: ArabicCase,
     },
     /// A particle (PART).
     Particle {
@@ -59,11 +139,11 @@ pub enum ArabicMorphology {
     /// A pronoun (PRON).
     Pronoun {
         lemma: String,
-        pronoun_type: String,
+        pronoun_type: ArabicPronounType,
         attachment_type: String,
-        person: String,
-        number: String,
-        gender: String,
+        person: ArabicPerson,
+        number: ArabicNumber,
+        gender: ArabicGender,
     },
     /// A proper noun (PROPN).
     ProperNoun { lemma: String },
@@ -77,13 +157,13 @@ pub enum ArabicMorphology {
     Verb {
         lemma: String,
         root: String,
-        form: String,
-        person: String,
-        number: String,
-        gender: String,
-        tense: String,
-        mood: String,
-        voice: String,
+        form: ArabicVerbForm,
+        person: ArabicPerson,
+        number: ArabicNumber,
+        gender: ArabicGender,
+        tense: ArabicTense,
+        mood: ArabicMood,
+        voice: ArabicVoice,
     },
     /// Other (X) for unanalyzable tokens.
     Other { lemma: String },

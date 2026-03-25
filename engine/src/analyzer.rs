@@ -433,8 +433,8 @@ mod tests {
             word: word.to_string(),
             morphology: PolishMorphology::Noun {
                 lemma: lemma.to_string(),
-                gender: String::new(),
-                case: String::new(),
+                gender: langs::polish::PolishGender::MasculineInanimate,
+                case: langs::polish::PolishCase::Nominative,
             },
         }
     }
@@ -444,8 +444,8 @@ mod tests {
             word: word.to_string(),
             morphology: PolishMorphology::Verb {
                 lemma: lemma.to_string(),
-                tense: String::new(),
-                aspect: String::new(),
+                tense: langs::polish::PolishTense::Present,
+                aspect: langs::polish::PolishAspect::Imperfective,
             },
         }
     }
@@ -559,8 +559,8 @@ mod tests {
             word: "książkę".to_string(),
             morphology: PolishMorphology::Noun {
                 lemma: "książka".to_string(),
-                gender: "Feminine".to_string(),
-                case: "Accusative".to_string(),
+                gender: langs::polish::PolishGender::Feminine,
+                case: langs::polish::PolishCase::Accusative,
             },
         }, "polish_acc");
 
@@ -568,8 +568,8 @@ mod tests {
             word: "czytam".to_string(),
             morphology: PolishMorphology::Verb {
                 lemma: "czytać".to_string(),
-                aspect: "Imperfective".to_string(),
-                tense: "Present".to_string(),
+                aspect: langs::polish::PolishAspect::Imperfective,
+                tense: langs::polish::PolishTense::Present,
             },
         }, "polish_acc");
 
@@ -578,8 +578,8 @@ mod tests {
             word: "nowy".to_string(),
             morphology: PolishMorphology::Adjective {
                 lemma: "nowy".to_string(),
-                gender: "Masculine".to_string(),
-                case: "Nominative".to_string(),
+                gender: langs::polish::PolishGender::MasculinePersonal,
+                case: langs::polish::PolishCase::Nominative,
             },
         }, "polish_nom");
 
