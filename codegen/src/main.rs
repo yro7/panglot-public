@@ -151,6 +151,7 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         bail!("Usage: lc-codegen <iso-639-3-code>\nExample: lc-codegen swh");
+        bail!("Build: cargo run -p lc-codegen <iso-639-3-code>");
     }
     let iso = &args[1];
 
