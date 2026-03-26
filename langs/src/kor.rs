@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{IpaConfig, Language, NoExtraFields, Person, Script, TtsConfig, TypologicalFeature};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -49,14 +49,6 @@ pub enum KoreanNumeralType {
     CardinalNative,
     CardinalSino,
     Ordinal,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum KoreanPerson {
-    First,
-    Second,
-    Third,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
@@ -118,7 +110,7 @@ pub enum KoreanMorphology {
     Pronoun {
         lemma: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        person: Option<KoreanPerson>,
+        person: Option<Person>,
         #[serde(skip_serializing_if = "Option::is_none")]
         honorifics: Option<KoreanHonorifics>,
     },

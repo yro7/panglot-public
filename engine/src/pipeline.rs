@@ -919,8 +919,8 @@ mod tests {
                 word: "dom".to_string(),
                 morphology: PolishMorphology::Noun {
                     lemma: "dom".to_string(),
-                    gender: "Masculine".to_string(),
-                    case: "Nominative".to_string(),
+                    gender: langs::polish::PolishGender::MasculineInanimate,
+                    case: langs::polish::PolishCase::Nominative,
                 },
             }],
             excluded_vocabulary: vec![],

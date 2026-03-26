@@ -445,7 +445,7 @@ mod tests {
             morphology: PolishMorphology::Verb {
                 lemma: lemma.to_string(),
                 tense: langs::polish::PolishTense::Present,
-                aspect: langs::polish::PolishAspect::Imperfective,
+                aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
             },
         }
     }
@@ -568,7 +568,7 @@ mod tests {
             word: "czytam".to_string(),
             morphology: PolishMorphology::Verb {
                 lemma: "czytać".to_string(),
-                aspect: langs::polish::PolishAspect::Imperfective,
+                aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
                 tense: langs::polish::PolishTense::Present,
             },
         }, "polish_acc");

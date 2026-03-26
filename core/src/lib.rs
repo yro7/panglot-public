@@ -1,4 +1,5 @@
 pub mod domain;
+pub mod morphology_enums;
 pub mod traits;
 pub mod user;
 pub mod storage;
