@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, SlavicAspect, TtsConfig, TypologicalFeature};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -28,13 +28,6 @@ impl PolishGender {
     pub fn is_masculine(&self) -> bool {
         matches!(self, Self::MasculinePersonal | Self::MasculineAnimate | Self::MasculineInanimate)
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum PolishAspect {
-    Perfective,
-    Imperfective,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
@@ -98,7 +91,7 @@ pub enum PolishMorphology {
     Verb {
         lemma: String,
         tense: PolishTense,
-        aspect: PolishAspect,
+        aspect: SlavicAspect,
     },
     /// Other (X) for unanalyzable tokens.
     Other { lemma: String },

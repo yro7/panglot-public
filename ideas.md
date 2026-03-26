@@ -28,10 +28,19 @@ Japanese language consists of more than 60% homographic heterophones
 
 - Pour les langues à racine consonnantique, la metttre en valeur dans le front
 
+LEXICON :
+
+- Contexte + Targets = ensemble de ce à quoi l'user a été exposé
+- Target maîtrisé = trucs maîtrisés par l'user
+- Targets en général = peut représenter l'ensemble des exercices: par ex si on build à partir de tout target et qu'on voit que "nominatif" est surreprésenté -> pas d'exo sur les autres déclinaisons.
+
+
 
 
 LLM AGENTS :
 
 - Créer une "API haut niveau pour l'agent" pour qu'il puisse analyzer, générer etc des decks
+
+
 
 

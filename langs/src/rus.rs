@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{BinaryNumber, BinaryVoice, IpaConfig, Language, NoExtraFields, Person, Script, SlavicAspect, TernaryGender, TtsConfig, TypologicalFeature};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -13,20 +13,6 @@ pub enum RussianCase {
     Prepositional,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RussianGender {
-    Masculine,
-    Feminine,
-    Neuter,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RussianNumber {
-    Singular,
-    Plural,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -43,12 +29,6 @@ pub enum RussianDegree {
     Superlative,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RussianAspect {
-    Perfective,
-    Imperfective,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -66,20 +46,6 @@ pub enum RussianMood {
     Conditional,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RussianPerson {
-    First,
-    Second,
-    Third,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum RussianVoice {
-    Active,
-    Passive,
-}
 
 /// A morphological feature representing a Part of Speech (PoS) in Russian.
 /// The `pos` field determines the variant type.
@@ -90,8 +56,8 @@ pub enum RussianMorphology {
     /// An adjective (ADJ) - Прилагательное.
     Adjective {
         lemma: String,
-        gender: RussianGender,
-        number: RussianNumber,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
         degree: RussianDegree,
@@ -114,8 +80,8 @@ pub enum RussianMorphology {
     /// A determiner (DET) - Определитель.
     Determiner {
         lemma: String,
-        gender: RussianGender,
-        number: RussianNumber,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
     },
@@ -124,16 +90,16 @@ pub enum RussianMorphology {
     /// A noun (NOUN) - Существительное.
     Noun {
         lemma: String,
-        gender: RussianGender,
-        number: RussianNumber,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
     },
     /// A numeral (NUM) - Числительное.
     Numeral {
         lemma: String,
-        gender: RussianGender,
-        number: RussianNumber,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
     },
@@ -142,17 +108,17 @@ pub enum RussianMorphology {
     /// A pronoun (PRON) - Местоимение.
     Pronoun {
         lemma: String,
-        person: RussianPerson,
-        gender: RussianGender,
-        number: RussianNumber,
+        person: Person,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
     },
     /// A proper noun (PROPN) - Имя собственное.
     ProperNoun {
         lemma: String,
-        gender: RussianGender,
-        number: RussianNumber,
+        gender: TernaryGender,
+        number: BinaryNumber,
         case: RussianCase,
         animacy: RussianAnimacy,
     },
@@ -165,13 +131,13 @@ pub enum RussianMorphology {
     /// A verb (VERB) - Глагол.
     Verb {
         lemma: String,
-        aspect: RussianAspect,
+        aspect: SlavicAspect,
         tense: RussianTense,
         mood: RussianMood,
-        person: RussianPerson,
-        number: RussianNumber,
-        gender: RussianGender,
-        voice: RussianVoice,
+        person: Person,
+        number: BinaryNumber,
+        gender: TernaryGender,
+        voice: BinaryVoice,
     },
     /// Other (X) for unanalyzable tokens - Прочее.
     Other { lemma: String },

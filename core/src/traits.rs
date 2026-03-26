@@ -4,6 +4,8 @@ use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::morphology_enums::*;
+
 /// Common interface for language-specific morphology enums.
 /// Allows generic code to extract the lemma and PoS label from any morphology variant.
 pub trait MorphologyInfo {
