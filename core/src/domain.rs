@@ -25,7 +25,8 @@ pub struct MultiwordExpression {
 /// The metadata of a card. It contains the card id, the skill id
 /// and the list of features extracted from the context text by the FeatureExtractor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CardMetadata<M> {
+#[serde(bound(deserialize = "M: for<'de2> Deserialize<'de2>, F: for<'de2> Deserialize<'de2>"))]
+pub struct CardMetadata<M, F = ()> {
     pub card_id: String,
     /// ISO 639-3 language code (e.g. "pol", "cmn"). Used to filter cards by language during lexicon scan.
     #[serde(default)]
@@ -41,5 +42,8 @@ pub struct CardMetadata<M> {
     pub multiword_expressions: Vec<MultiwordExpression>,
     pub ipa: Option<String>,
     pub audio_file: Option<String>,
+    /// Morpheme segmentation — present only for agglutinative languages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub morpheme_segmentation: Option<Vec<crate::morpheme::WordSegmentation<F>>>,
 }
 

@@ -173,6 +173,7 @@ pub struct Arabic;
 impl Language for Arabic {
     type Morphology = ArabicMorphology;
     type ExtraFields = ArabicExtraFields;
+    type GrammaticalFunction = ();
 
     fn iso_code(&self) -> lc_core::traits::IsoLang {
         lc_core::traits::IsoLang::Ara
