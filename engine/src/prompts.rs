@@ -436,6 +436,11 @@ impl<'a, L: Language> FeatureExtractorContext<'a, L> {
             blocks.push(wrap_tag("user_context", &user_context_str));
         }
 
+        // Morpheme segmentation directives (agglutinative languages only)
+        if let Some(morph_directives) = self.language.extra_extraction_directives() {
+            blocks.push(wrap_tag("morpheme_segmentation", &morph_directives));
+        }
+
         // Output instruction section
         blocks.push(wrap_tag("output", &cfg.output_instruction));
 

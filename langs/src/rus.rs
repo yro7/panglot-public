@@ -148,6 +148,7 @@ pub struct Russian;
 impl Language for Russian {
     type Morphology = RussianMorphology;
     type ExtraFields = NoExtraFields;
+    type GrammaticalFunction = ();
 
     fn iso_code(&self) -> lc_core::traits::IsoLang {
         lc_core::traits::IsoLang::Rus

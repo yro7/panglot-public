@@ -322,7 +322,7 @@ impl LibraryAnalyzer {
         let mut tracker = LexiconTracker::new();
 
         for card in &cards {
-            if let Some(metadata) = self.extract_metadata::<M>(card) {
+            if let Some(metadata) = self.extract_metadata::<M, ()>(card) {
                 // Skip cards from other languages
                 if let Some(lang) = language_filter {
                     if !metadata.language.is_empty() && metadata.language != lang {
@@ -348,9 +348,10 @@ impl LibraryAnalyzer {
         Ok(tracker)
     }
 
-    fn extract_metadata<M>(&self, card: &StoredCard) -> Option<CardMetadata<M>>
+    fn extract_metadata<M, F>(&self, card: &StoredCard) -> Option<CardMetadata<M, F>>
     where
         M: for<'de> Deserialize<'de>,
+        F: for<'de> Deserialize<'de>,
     {
         // In Anki, fields are separated by \x1f
         let fields: Vec<&str> = card.fields.split('\x1f').collect();
@@ -413,6 +414,7 @@ mod tests {
             multiword_expressions: vec![],
             ipa: None,
             audio_file: None,
+            morpheme_segmentation: None::<Vec<lc_core::morpheme::WordSegmentation<()>>>,
         };
         let metadata_json = serde_json::to_string(&metadata).unwrap();
         // Fields format: front \x1f back \x1f metadata

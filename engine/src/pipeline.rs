@@ -37,9 +37,9 @@ pub enum LexiconStatus {
 // ----- Generation Result -----
 
 /// A single generated card with its model and metadata.
-pub struct GeneratedCard<P: std::fmt::Debug + Clone + Serialize + for<'de> Deserialize<'de>> {
+pub struct GeneratedCard<P: std::fmt::Debug + Clone + Serialize + for<'de> Deserialize<'de>, F = ()> {
     pub model: crate::card_models::AnyCard,
-    pub metadata: CardMetadata<P>,
+    pub metadata: CardMetadata<P, F>,
 }
 
 // ----- Pipeline Orchestrator -----
@@ -76,6 +76,14 @@ where
         + PartialEq
         + std::hash::Hash
         + Eq
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + Send
+        + Sync,
+    L::GrammaticalFunction: std::fmt::Debug
+        + Clone
+        + PartialEq
         + Serialize
         + for<'de> Deserialize<'de>
         + schemars::JsonSchema
@@ -242,7 +250,7 @@ where
         skill_node_id: &str,
         llm_semaphore: Arc<Semaphore>,
         post_process_semaphore: Arc<Semaphore>,
-    ) -> Result<Vec<GeneratedCard<L::Morphology>>> {
+    ) -> Result<Vec<GeneratedCard<L::Morphology, L::GrammaticalFunction>>> {
         if req.num_cards == 0 {
             return Ok(Vec::new());
         }
@@ -436,11 +444,11 @@ where
                  );
 
                  // Assemble metadata from feature extraction results
-                 let (pedagogical_explanation, target_features, context_features, multiword_expressions) = match extracted {
-                     Ok(resp) => (resp.pedagogical_explanation, resp.target_features, resp.context_features, resp.multiword_expressions),
+                 let (pedagogical_explanation, target_features, context_features, multiword_expressions, morpheme_segmentation) = match extracted {
+                     Ok(resp) => (resp.pedagogical_explanation, resp.target_features, resp.context_features, resp.multiword_expressions, resp.morpheme_segmentation),
                      Err(e) => {
                          tracing::error!(%e, "Feature extraction FAILED (even after retry) — explanation will be empty");
-                         (String::new(), Vec::new(), Vec::new(), Vec::new())
+                         (String::new(), Vec::new(), Vec::new(), Vec::new(), None)
                      },
                  };
 
@@ -455,6 +463,7 @@ where
                      multiword_expressions,
                      ipa: None,
                      audio_file: None,
+                     morpheme_segmentation,
                  };
 
                  // Merge early post-processing results
@@ -731,6 +740,14 @@ where
         + schemars::JsonSchema
         + Send
         + Sync,
+    L::GrammaticalFunction: std::fmt::Debug
+        + Clone
+        + PartialEq
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + Send
+        + Sync,
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     fn language_name(&self) -> &str {
@@ -832,9 +849,7 @@ where
             .generate_prompt()?;
 
         let schema_call_1 = crate::card_models::AnyCard::schema_json_value::<L>(card_model_id);
-        let schema_call_2 = serde_json::to_value(
-            &schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<L::Morphology>)
-        ).unwrap_or_default();
+        let schema_call_2 = self.language.build_extraction_schema();
 
         Ok(DynPromptPreview {
             system_prompt_call_1,

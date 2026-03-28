@@ -102,6 +102,7 @@ pub struct Polish;
 impl Language for Polish {
     type Morphology = PolishMorphology;
     type ExtraFields = NoExtraFields;
+    type GrammaticalFunction = ();
 
     fn iso_code(&self) -> lc_core::traits::IsoLang {
         lc_core::traits::IsoLang::Pol

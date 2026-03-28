@@ -44,7 +44,7 @@ where L::Morphology: Send + Sync
         language: &L,
         model: &AnyCard,
         extra_fields: &serde_json::Value,
-        metadata: &mut CardMetadata<L::Morphology>,
+        metadata: &mut CardMetadata<L::Morphology, L::GrammaticalFunction>,
     ) -> Result<()>;
 }
 

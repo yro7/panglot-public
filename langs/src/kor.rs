@@ -145,6 +145,7 @@ pub struct Korean;
 impl Language for Korean {
     type Morphology = KoreanMorphology;
     type ExtraFields = NoExtraFields;
+    type GrammaticalFunction = ();
 
     fn iso_code(&self) -> lc_core::traits::IsoLang {
         lc_core::traits::IsoLang::Kor

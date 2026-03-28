@@ -14,7 +14,8 @@ tracing + latencyreport
 
 - queueing des requêtes? pour éviter de se faire kill par les providers
 
-
+https://www.eva.mpg.de/lingua/pdf/Glossing-Rules.pdf
+Pour prompt le LLM pour expliquer les Glossing Rules !
 
 TESTING :
 
@@ -27,6 +28,8 @@ LINGUISTICS NOTES :
 Japanese language consists of more than 60% homographic heterophones 
 
 - Pour les langues à racine consonnantique, la metttre en valeur dans le front
+
+Morphotactique (Contraintes d'attachement) : Un morphème grammatical ne s'attache pas à n'importe quelle racine. Il faut définir la catégorie grammaticale (Part of Speech) de la base hôte (ex: suffixe nominal vs suffixe verbal).
 
 LEXICON :
 

@@ -13,12 +13,14 @@ fn main() {
     let morph_re = Regex::new(r"type\s+Morphology\s*=\s*(\w+)").unwrap();
     let iso_re = Regex::new(r"IsoLang::(\w+)").unwrap();
     let extra_re = Regex::new(r"type\s+ExtraFields\s*=\s*(\w+)").unwrap();
+    let gf_re = Regex::new(r"type\s+GrammaticalFunction\s*=\s*([\w()]+)").unwrap(); // TODO check
 
     struct LangInfo {
         mod_name: String,
         struct_name: String,
         morphology_name: String,
         extra_fields_name: Option<String>,
+        grammatical_function_name: Option<String>,
         iso_lower: String,
     }
 
@@ -67,6 +69,17 @@ fn main() {
                 }
             });
 
+        let grammatical_function = gf_re
+            .captures(&content)
+            .map(|c| c.get(1).unwrap().as_str().to_string())
+            .and_then(|name| {
+                if name == "()" {
+                    None
+                } else {
+                    Some(name)
+                }
+            });
+
         let iso_lower = iso_variant.to_lowercase();
 
         langs.push(LangInfo {
@@ -74,6 +87,7 @@ fn main() {
             struct_name,
             morphology_name,
             extra_fields_name: extra_fields,
+            grammatical_function_name: grammatical_function,
             iso_lower,
         });
     }
@@ -111,8 +125,12 @@ fn main() {
             Some(name) => format!(", {name}"),
             None => String::new(),
         };
+        let gf = match &l.grammatical_function_name {
+            Some(name) => format!(", {name}"),
+            None => String::new(),
+        };
         code.push_str(&format!(
-            "pub use {}::{{{}, {}{extra}}};\n",
+            "pub use {}::{{{}, {}{extra}{gf}}};\n",
             l.mod_name, l.struct_name, l.morphology_name,
         ));
     }
