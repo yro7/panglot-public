@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use lc_core::domain::CardMetadata;
-use lc_core::traits::{CardModel, Language};
+use lc_core::traits::{CardModel, Language, LinguisticDefinition};
 use lc_core::user::UserSettings;
 
 use anyhow::Result;
@@ -168,7 +168,7 @@ where
             });
         }
 
-        let language_code = self.language.iso_code().to_639_3().to_string();
+        let language_code = self.language.linguistic_def().iso_code().to_639_3().to_string();
         Ok((dyn_cards, NewDeckData { name: deck_name, language_code, cards: new_cards }))
     }
 
@@ -212,7 +212,7 @@ where
             }
         }).collect();
 
-        let language_code = self.language.iso_code().to_639_3().to_string();
+        let language_code = self.language.linguistic_def().iso_code().to_639_3().to_string();
         Ok(NewDeckData {
             name: deck_name,
             language_code,
@@ -402,7 +402,7 @@ where
                          let _pp_permit = pp_sem.acquire().await.unwrap();
                          let speakable = any_card.speakable_text();
                          let input_chars = speakable.as_ref().map(|t| t.len() as u32).unwrap_or(0);
-                         let lang_code = self.language.iso_code().to_639_3().to_string();
+                         let lang_code = self.language.linguistic_def().iso_code().to_639_3().to_string();
 
                          let mut results = Vec::new();
                          for processor in &self.early_processors {
@@ -454,7 +454,7 @@ where
 
                  let mut metadata = CardMetadata {
                      card_id: card_id_str,
-                     language: self.language.iso_code().to_639_3().to_string(),
+                     language: self.language.linguistic_def().iso_code().to_639_3().to_string(),
                      skill_id: skill_node_id.to_string(),
                      skill_name,
                      pedagogical_explanation,
@@ -751,11 +751,11 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     fn language_name(&self) -> &str {
-        self.language.name()
+        self.language.linguistic_def().name()
     }
 
     fn iso_code_str(&self) -> &str {
-        self.language.iso_code().to_639_3()
+        self.language.linguistic_def().iso_code().to_639_3()
     }
 
     fn base_tree(&self) -> SkillNode {
@@ -839,17 +839,27 @@ where
             .build()
             .generate_prompt()?;
 
-        let system_prompt_call_2 = crate::prompts::FeatureExtractorContext::builder()
-            .language(&self.language)
-            .skill_node(node)
-            .node_path(&path)
-            .request(&req)
-            .prompt_config(&self.prompt_config)
-            .build()
-            .generate_prompt()?;
+        let system_prompt_call_2 = {
+            let extraction_req = panini_engine::prompts::ExtractionRequest {
+                content: String::new(),
+                targets: Vec::new(),
+                pedagogical_context: node.node_instructions.clone(),
+                skill_path: Some(path.clone()),
+                learner_ui_language: req.user_profile.ui_language.clone(),
+                linguistic_background: crate::panini_adapter::to_panini_language_levels(
+                    &req.user_profile.linguistic_background,
+                ),
+                user_prompt: req.user_prompt.clone(),
+            };
+            panini_engine::prompts::build_extraction_prompt(
+                self.language.linguistic_def(),
+                &extraction_req,
+                &self.prompt_config.extractor,
+            )?
+        };
 
         let schema_call_1 = crate::card_models::AnyCard::schema_json_value::<L>(card_model_id);
-        let schema_call_2 = self.language.build_extraction_schema();
+        let schema_call_2 = self.language.linguistic_def().build_extraction_schema();
 
         Ok(DynPromptPreview {
             system_prompt_call_1,
@@ -861,7 +871,7 @@ where
 
     async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>> {
         let analyzer = LibraryAnalyzer;
-        let lang = self.language.iso_code().to_639_3();
+        let lang = self.language.linguistic_def().iso_code().to_639_3();
         let tracker = analyzer.extract_tracker_async::<L::Morphology>(provider, Some(lang)).await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(Arc::new(tracker))

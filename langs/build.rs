@@ -5,15 +5,21 @@ use regex::Regex;
 
 fn main() {
     println!("cargo:rerun-if-changed=src/");
+    println!("cargo:rerun-if-changed=../panini/panini-langs/src/");
 
     let src_dir = Path::new("src");
+    let panini_langs_dir = Path::new("../panini/panini-langs/src");
     let skip = ["lib.rs", "type_assertions.rs"];
 
     let struct_re = Regex::new(r"impl\s+Language\s+for\s+(\w+)").unwrap();
     let morph_re = Regex::new(r"type\s+Morphology\s*=\s*(\w+)").unwrap();
     let iso_re = Regex::new(r"IsoLang::(\w+)").unwrap();
     let extra_re = Regex::new(r"type\s+ExtraFields\s*=\s*(\w+)").unwrap();
-    let gf_re = Regex::new(r"type\s+GrammaticalFunction\s*=\s*([\w()]+)").unwrap(); // TODO check
+    let gf_re = Regex::new(r"type\s+GrammaticalFunction\s*=\s*([\w()]+)").unwrap();
+    let panini_re = Regex::new(r"pub\s+use\s+panini_langs::(\w+)::\*").unwrap();
+
+    // For panini-langs files, look for `impl LinguisticDefinition for X`
+    let ld_struct_re = Regex::new(r"impl\s+LinguisticDefinition\s+for\s+(\w+)").unwrap();
 
     struct LangInfo {
         mod_name: String,
@@ -42,38 +48,56 @@ fn main() {
             None => continue,
         };
 
-        let morphology_name = morph_re
-            .captures(&content)
-            .unwrap_or_else(|| panic!("No `type Morphology = X` found in {filename}"))
-            .get(1)
-            .unwrap()
-            .as_str()
-            .to_string();
+        // Check if this file re-exports from panini-langs
+        let is_panini = panini_re.is_match(&content);
 
-        let iso_variant = iso_re
-            .captures(&content)
-            .unwrap_or_else(|| panic!("No `IsoLang::Xxx` found in {filename}"))
-            .get(1)
-            .unwrap()
-            .as_str()
-            .to_string();
+        // For panini-langs re-exports, read the Morphology type and ISO code
+        // from the panini-langs source file instead
+        let (morphology_name, iso_variant, grammatical_function) = if is_panini {
+            let panini_mod = panini_re.captures(&content).unwrap()
+                .get(1).unwrap().as_str();
+            let panini_file = panini_langs_dir.join(format!("{panini_mod}.rs"));
+            let panini_content = fs::read_to_string(&panini_file)
+                .unwrap_or_else(|_| panic!("Cannot read panini-langs file: {}", panini_file.display()));
+
+            let morph = morph_re.captures(&panini_content)
+                .or_else(|| {
+                    // In panini-langs, Morphology is on LinguisticDefinition, not Language
+                    Regex::new(r"type\s+Morphology\s*=\s*(\w+)").unwrap().captures(&panini_content)
+                })
+                .unwrap_or_else(|| panic!("No Morphology type found in panini-langs/{panini_mod}.rs"))
+                .get(1).unwrap().as_str().to_string();
+
+            let iso = iso_re.captures(&panini_content)
+                .unwrap_or_else(|| panic!("No IsoLang found in panini-langs/{panini_mod}.rs"))
+                .get(1).unwrap().as_str().to_string();
+
+            let gf = gf_re.captures(&panini_content)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .and_then(|name| if name == "()" { None } else { Some(name) });
+
+            (morph, iso, gf)
+        } else {
+            let morph = morph_re.captures(&content)
+                .unwrap_or_else(|| panic!("No `type Morphology = X` found in {filename}"))
+                .get(1).unwrap().as_str().to_string();
+
+            let iso = iso_re.captures(&content)
+                .unwrap_or_else(|| panic!("No `IsoLang::Xxx` found in {filename}"))
+                .get(1).unwrap().as_str().to_string();
+
+            let gf = gf_re.captures(&content)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .and_then(|name| if name == "()" { None } else { Some(name) });
+
+            (morph, iso, gf)
+        };
 
         let extra_fields = extra_re
             .captures(&content)
             .map(|c| c.get(1).unwrap().as_str().to_string())
             .and_then(|name| {
                 if name == "NoExtraFields" {
-                    None
-                } else {
-                    Some(name)
-                }
-            });
-
-        let grammatical_function = gf_re
-            .captures(&content)
-            .map(|c| c.get(1).unwrap().as_str().to_string())
-            .and_then(|name| {
-                if name == "()" {
                     None
                 } else {
                     Some(name)

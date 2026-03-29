@@ -836,6 +836,8 @@ dependencies = [
  "isolang",
  "langs",
  "lc_core",
+ "panini-core",
+ "panini-engine",
  "regex",
  "reqwest 0.13.2",
  "schemars",
@@ -1675,6 +1677,8 @@ version = "0.1.0"
 dependencies = [
  "lc_core",
  "lc_macro",
+ "panini-core",
+ "panini-langs",
  "regex",
  "schemars",
  "serde",
@@ -1718,6 +1722,7 @@ dependencies = [
  "iso15924",
  "isolang",
  "lc_macro",
+ "panini-core",
  "schemars",
  "serde",
  "serde_json",
@@ -2107,6 +2112,63 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+]
+
+[[package]]
+name = "panini"
+version = "0.1.0"
+dependencies = [
+ "panini-core",
+ "panini-engine",
+ "panini-langs",
+]
+
+[[package]]
+name = "panini-core"
+version = "0.1.0"
+dependencies = [
+ "iso15924",
+ "isolang",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "panini-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "isolang",
+ "panini-core",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "panini-langs"
+version = "0.1.0"
+dependencies = [
+ "panini-core",
+ "panini-macro",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "panini-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 use lc_core::domain::CardMetadata;
-use lc_core::traits::{IpaConfig, Language, TtsConfig};
+use lc_core::traits::{IpaConfig, Language, LinguisticDefinition, TtsConfig};
 
 use async_trait::async_trait;
 use anyhow::Result;
@@ -86,7 +86,7 @@ where L::Morphology: Send + Sync
         let voice = match config {
             TtsConfig::Edge { voice } => voice,
             TtsConfig::None => {
-                tracing::debug!(language = language.name(), "No TTS strategy configured, skipping");
+                tracing::debug!(language = language.linguistic_def().name(), "No TTS strategy configured, skipping");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };
@@ -160,7 +160,7 @@ where L::Morphology: Send + Sync
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
             IpaConfig::None => {
-                tracing::debug!(language = language.name(), "No IPA strategy configured, skipping");
+                tracing::debug!(language = language.linguistic_def().name(), "No IPA strategy configured, skipping");
                 return Ok(EarlyPostProcessResult { ipa: None, audio_file: None });
             }
         };

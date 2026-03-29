@@ -7,5 +7,10 @@ members = [
     "app",
     "lc_macro",
     "codegen",
+    "panini/panini-core",
+    "panini/panini-macro",
+    "panini/panini-engine",
+    "panini/panini-langs",
+    "panini/panini",
 ]
 resolver = "2"
