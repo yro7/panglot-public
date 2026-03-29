@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{BinaryNumber, BinaryVoice, IpaConfig, Language, NoExtraFields, Person, Script, SlavicAspect, TernaryGender, TtsConfig, TypologicalFeature};
+use lc_core::traits::{BinaryNumber, BinaryVoice, IpaConfig, Language, LinguisticDefinition, NoExtraFields, Person, Script, SlavicAspect, TernaryGender, TtsConfig, TypologicalFeature, IsoLang};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -145,13 +145,12 @@ pub enum RussianMorphology {
 
 pub struct Russian;
 
-impl Language for Russian {
+impl LinguisticDefinition for Russian {
     type Morphology = RussianMorphology;
-    type ExtraFields = NoExtraFields;
     type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> lc_core::traits::IsoLang {
-        lc_core::traits::IsoLang::Rus
+    fn iso_code(&self) -> IsoLang {
+        IsoLang::Rus
     }
 
     fn supported_scripts(&self) -> &[Script] {
@@ -180,6 +179,15 @@ impl Language for Russian {
          4. For adpositions: provide the case they govern (governed_case).\n\
          5. For adjectives and adverbs: provide the degree (positive, comparative, superlative)."
     }
+}
+
+impl Language for Russian {
+    type Morphology = RussianMorphology;
+    type GrammaticalFunction = ();
+    type ExtraFields = NoExtraFields;
+    type LinguisticDef = Self;
+
+    fn linguistic_def(&self) -> &Self { self }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("When generating Russian text, ensure correct case, gender, number, and animacy agreement between nouns, adjectives, determiners, and pronouns. Pay attention to verb aspect and tense usage. Russian is a pro-drop language; omit subject pronouns when contextually clear.")

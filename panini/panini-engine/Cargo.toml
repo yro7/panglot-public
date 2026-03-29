@@ -1,0 +1,17 @@
+[package]
+name = "panini-engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panini-core = { path = "../panini-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yml = "0.0.12"
+schemars = "1.2.1"
+async-trait = "0.1.89"
+anyhow = "1.0.102"
+regex = "1"
+tracing = "0.1"
+thiserror = "2.0.18"
+isolang = { version = "2.4.0", features = ["english_names"] }

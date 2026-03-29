@@ -1,0 +1,13 @@
+[package]
+name = "panini"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panini-core = { path = "../panini-core" }
+panini-engine = { path = "../panini-engine" }
+panini-langs = { path = "../panini-langs", optional = true }
+
+[features]
+default = ["langs"]
+langs = ["dep:panini-langs"]

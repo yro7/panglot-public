@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Person, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{IpaConfig, Language, LinguisticDefinition, NoExtraFields, Person, Script, TtsConfig, TypologicalFeature, IsoLang};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -142,13 +142,12 @@ pub enum KoreanMorphology {
 
 pub struct Korean;
 
-impl Language for Korean {
+impl LinguisticDefinition for Korean {
     type Morphology = KoreanMorphology;
-    type ExtraFields = NoExtraFields;
     type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> lc_core::traits::IsoLang {
-        lc_core::traits::IsoLang::Kor
+    fn iso_code(&self) -> IsoLang {
+        IsoLang::Kor
     }
 
     fn supported_scripts(&self) -> &[Script] {
@@ -160,7 +159,7 @@ impl Language for Korean {
     }
 
     fn typological_features(&self) -> &[TypologicalFeature] {
-        &[TypologicalFeature::Conjugation] // Korean is highly agglutinative with extensive conjugation.
+        &[TypologicalFeature::Conjugation]
     }
 
     fn extraction_directives(&self) -> &str {
@@ -179,16 +178,25 @@ impl Language for Korean {
          6. For pronouns (대명사): provide lemma, person, and honorifics.\n\
          7. For numerals (수사): provide lemma and numeral type (e.g., 'cardinal_native', 'cardinal_sino')."
     }
+}
+
+impl Language for Korean {
+    type Morphology = KoreanMorphology;
+    type GrammaticalFunction = ();
+    type ExtraFields = NoExtraFields;
+    type LinguisticDef = Self;
+
+    fn linguistic_def(&self) -> &Self { self }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("When generating Korean text, ensure correct usage of honorifics and speech levels based on context and speaker/listener relationship. Korean is a pro-drop language; omit subject pronouns when contextually clear. Adjectives conjugate like verbs.")
     }
 
     fn ipa_strategy(&self) -> IpaConfig {
-        IpaConfig::Epitran("kor-Hang") // Epitran supports Korean Hangul to IPA
+        IpaConfig::Epitran("kor-Hang")
     }
 
     fn tts_strategy(&self) -> TtsConfig {
-        TtsConfig::Edge { voice: "ko-KR-SunHiNeural" } // A suitable Korean voice from Edge TTS
+        TtsConfig::Edge { voice: "ko-KR-SunHiNeural" }
     }
 }

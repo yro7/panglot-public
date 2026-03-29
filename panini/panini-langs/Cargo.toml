@@ -1,0 +1,11 @@
+[package]
+name = "panini-langs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panini-core = { path = "../panini-core" }
+panini-macro = { path = "../panini-macro" }
+schemars = "1.2.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
