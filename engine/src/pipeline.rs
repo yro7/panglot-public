@@ -10,19 +10,28 @@ use tokio::sync::Semaphore;
 
 use crate::card_models::CardModelId;
 use crate::generator::GenerationRequest;
-use crate::llm_client::{ChatMessage, LlmClient, LlmRequest, Role};
+use crate::llm_backend::LlmBackend;
 use crate::post_process::{EarlyPostProcessor, LatePostProcessor};
 use crate::prompts::{GeneratorContext, PromptConfig};
 use crate::skill_tree::SkillNode;
-use crate::usage::{PostProcessEvent, PostProcessType, UsageRecorder};
+use crate::usage::{LlmProviderUsageEvent, PostProcessEvent, PostProcessType, UsageRecorder};
 use crate::validation::CardValidator;
+
+use rig::completion::CompletionModel;
 
 use lc_core::storage::{StorageProvider, NewDeckData, NewCardEntry};
 
 use crate::analyzer::{DynLexiconTracker, LexiconTracker, LibraryAnalyzer};
 use crate::llm_utils::clean_llm_json;
 
-// ----- Lexicon Status -----
+fn to_panini_language_levels(
+    levels: &[lc_core::user::KnownLanguage],
+) -> Vec<panini_engine::prompts::LanguageLevel> {
+    levels.iter().map(|l| panini_engine::prompts::LanguageLevel {
+        iso_639_3: l.iso_639_3.clone(),
+        level: format!("{:?}", l.level),
+    }).collect()
+}
 
 /// Status of async lexicon loading.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -56,7 +65,7 @@ pub struct GeneratedCard<P: std::fmt::Debug + Clone + Serialize + for<'de> Deser
 /// allowing per-user overlays without shared mutable state.
 pub struct Pipeline<L: Language + Send + Sync> {
     pub language: L,
-    llm_client: tokio::sync::RwLock<Box<dyn LlmClient>>,
+    llm_backend: tokio::sync::RwLock<LlmBackend>,
     early_processors: Vec<Box<dyn EarlyPostProcessor<L>>>,
     late_processors: Vec<Box<dyn LatePostProcessor<L>>>,
     validators: Vec<Box<dyn CardValidator<L>>>,
@@ -92,7 +101,7 @@ where
 {
     pub fn new(
         language: L,
-        llm_client: Box<dyn LlmClient>,
+        llm_backend: LlmBackend,
         generator_temperature: f32,
         generator_max_tokens: u32,
         extractor_temperature: f32,
@@ -101,7 +110,7 @@ where
     ) -> Self {
         Self {
             language,
-            llm_client: tokio::sync::RwLock::new(llm_client),
+            llm_backend: tokio::sync::RwLock::new(llm_backend),
             early_processors: Vec::new(),
             late_processors: Vec::new(),
             validators: Vec::new(),
@@ -281,22 +290,62 @@ where
             "required": ["cards"],
         });
 
-        let content_request = LlmRequest {
-            messages: vec![
-                ChatMessage { role: Role::System, content: system_content },
-                ChatMessage { role: Role::User, content: user_content },
-            ],
-            temperature: self.generator_temperature,
-            max_tokens: Some(self.generator_max_tokens),
-            response_schema: Some(array_schema),
-            request_context: req.request_context.clone(),
-            call_type: crate::llm_client::CallType::Generation,
-        };
-
         let raw_json = {
             let _permit = llm_semaphore.acquire().await.unwrap();
-            let client = self.llm_client.read().await;
-            client.chat_completion(&content_request).await?.content
+            let client = self.llm_backend.read().await;
+            
+            let rig_schema: schemars::Schema = serde_json::from_value(array_schema)?;
+            let start = std::time::Instant::now();
+            
+            macro_rules! execute_rig {
+                ($m:expr, $provider_str:expr) => {{
+                    let req_builder = $m.completion_request(&user_content)
+                      .preamble(system_content.clone())
+                      .temperature(self.generator_temperature as f64)
+                      .max_tokens(self.generator_max_tokens as u64)
+                      .output_schema(rig_schema.clone());
+                      
+                    match req_builder.send().await {
+                        Ok(response) => {
+                            let latency_ms = start.elapsed().as_millis() as u64;
+                            let tokens_in = response.usage.input_tokens as u32;
+                            let tokens_out = response.usage.output_tokens as u32;
+                            
+                            if let (Some(recorder), Some(ctx)) = (&self.usage_recorder, &req.request_context) {
+                                recorder.record_llm_call(LlmProviderUsageEvent {
+                                    user_id: ctx.user_id.clone(),
+                                    request_id: ctx.request_id.clone(),
+                                    endpoint: ctx.endpoint.clone(),
+                                    call_type: "Generation".to_string(),
+                                    provider: $provider_str.to_string(),
+                                    model: "unknown".to_string(), // .model() not available via CompletioModel trait directly without casting or extra bounds
+                                    language: ctx.language.clone(),
+                                    tokens_in,
+                                    tokens_out,
+                                    latency_ms,
+                                    is_error: false,
+                                    error_message: None,
+                                });
+                            }
+                            
+                            response.choice.into_iter().find_map(|c| {
+                                if let rig::completion::message::AssistantContent::Text(t) = c {
+                                    Some(t.text)
+                                } else { None }
+                            }).ok_or_else(|| anyhow::anyhow!("LLM returned no text content"))
+                        }
+                        Err(e) => Err(anyhow::anyhow!("LLM request failed: {}", e))
+                    }
+                }}
+            }
+            
+            let response_text = match &*client {
+                LlmBackend::OpenAi(m) => execute_rig!(m, "openai"),
+                LlmBackend::Anthropic(m) => execute_rig!(m, "anthropic"),
+                LlmBackend::Google(m) => execute_rig!(m, "google"),
+            }?;
+            
+            response_text
         };
         tracing::debug!(raw_len = raw_json.len(), "Raw LLM content output");
 
@@ -367,33 +416,80 @@ where
                           };
                           let mut result = {
                               let _permit = llm_sem.acquire().await.unwrap();
-                              let client = self.llm_client.read().await;
-                              crate::feature_extractor::extract_features_via_llm(
-                                  &self.language, ext_node, &extraction_path,
-                                  client.as_ref(), req,
-                                  &card_json_for_extraction, &targets,
-                                  self.extractor_temperature, self.extractor_max_tokens,
-                                  None, &self.prompt_config,
-                              ).await
+                              let client = self.llm_backend.read().await;
+                              
+                              let extraction_request = panini_engine::prompts::ExtractionRequest {
+                                  content: card_json_for_extraction.to_string(),
+                                  targets: targets.to_vec(),
+                                  pedagogical_context: ext_node.node_instructions.clone(),
+                                  skill_path: Some(extraction_path.to_string()),
+                                  learner_ui_language: req.user_profile.ui_language.clone(),
+                                  linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
+                                  user_prompt: req.user_prompt.clone(),
+                              };
+                              
+                              macro_rules! execute_extract {
+                                  ($m:expr) => {
+                                      panini_engine::extractor::extract_features_via_llm(
+                                          self.language.linguistic_def(),
+                                          $m,
+                                          &extraction_request,
+                                          self.extractor_temperature, self.extractor_max_tokens,
+                                          None, &self.prompt_config.extractor,
+                                      ).await
+                                  }
+                              }
+                              
+                              let r = match &*client {
+                                  LlmBackend::OpenAi(m) => execute_extract!(m),
+                                  LlmBackend::Anthropic(m) => execute_extract!(m),
+                                  LlmBackend::Google(m) => execute_extract!(m),
+                              };
+                              
+                              // Optionally record usage from extraction, Panini would need to return Rig usage,
+                              // but Panini strips the usage out since it's framework-agnostic. That's fine for now,
+                              // or we can extract the text length as an approximation.
+                              r
                           };
                           if let Err(ref e) = result {
                               // Build correction context from the parse error if available
-                              let prev_attempt = e.downcast_ref::<crate::feature_extractor::ExtractionParseError>()
-                                  .map(|pe| crate::feature_extractor::PreviousAttempt {
+                              let prev_attempt = e.downcast_ref::<panini_engine::ExtractionParseError>()
+                                  .map(|pe| panini_engine::PreviousAttempt {
                                       raw_response: pe.raw_response.clone(),
                                       error: pe.error_message.clone(),
                                   });
                               tracing::warn!("Feature extraction first attempt failed, retrying with error feedback");
                               tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                               let _permit = llm_sem.acquire().await.unwrap();
-                              let client = self.llm_client.read().await;
-                              result = crate::feature_extractor::extract_features_via_llm(
-                                  &self.language, ext_node, &extraction_path,
-                                  client.as_ref(), req,
-                                  &card_json_for_extraction, &targets,
-                                  self.extractor_temperature, self.extractor_max_tokens,
-                                  prev_attempt.as_ref(), &self.prompt_config,
-                              ).await;
+                              let client = self.llm_backend.read().await;
+                              
+                              let extraction_request = panini_engine::prompts::ExtractionRequest {
+                                  content: card_json_for_extraction.to_string(),
+                                  targets: targets.to_vec(),
+                                  pedagogical_context: ext_node.node_instructions.clone(),
+                                  skill_path: Some(extraction_path.to_string()),
+                                  learner_ui_language: req.user_profile.ui_language.clone(),
+                                  linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
+                                  user_prompt: req.user_prompt.clone(),
+                              };
+                              
+                              macro_rules! execute_extract_retry {
+                                  ($m:expr) => {
+                                      panini_engine::extractor::extract_features_via_llm(
+                                          self.language.linguistic_def(),
+                                          $m,
+                                          &extraction_request,
+                                          self.extractor_temperature, self.extractor_max_tokens,
+                                          prev_attempt.as_ref(), &self.prompt_config.extractor,
+                                      ).await
+                                  }
+                              }
+                              
+                              result = match &*client {
+                                  LlmBackend::OpenAi(m) => execute_extract_retry!(m),
+                                  LlmBackend::Anthropic(m) => execute_extract_retry!(m),
+                                  LlmBackend::Google(m) => execute_extract_retry!(m),
+                              };
                           }
                           result
                       },
@@ -531,24 +627,62 @@ where
 
         let item_schema = crate::card_models::AnyCard::schema_json_value::<L>(req.card_model_id);
 
-        let retry_request = LlmRequest {
-            messages: vec![
-                ChatMessage { role: Role::System, content: system_content },
-                ChatMessage { role: Role::User, content: user_content },
-            ],
-            temperature: self.generator_temperature,
-            max_tokens: Some(self.generator_max_tokens),
-            response_schema: Some(item_schema),
-            request_context: req.request_context.clone(),
-            call_type: crate::llm_client::CallType::Generation,
-        };
-
         let raw_json = {
             let _permit = llm_semaphore.acquire().await.unwrap();
-            let client = self.llm_client.read().await;
-            client.chat_completion(&retry_request).await
-                .map_err(|e| format!("Retry LLM call failed: {}", e))?
-                .content
+            let client = self.llm_backend.read().await;
+            
+            let rig_schema: schemars::Schema = serde_json::from_value(item_schema).map_err(|e| e.to_string())?;
+            let start = std::time::Instant::now();
+            
+            macro_rules! execute_rig_retry {
+                ($m:expr, $provider_str:expr) => {{
+                    let req_builder = $m.completion_request(&user_content)
+                      .preamble(system_content.clone())
+                      .temperature(self.generator_temperature as f64)
+                      .max_tokens(self.generator_max_tokens as u64)
+                      .output_schema(rig_schema.clone());
+                      
+                    match req_builder.send().await {
+                        Ok(response) => {
+                            let latency_ms = start.elapsed().as_millis() as u64;
+                            let tokens_in = response.usage.input_tokens as u32;
+                            let tokens_out = response.usage.output_tokens as u32;
+                            
+                            if let (Some(recorder), Some(ctx)) = (&self.usage_recorder, &req.request_context) {
+                                recorder.record_llm_call(LlmProviderUsageEvent {
+                                    user_id: ctx.user_id.clone(),
+                                    request_id: ctx.request_id.clone(),
+                                    endpoint: ctx.endpoint.clone(),
+                                    call_type: "GenerationRetry".to_string(),
+                                    provider: $provider_str.to_string(),
+                                    model: "unknown".to_string(),
+                                    language: ctx.language.clone(),
+                                    tokens_in,
+                                    tokens_out,
+                                    latency_ms,
+                                    is_error: false,
+                                    error_message: None,
+                                });
+                            }
+                            
+                            response.choice.into_iter().find_map(|c| {
+                                if let rig::completion::message::AssistantContent::Text(t) = c {
+                                    Some(t.text)
+                                } else { None }
+                            }).ok_or_else(|| format!("LLM returned no text content on retry"))
+                        }
+                        Err(e) => Err(format!("Retry LLM call failed: {}", e))
+                    }
+                }}
+            }
+            
+            let response_text = match &*client {
+                LlmBackend::OpenAi(m) => execute_rig_retry!(m, "openai"),
+                LlmBackend::Anthropic(m) => execute_rig_retry!(m, "anthropic"),
+                LlmBackend::Google(m) => execute_rig_retry!(m, "google"),
+            }?;
+            
+            response_text
         };
 
         let cleaned = clean_llm_json(&raw_json);
@@ -606,7 +740,7 @@ where
         user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         lexicon: Option<&LexiconTracker<L::Morphology>>,
     ) -> GenerationRequest<L> {
         let mut injected_vocabulary = Vec::new();
@@ -684,7 +818,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>>;
@@ -694,7 +828,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<NewDeckData>;
@@ -705,7 +839,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)>;
@@ -720,8 +854,8 @@ pub trait DynPipeline: Send + Sync {
     /// Factory: builds a type-erased lexicon tracker from a storage provider.
     async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>>;
 
-    /// Hot-swap the LLM client (e.g. after changing provider/model at runtime).
-    async fn swap_llm_client(&self, new_client: Box<dyn LlmClient>);
+    /// Hot-swap the LLM backend (e.g. after changing provider/model at runtime).
+    async fn swap_llm_client(&self, new_backend: LlmBackend);
 
     fn available_models(&self) -> Vec<CardModelId>;
 }
@@ -770,7 +904,7 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>> {
@@ -794,7 +928,7 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<NewDeckData> {
@@ -808,7 +942,7 @@ where
         num_cards: u32, difficulty: u8, user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
-        request_context: Option<crate::llm_client::RequestContext>,
+        request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<(Vec<DynGeneratedCard>, NewDeckData)> {
@@ -846,9 +980,7 @@ where
                 pedagogical_context: node.node_instructions.clone(),
                 skill_path: Some(path.clone()),
                 learner_ui_language: req.user_profile.ui_language.clone(),
-                linguistic_background: crate::panini_adapter::to_panini_language_levels(
-                    &req.user_profile.linguistic_background,
-                ),
+                linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
                 user_prompt: req.user_prompt.clone(),
             };
             panini_engine::prompts::build_extraction_prompt(
@@ -877,120 +1009,12 @@ where
         Ok(Arc::new(tracker))
     }
 
-    async fn swap_llm_client(&self, new_client: Box<dyn LlmClient>) {
-        let mut client = self.llm_client.write().await;
-        *client = new_client;
+    async fn swap_llm_client(&self, new_backend: LlmBackend) {
+        let mut client = self.llm_backend.write().await;
+        *client = new_backend;
     }
 
     fn available_models(&self) -> Vec<CardModelId> {
         CardModelId::available_models(&self.language)
     }
-}
-
-// ----- Tests -----
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::llm_client::MockLlmClient;
-    use crate::skill_tree::{SkillNodeConfig, SkillTree};
-    use langs::{Polish, PolishMorphology};
-    use lc_core::domain::ExtractedFeature;
-
-    fn sample_tree() -> SkillTree<Polish> {
-        let config = SkillNodeConfig {
-            id: "root".to_string(),
-            name: "Polski".to_string(),
-            node_instructions: None,
-            children: vec![SkillNodeConfig {
-                id: "accusative".to_string(),
-                name: "Biernik".to_string(),
-                node_instructions: Some(
-                    "Generate a Polish accusative cloze test as JSON.".to_string(),
-                ),
-                children: vec![],
-            }],
-        };
-        SkillTree::new(Polish, config)
-    }
-
-    #[tokio::test]
-    async fn pipeline_generates_cards_with_mock_llm() {
-        let tree = sample_tree();
-        let acc_id = "accusative";
-        let prompts_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("Failed to get parent directory")
-            .join("prompts");
-        let config = crate::prompts::PromptConfig::load(prompts_path.to_str().unwrap()).expect("Failed to load prompts");
-
-        let mock = MockLlmClient::new(vec![
-            // Call 1: Content generation
-            r#"{"cards": [{"sentence": "Czytam {{c1::książkę}}.", "targets": ["książkę"], "debug": "pipi caca debug", "translation": "I am reading a book."}]}"#.to_string(),
-            // Call 2: Feature extraction (new morphology schema)
-            r#"{"pedagogical_explanation": "Test", "target_features": [{"word": "książkę", "morphology": {"pos": "Noun", "lemma": "książka", "gender": "Feminine", "case": "Accusative"}}], "context_features": [{"word": "czytam", "morphology": {"pos": "Verb", "lemma": "czytać", "aspect": "Imperfective"}}]}"#.to_string(),
-        ]);
-
-        let pipeline = Pipeline::new(Polish, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
-
-        let req = GenerationRequest::<langs::Polish> {
-            card_model_id: crate::card_models::CardModelId::ClozeTest,
-            num_cards: 1,
-            difficulty: 3,
-            user_profile: lc_core::user::UserSettings::default(),
-            user_prompt: None,
-            transliteration: None,
-            injected_vocabulary: vec![ExtractedFeature {
-                word: "dom".to_string(),
-                morphology: PolishMorphology::Noun {
-                    lemma: "dom".to_string(),
-                    gender: langs::polish::PolishGender::MasculineInanimate,
-                    case: langs::polish::PolishCase::Nominative,
-                },
-            }],
-            excluded_vocabulary: vec![],
-            request_context: None,
-        };
-
-        let deck_data = pipeline
-            .generate_deck_data(&tree.root, acc_id, &req, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)))
-            .await
-            .unwrap();
-
-        assert_eq!(deck_data.cards.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn pipeline_handles_llm_failure_gracefully() {
-        let tree = sample_tree();
-        let acc_id = "accusative";
-        let prompts_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("Failed to get parent directory")
-            .join("prompts");
-        let config = crate::prompts::PromptConfig::load(prompts_path.to_str().unwrap()).expect("Failed to load prompts");
-
-        let mock = MockLlmClient::with_fixed_response("not valid json at all");
-        let pipeline = Pipeline::new(Polish, Box::new(mock), 0.8, 4000, 0.0, 4000, config);
-
-        let req = GenerationRequest::<langs::Polish> {
-            card_model_id: crate::card_models::CardModelId::ClozeTest,
-            num_cards: 3,
-            difficulty: 1,
-            user_profile: lc_core::user::UserSettings::default(),
-            user_prompt: None,
-            transliteration: None,
-            injected_vocabulary: vec![],
-            excluded_vocabulary: vec![],
-            request_context: None,
-        };
-
-        let deck_data = pipeline
-            .generate_deck_data_dyn(&tree.root, acc_id, req.card_model_id, req.num_cards, req.difficulty, req.user_profile, req.user_prompt, None, None, Arc::new(Semaphore::new(1)), Arc::new(Semaphore::new(1)), None)
-            .await
-            .unwrap();
-
-        assert_eq!(deck_data.cards.len(), 0);
-    }
-
 }

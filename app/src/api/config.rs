@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse, Responder};
-use engine::llm_client::{LlmProvider, LlmHttpClient};
+use engine::llm_backend::LlmProvider;
 use engine::card_models::CardModelId;
 use lc_core::user::UserSettings;
 
@@ -73,17 +73,24 @@ pub async fn update_llm_config(
     let base_url = data.llm_config.base_url.clone()
         .unwrap_or_else(|| new_provider.default_base_url().to_string());
 
-    // Build the new LLM client and swap it into every pipeline
-    let new_client_factory = || -> Box<dyn engine::llm_client::LlmClient> {
-        Box::new(LlmHttpClient::custom(
-            api_key.clone(), base_url.clone(), new_model.clone(), new_provider,
-        ))
+    let new_client_factory = || -> anyhow::Result<engine::llm_backend::LlmBackend> {
+        engine::llm_backend::LlmBackend::build(new_provider, &new_model, &api_key, &base_url)
     };
 
     {
         let pipelines = data.pipelines.read().await;
         for pipeline in pipelines.values() {
-            pipeline.swap_llm_client(new_client_factory()).await;
+            match new_client_factory() {
+                Ok(backend) => {
+                    pipeline.swap_llm_client(backend).await;
+                }
+                Err(e) => {
+                    return HttpResponse::InternalServerError().json(serde_json::json!({
+                        "success": false,
+                        "message": format!("Failed to configure new LLM: {}", e)
+                    }));
+                }
+            }
         }
     }
 

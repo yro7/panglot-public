@@ -19,7 +19,7 @@ fn main() {
     let panini_re = Regex::new(r"pub\s+use\s+panini_langs::(\w+)::\*").unwrap();
 
     // For panini-langs files, look for `impl LinguisticDefinition for X`
-    let ld_struct_re = Regex::new(r"impl\s+LinguisticDefinition\s+for\s+(\w+)").unwrap();
+    let _ld_struct_re = Regex::new(r"impl\s+LinguisticDefinition\s+for\s+(\w+)").unwrap();
 
     struct LangInfo {
         mod_name: String,

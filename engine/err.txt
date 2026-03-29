@@ -1,0 +1,258 @@
+warning: unused variable: `ld_struct_re`
+  --> langs/build.rs:22:9
+   |
+22 |     let ld_struct_re = Regex:...
+   |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ld_struct_re`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `langs` (build script) generated 1 warning
+    Checking engine v0.1.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/engine)
+error[E0425]: cannot find type `CompletionModel` in module `rig::providers::anthropic`
+  --> engine/src/llm_backend.rs:82:42
+   |
+82 | ...thropic::CompletionModel),
+   |             ^^^^^^^^^^^^^^^ not found in `rig::providers::anthropic`
+   |
+help: consider importing one of these items
+   |
+ 1 + use rig::completion::CompletionModel;
+   |
+ 1 + use rig::providers::anthropic::completion::CompletionModel;
+   |
+ 1 + use rig::providers::azure::CompletionModel;
+   |
+ 1 + use rig::providers::cohere::CompletionModel;
+   |
+   = and 16 other candidates
+help: if you import `CompletionModel`, refer to it directly
+   |
+82 -     Anthropic(rig::providers::anthropic::CompletionModel),
+82 +     Anthropic(CompletionModel),
+   |
+
+error[E0425]: cannot find type `LanguageLevel` in module `lc_core::user`
+  --> engine/src/pipeline.rs:29:30
+   |
+29 |     levels: &[lc_core::user::LanguageLevel],
+   |                              ^^^^^^^^^^^^^ not found in `lc_core::user`
+   |
+help: consider importing this struct
+   |
+ 1 + use panini_engine::prompts::LanguageLevel;
+   |
+help: if you import `LanguageLevel`, refer to it directly
+   |
+29 -     levels: &[lc_core::user::LanguageLevel],
+29 +     levels: &[LanguageLevel],
+   |
+
+warning: unused import: `RequestContext`
+  --> engine/src/pipeline.rs:13:38
+   |
+13 | ...LlmBackend, RequestContext};
+   |                ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Prompt`
+  --> engine/src/pipeline.rs:20:40
+   |
+20 | ...ompletionModel, Prompt};
+   |                    ^^^^^^
+
+warning: unused import: `rig::message::Message`
+  --> engine/src/pipeline.rs:21:5
+   |
+21 | use rig::message::Message;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::llm_backend::RequestContext`
+ --> engine/src/usage.rs:3:5
+  |
+3 | use crate::llm_backend::RequestContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0308]: `match` arms have incompatible types
+   --> engine/src/pipeline.rs:304:21
+    |
+304 | /                     $m.completion_request(&user_content)
+305 | |                       .preamble(system_content.clone())
+306 | |                       .temperature(self.generator_temperatu...
+307 | |                       .max_tokens(self.generator_max_tokens...
+308 | |                       .output_schema(rig_schema.clone())
+309 | |                       .send()
+310 | |                       .await
+    | |                            ^
+    | |                            |
+    | |____________________________expected `CompletionResponse`, found `GenerateContentResponse`
+    | |____________________________this is found to be of type `Result<rig::completion::CompletionResponse<rig::providers::openai::CompletionResponse>, rig::completion::CompletionError>`
+    |                              this is found to be of type `Result<rig::completion::CompletionResponse<rig::providers::openai::CompletionResponse>, rig::completion::CompletionError>`
+...
+314 | |             let response = match &*client {
+    | |                            -------------- `match` arms have incompatible types
+...   |
+317 | |                 LlmBackend::Google(m) => execute_rig!(m),
+    | |                                          --------------- in this macro invocation
+    |
+    = note: expected enum `Result<..., ...>`
+               found enum `Result<rig::completion::CompletionResponse<GenerateContentResponse>, _>`
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-8348925382639420809.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the macro `execute_rig` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: no method named `model` found for reference `&CompletionModel` in the current scope
+   --> engine/src/pipeline.rs:322:55
+    |
+322 | ...openai", m.model().to_string()),
+    |               ^^^^^-- help: remove the arguments
+    |               |
+    |               field, not a method
+    |
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-9964436501165066070.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0599]: no method named `model` found for reference `&CompletionModel` in the current scope
+   --> engine/src/pipeline.rs:324:55
+    |
+324 | ...google", m.model().to_string()),
+    |               ^^^^^-- help: remove the arguments
+    |               |
+    |               field, not a method
+    |
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-18327171919880408064.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+   --> engine/src/pipeline.rs:334:35
+    |
+334 | ...r: provider_str.to_string(),
+    |       ^^^^^^^^^^^^ cannot infer type
+
+error[E0277]: `?` couldn't convert the error to `std::string::String`
+   --> engine/src/pipeline.rs:639:83
+    |
+639 | ... = serde_json::from_value(item_schema)?;
+    |       -----------------------------------^ unsatisfied trait bound
+    |       |
+    |       this can't be annotated with `?` because it has type `Result<_, serde_json::Error>`
+    |
+    = help: the trait `From<serde_json::Error>` is not implemented for `std::string::String`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the following other types implement trait `From<T>`:
+              `std::string::String` implements `From<&mut str>`
+              `std::string::String` implements `From<&std::string::String>`
+              `std::string::String` implements `From<&str>`
+              `std::string::String` implements `From<Uuid>`
+              `std::string::String` implements `From<char>`
+              `std::string::String` implements `From<UriTemplateString>`
+              `std::string::String` implements `From<RiAbsoluteString<...>>`
+              `std::string::String` implements `From<RiFragmentString<...>>`
+            and 7 others
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-17186248240773664054.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0308]: `match` arms have incompatible types
+   --> engine/src/pipeline.rs:644:21
+    |
+644 | /                     $m.completion_request(&user_content)
+645 | |                       .preamble(system_content.clone())
+646 | |                       .temperature(self.generator_temperature as ...
+647 | |                       .max_tokens(self.generator_max_tokens as u64)
+648 | |                       .output_schema(rig_schema.clone())
+649 | |                       .send()
+650 | |                       .await
+    | |                            ^
+    | |                            |
+    | |____________________________expected `CompletionResponse`, found `GenerateContentResponse`
+    | |____________________________this is found to be of type `Result<rig::completion::CompletionResponse<rig::providers::openai::CompletionResponse>, rig::completion::CompletionError>`
+    |                              this is found to be of type `Result<rig::completion::CompletionResponse<rig::providers::openai::CompletionResponse>, rig::completion::CompletionError>`
+...
+654 | |             let response = match &*client {
+    | |                            -------------- `match` arms have incompatible types
+...   |
+657 | |                 LlmBackend::Google(m) => execute_rig_retry!(m),
+    | |                                          --------------------- in this macro invocation
+    |
+    = note: expected enum `Result<..., ...>`
+               found enum `Result<rig::completion::CompletionResponse<GenerateContentResponse>, _>`
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-8348925382639420809.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the macro `execute_rig_retry` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: no method named `model` found for reference `&CompletionModel` in the current scope
+   --> engine/src/pipeline.rs:662:55
+    |
+662 | ...openai", m.model().to_string()),
+    |               ^^^^^-- help: remove the arguments
+    |               |
+    |               field, not a method
+    |
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-12443712882997012413.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0599]: no method named `model` found for reference `&CompletionModel` in the current scope
+   --> engine/src/pipeline.rs:664:55
+    |
+664 | ...google", m.model().to_string()),
+    |               ^^^^^-- help: remove the arguments
+    |               |
+    |               field, not a method
+    |
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-9477652297194153227.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0282]: type annotations needed
+   --> engine/src/pipeline.rs:674:35
+    |
+674 | ...r: provider_str.to_string(),
+    |       ^^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no function or associated item named `from_url` found for struct `Client<OpenAIResponsesExt, _>` in the current scope
+   --> engine/src/llm_backend.rs:90:62
+    |
+ 90 | ...i::Client::from_url(api_key, base_url);
+    |               ^^^^^^^^ function or associated item not found in `Client<OpenAIResponsesExt, _>`
+    |
+note: if you're trying to build a new `Client<OpenAIResponsesExt, _>`, consider using `Client::<Ext>::new` which returns `Result<Client<_>, rig::http_client::Error>`
+   --> /Users/marin.decanini/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rig-core-0.33.0/src/client/mod.rs:267:5
+    |
+267 | /     pub fn new(
+268 | |         api_key: impl Into<<Ext::Build...
+269 | |     ) -> http_client::Result<Self> {
+    | |__________________________________^
+    = note: the function or associated item was found for
+            - `Client<LlamafileExt>`
+help: there is an associated function `from` with a similar name
+   --> /private/tmp/rust-20260212-8302-1nmtix/rustc-1.93.1-src/library/core/src/convert/mod.rs:592:5
+
+error[E0599]: no function or associated item named `new` found for struct `ClientBuilder<Ext, ApiKey, H>` in the current scope
+  --> engine/src/llm_backend.rs:94:72
+   |
+94 | ...ientBuilder::new(api_key)
+   |                 ^^^ function or associated item not found in `ClientBuilder<..., ..., _>`
+   |
+   = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-11043632470905194749.txt'
+   = note: consider using `--verbose` to print the full type name to the console
+
+error[E0599]: no method named `completion_model` found for enum `Result<T, E>` in the current scope
+   --> engine/src/llm_backend.rs:104:40
+    |
+104 | ...e(client.completion_model(model)))
+    |             ^^^^^^^^^^^^^^^^ method not found in `Result<Client<...>, ...>`
+    |
+    = note: the full name for the type has been written to '/Users/marin.decanini/Documents/PROJETS/Panglot/target/debug/deps/engine-c00b275470b38af5.long-type-961844999410713888.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0560]: struct `LanguageLevel` has no field named `language`
+  --> engine/src/pipeline.rs:32:9
+   |
+32 |         language: l.language.clone(),
+   |         ^^^^^^^^ `LanguageLevel` does not have this field
+   |
+   = note: available fields are: `iso_639_3`
+
+Some errors have detailed explanations: E0277, E0282, E0308, E0425, E0560, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `engine` (lib) generated 4 warnings
+error: could not compile `engine` (lib) due to 15 previous errors; 4 warnings emitted

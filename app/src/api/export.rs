@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
-use engine::llm_client::RequestContext;
+use engine::llm_backend::RequestContext;
 use engine::skill_tree;
 use std::fs;
 use anki_bridge::DeckBuilder;

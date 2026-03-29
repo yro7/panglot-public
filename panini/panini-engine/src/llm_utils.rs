@@ -9,13 +9,11 @@ pub fn clean_llm_json(raw: &str) -> &str {
 
 /// Normalizes `"pos"` field values in a JSON string before deserialization:
 /// 1. Lowercases all `"pos": "..."` values
-/// 2. Maps common UD abbreviations to canonical enum names (e.g. `adj` → `adjective`)
-///
-/// This is a defensive pre-processing step so the morphology enum doesn't need
-/// dozens of `#[serde(alias)]` annotations.
+/// 2. Maps common UD abbreviations AND long-form aliases to canonical enum names
 pub fn normalize_pos_tags(json: &str) -> String {
-    // UD abbreviation → canonical lowercase enum variant
+    // UD abbreviation / long-form alias → canonical lowercase enum variant
     let ud_map: &[(&str, &str)] = &[
+        // UD tag abbreviations
         ("adj",   "adjective"),
         ("adp",   "adposition"),
         ("adv",   "adverb"),
@@ -34,9 +32,16 @@ pub fn normalize_pos_tags(json: &str) -> String {
         ("conj",  "coordinating_conjunction"),
         ("interj","interjection"),
         ("sym",   "symbol"),
-        ("punc",   "punctuation"),
-        ("punct",   "punctuation"),
+        ("punc",  "punctuation"),
+        ("punct", "punctuation"),
         ("x",     "other"),
+        // Long-form aliases that some LLMs emit
+        ("preposition",              "adposition"),
+        ("conjunction",              "coordinating_conjunction"),
+        ("coordinating conjunction", "coordinating_conjunction"),
+        ("subordinating conjunction","subordinating_conjunction"),
+        ("proper noun",              "proper_noun"),
+        ("propernoun",               "proper_noun"),
     ];
 
     // Regex: match `"pos"` (with optional whitespace) `:` string value
@@ -49,7 +54,6 @@ pub fn normalize_pos_tags(json: &str) -> String {
             .map(|(_, canonical)| *canonical)
             .unwrap_or_else(|| {
                 // Not in the map — use the lowercased value as-is
-                // (leak is fine here, it's a small bounded set of POS tags)
                 return &raw_val;
             });
         format!(r#""pos": "{}""#, normalized)
@@ -76,6 +80,15 @@ mod tests {
 
         let input3 = r#"{"pos": "ADP", "lemma": "na"}"#;
         assert_eq!(normalize_pos_tags(input3), r#"{"pos": "adposition", "lemma": "na"}"#);
+    }
+
+    #[test]
+    fn normalize_pos_maps_long_form_aliases() {
+        let input = r#"{"pos": "preposition", "lemma": "w"}"#;
+        assert_eq!(normalize_pos_tags(input), r#"{"pos": "adposition", "lemma": "w"}"#);
+
+        let input2 = r#"{"pos": "Preposition", "lemma": "na"}"#;
+        assert_eq!(normalize_pos_tags(input2), r#"{"pos": "adposition", "lemma": "na"}"#);
     }
 
     #[test]

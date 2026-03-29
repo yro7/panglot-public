@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use lc_core::storage::{NewDeckData, NewCardEntry};
+use lc_core::storage::{NewDeckData};
 
 // ----- Shared model definition (used by export_apkg) -----
 

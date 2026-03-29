@@ -184,6 +184,7 @@ impl Default for UserSettingsDefaultsConfig {
 #[derive(Debug, Deserialize)]
 pub struct PathsConfig {
     pub output_dir: String,
+    #[allow(dead_code)]
     pub audio_staging_dir: String,
     /// URL to the AnkiConnect add-on running locally.
     /// Default: http://localhost:8765

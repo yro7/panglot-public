@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::analyzer::DynLexiconTracker;
 use engine::card_models::CardModelId;
-use engine::llm_client::RequestContext;
+use engine::llm_backend::RequestContext;
 use engine::pipeline::DynGeneratedCard;
 use engine::skill_tree;
 use lc_core::db::DraftCard;

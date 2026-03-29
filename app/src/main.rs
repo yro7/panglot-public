@@ -9,7 +9,7 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use lc_core::traits::Language;
-use engine::llm_client::{LlmHttpClient, LlmProvider};
+use engine::llm_backend::LlmProvider;
 use engine::pipeline::{Pipeline, DynPipeline};
 use engine::prompts::PromptConfig;
 use engine::python_sidecar::PythonSidecar;
@@ -29,11 +29,10 @@ use auth::parse_jwk;
 fn build_pipeline<L>(
     lang: L,
     cfg: &config::AppConfig,
-    make_client: &dyn Fn(&str) -> LlmHttpClient,
+    make_client: &dyn Fn(&str) -> anyhow::Result<engine::llm_backend::LlmBackend>,
     sidecar: &Arc<tokio::sync::Mutex<PythonSidecar>>,
     prompt_config: &PromptConfig,
     recorder: &engine::usage::UsageRecorder,
-    provider: &LlmProvider,
 ) -> Box<dyn DynPipeline>
 where
     L: Language + Send + Sync + 'static,
@@ -50,12 +49,9 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     let model = cfg.llm.active_model().expect("model already validated at startup");
-    let base_client = make_client(model);
-    let instrumented = engine::usage::InstrumentedLlmClient::new(
-        base_client, recorder.clone(), provider.to_string(), model.to_string(),
-    );
     let mut pipeline = Pipeline::new(
-        lang, Box::new(instrumented),
+        lang,
+        make_client(model).expect("Failed to create LLM backend"),
         cfg.generator.temperature, cfg.generator.max_tokens,
         cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
         prompt_config.clone(),
@@ -121,15 +117,16 @@ async fn main() -> std::io::Result<()> {
 
     let mut pipelines_map: HashMap<String, Box<dyn DynPipeline>> = HashMap::new();
 
-    // Helper: create an LLM client for a given model
-    let make_client = |model: &str| -> LlmHttpClient {
-        LlmHttpClient::custom(api_key.clone(), base_url.clone(), model.to_string(), provider)
+    let base_url = cfg.llm.base_url.clone().unwrap_or_else(|| provider.default_base_url().to_string());
+    
+    let make_client = |model: &str| -> anyhow::Result<engine::llm_backend::LlmBackend> {
+        engine::llm_backend::LlmBackend::build(provider, model, &api_key, &base_url)
     };
 
     // ── Build pipelines for all registered languages ──
     for &iso in langs::ALL_ISO_CODES {
         if let Some(pipeline) = langs::dispatch_iso!(iso, lang => {
-            build_pipeline(lang, &cfg, &make_client, &sidecar, &prompt_config, &recorder, &provider)
+            build_pipeline(lang, &cfg, &make_client, &sidecar, &prompt_config, &recorder)
         }) {
             tracing::info!(language = pipeline.language_name(), iso, "Loaded language pipeline");
             pipelines_map.insert(iso.to_string(), pipeline);
