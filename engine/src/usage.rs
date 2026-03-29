@@ -1,23 +1,23 @@
 use std::fmt;
-
-use anyhow::Result;
-use async_trait::async_trait;
 use tokio::sync::mpsc;
-
-use crate::llm_client::{CallType, LlmClient, LlmRequest, LlmResponse, RequestContext};
 
 // ── LLM Usage ──
 
 /// A single LLM usage event to be persisted for billing/monitoring.
 #[derive(Debug, Clone)]
-pub struct UsageEvent {
-    pub ctx: RequestContext,
+pub struct LlmProviderUsageEvent {
+    pub user_id: String,
+    pub request_id: String,
+    pub endpoint: String,
+    pub call_type: String,
     pub provider: String,
     pub model: String,
-    pub call_type: CallType,
+    pub language: Option<String>,
     pub tokens_in: u32,
     pub tokens_out: u32,
     pub latency_ms: u64,
+    pub is_error: bool,
+    pub error_message: Option<String>,
 }
 
 // ── Post-Processing Usage ──
@@ -55,7 +55,7 @@ pub struct PostProcessEvent {
 /// Unified event covering both LLM and post-processing operations.
 #[derive(Debug, Clone)]
 pub enum PipelineEvent {
-    Llm(UsageEvent),
+    Llm(LlmProviderUsageEvent),
     PostProcess(PostProcessEvent),
 }
 
@@ -72,8 +72,8 @@ impl UsageRecorder {
         Self { tx }
     }
 
-    /// Record an LLM usage event (backward-compatible wrapper).
-    pub fn record(&self, event: UsageEvent) {
+    /// Record an LLM usage event.
+    pub fn record_llm_call(&self, event: LlmProviderUsageEvent) {
         let _ = self.tx.send(PipelineEvent::Llm(event));
     }
 
@@ -87,39 +87,4 @@ impl UsageRecorder {
 pub fn usage_channel() -> (UsageRecorder, mpsc::UnboundedReceiver<PipelineEvent>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (UsageRecorder::new(tx), rx)
-}
-
-// ── Instrumented LLM Client ──
-
-/// Decorator: wraps any LlmClient, records usage after each successful call.
-pub struct InstrumentedLlmClient<C: LlmClient> {
-    inner: C,
-    recorder: UsageRecorder,
-    provider: String,
-    model: String,
-}
-
-impl<C: LlmClient> InstrumentedLlmClient<C> {
-    pub fn new(inner: C, recorder: UsageRecorder, provider: String, model: String) -> Self {
-        Self { inner, recorder, provider, model }
-    }
-}
-
-#[async_trait]
-impl<C: LlmClient> LlmClient for InstrumentedLlmClient<C> {
-    async fn chat_completion(&self, request: &LlmRequest) -> Result<LlmResponse> {
-        let response = self.inner.chat_completion(request).await?;
-        if let Some(ctx) = &request.request_context {
-            self.recorder.record(UsageEvent {
-                ctx: ctx.clone(),
-                provider: self.provider.clone(),
-                model: self.model.clone(),
-                call_type: request.call_type,
-                tokens_in: response.usage.tokens_in,
-                tokens_out: response.usage.tokens_out,
-                latency_ms: response.latency_ms,
-            });
-        }
-        Ok(response)
-    }
 }

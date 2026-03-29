@@ -85,7 +85,7 @@ pub enum LlmBackend {
 }
 
 impl LlmBackend {
-    pub fn build(provider: LlmProvider, model: &str, api_key: &str, base_url: &str) -> anyhow::Result<Self> {
+    pub fn build(provider: LlmProvider, model: &str, api_key: &str, _base_url: &str) -> anyhow::Result<Self> {
         match provider {
             LlmProvider::OpenAi | LlmProvider::Custom => {
                 let client = rig::providers::openai::Client::new(api_key)

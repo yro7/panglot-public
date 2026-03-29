@@ -546,13 +546,4 @@ mod tests {
         assert!(prompt.contains("EXACTLY ONE JSON object"));
         assert!(!prompt.contains("distinct objects"));
     }
-
-    #[test]
-    fn dump_feature_extractor_schema() {
-        let schema_value = serde_json::to_value(
-            &schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<langs::PolishMorphology>)
-        ).unwrap();
-        let schema = serde_json::to_string_pretty(&schema_value).unwrap();
-        eprintln!("FEATURE EXTRACTOR SCHEMA\n{}", schema);
-    }
 }
