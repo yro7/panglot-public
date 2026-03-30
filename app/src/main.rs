@@ -10,7 +10,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use lc_core::traits::Language;
 use engine::llm_backend::LlmProvider;
-use engine::pipeline::{Pipeline, DynPipeline};
+use engine::pipeline::DynPipeline;
 use engine::prompts::PromptConfig;
 use engine::python_sidecar::PythonSidecar;
 
@@ -49,16 +49,23 @@ where
     L::ExtraFields: schemars::JsonSchema + Send + Sync,
 {
     let model = cfg.llm.active_model().expect("model already validated at startup");
-    let mut pipeline = Pipeline::new(
+    let pipeline_config = engine::pipeline::PipelineConfig {
+        generator_temperature: cfg.generator.temperature,
+        generator_max_tokens: cfg.generator.max_tokens,
+        extractor_temperature: cfg.feature_extractor.temperature,
+        extractor_max_tokens: cfg.feature_extractor.max_tokens,
+        llm_call_timeout: std::time::Duration::from_secs(cfg.llm.call_timeout_secs),
+    };
+    let pipeline = engine::pipeline::PipelineBuilder::new(
         lang,
         make_client(model).expect("Failed to create LLM backend"),
-        cfg.generator.temperature, cfg.generator.max_tokens,
-        cfg.feature_extractor.temperature, cfg.feature_extractor.max_tokens,
+        pipeline_config,
         prompt_config.clone(),
-    );
-    pipeline.set_usage_recorder(recorder.clone());
-    pipeline.add_early_processor(Box::new(engine::post_process::IpaGenerator::new(sidecar.clone())));
-    pipeline.add_early_processor(Box::new(engine::post_process::TtsGenerator::new(sidecar.clone())));
+    )
+    .early_processor(Box::new(engine::post_process::IpaGenerator::new(sidecar.clone())))
+    .early_processor(Box::new(engine::post_process::TtsGenerator::new(sidecar.clone())))
+    .usage_recorder(recorder.clone())
+    .build();
     Box::new(pipeline)
 }
 

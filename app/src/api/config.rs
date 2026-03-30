@@ -82,7 +82,7 @@ pub async fn update_llm_config(
         for pipeline in pipelines.values() {
             match new_client_factory() {
                 Ok(backend) => {
-                    pipeline.swap_llm_client(backend).await;
+                    pipeline.swap_llm_client(backend);
                 }
                 Err(e) => {
                     return HttpResponse::InternalServerError().json(serde_json::json!({

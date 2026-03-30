@@ -1,17 +1,49 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::card_models::CardModelId;
 use engine::llm_backend::RequestContext;
+use engine::pipeline::cards_to_deck_data;
 use engine::skill_tree;
 use std::fs;
 use anki_bridge::DeckBuilder;
 use anki_bridge::AnkiStorageProvider;
-use lc_core::storage::StorageProvider;
+use lc_core::storage::{StorageProvider, NewDeckData};
 
 use crate::state::AppState;
 use crate::auth::AuthUser;
 use super::generation::user_tracker;
 use super::models::{GenerateRequest, ExportResponse};
 use super::tree::build_user_tree;
+
+/// Generates cards via the pipeline and builds a `NewDeckData` for export/push.
+async fn generate_and_build_deck(
+    pipeline: &dyn engine::pipeline::DynPipeline,
+    user_tree: &engine::skill_tree::SkillNode,
+    node_id: &str,
+    card_model_id: CardModelId,
+    card_count: u32,
+    difficulty: u8,
+    body: &GenerateRequest,
+    req_ctx: Option<RequestContext>,
+    data: &AppState,
+    auth: &AuthUser,
+    lang: &str,
+) -> Result<NewDeckData, anyhow::Error> {
+    let llm_sem = data.llm_semaphore.clone();
+    let pp_sem = data.post_process_semaphore.clone();
+    let tracker = user_tracker(data, &auth.user_id, lang).await;
+
+    let cards = pipeline.generate_cards_dyn(
+        user_tree, node_id, card_model_id, card_count, difficulty,
+        body.user_profile.clone(),
+        body.user_prompt.as_deref().map(String::from),
+        body.lexicon_options.clone(),
+        req_ctx, llm_sem, pp_sem, tracker,
+    ).await?;
+
+    let deck_name = pipeline.build_deck_name_dyn(user_tree, node_id, card_model_id)?;
+    let language_code = pipeline.iso_code_str().to_string();
+    Ok(cards_to_deck_data(&cards, deck_name, language_code))
+}
 
 pub async fn export_deck(
     auth: AuthUser,
@@ -54,9 +86,6 @@ pub async fn export_deck(
         });
     }
 
-    let llm_sem = data.llm_semaphore.clone();
-    let pp_sem = data.post_process_semaphore.clone();
-
     let req_ctx = Some(RequestContext {
         user_id: auth.user_id.clone(),
         request_id: uuid::Uuid::new_v4().to_string(),
@@ -64,15 +93,9 @@ pub async fn export_deck(
         language: Some(lang.to_string()),
     });
 
-    let tracker = user_tracker(&data, &auth.user_id, lang).await;
-
-    let export_result = pipeline.generate_deck_data_dyn(
-        &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(),
-        body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(),
-        req_ctx,
-        llm_sem, pp_sem, tracker,
+    let export_result = generate_and_build_deck(
+        pipeline.as_ref(), &user_tree, node_id, card_model_id, card_count, difficulty,
+        &body, req_ctx, &data, &auth, lang,
     ).await;
 
     match export_result {
@@ -155,9 +178,6 @@ pub async fn push_to_anki(
         });
     }
 
-    let llm_sem = data.llm_semaphore.clone();
-    let pp_sem = data.post_process_semaphore.clone();
-
     let req_ctx = Some(RequestContext {
         user_id: auth.user_id.clone(),
         request_id: uuid::Uuid::new_v4().to_string(),
@@ -165,15 +185,9 @@ pub async fn push_to_anki(
         language: Some(lang.to_string()),
     });
 
-    let tracker = user_tracker(&data, &auth.user_id, lang).await;
-
-    let push_result = pipeline.generate_deck_data_dyn(
-        &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(),
-        body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(),
-        req_ctx,
-        llm_sem, pp_sem, tracker,
+    let push_result = generate_and_build_deck(
+        pipeline.as_ref(), &user_tree, node_id, card_model_id, card_count, difficulty,
+        &body, req_ctx, &data, &auth, lang,
     ).await;
 
     match push_result {
@@ -259,9 +273,6 @@ pub async fn push_to_local_db(
         });
     }
 
-    let llm_sem = data.llm_semaphore.clone();
-    let pp_sem = data.post_process_semaphore.clone();
-
     let req_ctx = Some(RequestContext {
         user_id: auth.user_id.clone(),
         request_id: uuid::Uuid::new_v4().to_string(),
@@ -269,15 +280,9 @@ pub async fn push_to_local_db(
         language: Some(lang.to_string()),
     });
 
-    let tracker = user_tracker(&data, &auth.user_id, lang).await;
-
-    let push_result = pipeline.generate_deck_data_dyn(
-        &user_tree, node_id, card_model_id, card_count, difficulty,
-        body.user_profile.clone(),
-        body.user_prompt.as_deref().map(String::from),
-        body.lexicon_options.clone(),
-        req_ctx,
-        llm_sem, pp_sem, tracker,
+    let push_result = generate_and_build_deck(
+        pipeline.as_ref(), &user_tree, node_id, card_model_id, card_count, difficulty,
+        &body, req_ctx, &data, &auth, lang,
     ).await;
 
     match push_result {
