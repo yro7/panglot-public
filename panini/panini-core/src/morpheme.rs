@@ -53,13 +53,14 @@ pub struct WordSegmentation<F> {
 /// should delegate here.
 pub trait Agglutinative: LinguisticDefinition
 where
-    <Self::Morphology as MorphologyInfo>::PosTag: Debug + Clone + Copy + PartialEq + Eq + Hash,
+    <Self::Morphology as MorphologyInfo>::PosTag: Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
     Self::GrammaticalFunction: Debug + Clone + PartialEq
         + Serialize
         + for<'de> Deserialize<'de>
         + schemars::JsonSchema
         + Send
-        + Sync,
+        + Sync
+        + 'static,
 {
     /// The full static inventory of morphemes for this language.
     fn morpheme_inventory() -> &'static [MorphemeDefinition<
@@ -74,7 +75,48 @@ where
     fn validate_and_enrich(
         &self,
         segmentation: &mut Option<Vec<WordSegmentation<Self::GrammaticalFunction>>>,
-    ) -> Result<(), String>;
+    ) -> Result<(), String> {
+        let Some(segs) = segmentation.as_mut() else {
+            return Ok(());
+        };
+
+        let mut errors = Vec::new();
+        let inventory = Self::morpheme_inventory();
+
+        for seg in segs.iter_mut() {
+            let word = &seg.word;
+            for morpheme in seg.morphemes.iter_mut() {
+                let definition = inventory
+                    .iter()
+                    .find(|d| d.base_form == morpheme.base_form);
+
+                let Some(def) = definition else {
+                    errors.push(format!(
+                        "Unknown morpheme base_form '{}' for word '{}'. Use only base_forms from the inventory.",
+                        morpheme.base_form, word
+                    ));
+                    continue;
+                };
+
+                if !def.functions.contains(&morpheme.function) {
+                    if def.functions.len() == 1 {
+                        morpheme.function = def.functions[0].clone();
+                    } else {
+                        errors.push(format!(
+                            "Invalid function {:?} for morpheme '{}' in word '{}'. Valid functions: {:?}",
+                            morpheme.function, morpheme.base_form, word, def.functions
+                        ));
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("\n"))
+        }
+    }
 
     /// Generate the full extraction JSON schema (base morphology + morpheme fields).
     fn build_full_schema() -> serde_json::Value
