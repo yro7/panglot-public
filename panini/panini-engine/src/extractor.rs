@@ -70,7 +70,7 @@ where
     // Convert panini's dynamic schema (serde_json::Value) into schemars::Schema.
     // schemars::Schema is a thin wrapper — this is a lossless round-trip.
     let schema_value = language.build_extraction_schema();
-    let rig_schema: schemars::Schema = serde_json::from_value(schema_value)?;
+    let rig_schema: schemars::Schema = serde_json::from_value(schema_value.clone())?;
 
     let user_message = format!(
         "Extract features from this card:\n{}\n\nTARGET WORDS: {:?}",
@@ -115,19 +115,47 @@ where
     let cleaned = clean_llm_json(&raw_text);
     let normalized = crate::llm_utils::normalize_pos_tags(cleaned);
 
-    let mut response_parsed: FeatureExtractionResponse<L::Morphology, L::GrammaticalFunction> =
-        match serde_json::from_str(&normalized) {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                let err_msg = e.to_string();
-                tracing::warn!(error = %err_msg, "Failed to parse feature extraction response");
-                return Err(ExtractionParseError {
-                    raw_response: normalized,
-                    error_message: err_msg,
+    let mut response_parsed: FeatureExtractionResponse<L::Morphology, L::GrammaticalFunction> = match serde_json::from_str::<serde_json::Value>(&normalized) {
+        Ok(json_value) => {
+            // First pass: validate the JSON DOM against the JSON Schema to collect *all* typing errors
+            if let Ok(validator) = jsonschema::validator_for(&schema_value) {
+                let schema_errors: Vec<_> = validator.iter_errors(&json_value).collect();
+                if !schema_errors.is_empty() {
+                    let mut err_msgs = Vec::new();
+                    for err in schema_errors {
+                        err_msgs.push(format!("- Path: {}: {}", err.instance_path(), err));
+                    }
+                    let err_msg = format!("Schema validation failed with {} errors:\n{}", err_msgs.len(), err_msgs.join("\n"));
+                    tracing::warn!(error = %err_msg, "Schema validation failed — retrying");
+                    return Err(ExtractionParseError {
+                        raw_response: normalized,
+                        error_message: err_msg,
+                    }.into());
                 }
-                .into());
             }
-        };
+
+            // Second pass: strongly-typed struct deserialization (should not fail if schema is valid)
+            match serde_json::from_value(json_value) {
+                Ok(parsed) => parsed,
+                Err(e) => {
+                    let err_msg = format!("Failed to deserialize valid DOM into struct: {}", e);
+                    tracing::warn!(error = %err_msg, "Failed to deserialize");
+                    return Err(ExtractionParseError {
+                        raw_response: normalized,
+                        error_message: err_msg,
+                    }.into());
+                }
+            }
+        }
+        Err(e) => {
+            let err_msg = format!("Invalid JSON syntax: {}", e);
+            tracing::warn!(error = %err_msg, "Failed to parse JSON syntax");
+            return Err(ExtractionParseError {
+                raw_response: normalized,
+                error_message: err_msg,
+            }.into());
+        }
+    };
 
     // Run language-specific post-processing (morpheme validation for agglutinative languages).
     if let Err(e) = language.post_process_extraction(&mut response_parsed.morpheme_segmentation) {

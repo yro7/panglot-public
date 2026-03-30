@@ -249,43 +249,7 @@ impl Agglutinative for Turkish {
         )
     }
 
-    fn validate_and_enrich(
-        &self,
-        segmentation: &mut Option<Vec<WordSegmentation<TurkishGrammaticalFunction>>>,
-    ) -> Result<(), String> {
-        let Some(segs) = segmentation.as_mut() else {
-            return Ok(());
-        };
 
-        for seg in segs.iter_mut() {
-            for morpheme in seg.morphemes.iter_mut() {
-                let definition = TURKISH_MORPHEMES
-                    .iter()
-                    .find(|d| d.base_form == morpheme.base_form);
-
-                let Some(def) = definition else {
-                    return Err(format!(
-                        "Unknown morpheme base_form '{}' for word '{}'. Use only base_forms from the inventory.",
-                        morpheme.base_form, seg.word
-                    ));
-                };
-
-                if !def.functions.contains(&morpheme.function) {
-                    if def.functions.len() == 1 {
-                        morpheme.function = def.functions[0].clone();
-                    } else {
-                        return Err(format!(
-                            "Invalid function {:?} for morpheme '{}' in word '{}'. Valid functions: {:?}",
-                            morpheme.function, morpheme.base_form, seg.word,
-                            def.functions.iter().collect::<Vec<_>>()
-                        ));
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 // ─── LinguisticDefinition implementation ─────────────────────────────────────
