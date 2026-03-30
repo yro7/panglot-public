@@ -38,6 +38,7 @@ llm:
   concurrency:
     max_llm_calls: 10            # semaphore LLM (appels paralleles max)
     max_post_process: 10          # fallback si available_parallelism echoue
+  call_timeout_secs: 120          # timeout par appel LLM individuel (secondes)
 
 # ── LLM — Parametres par call ────────────────────────────────
 generator:
