@@ -1,3 +1,4 @@
+mod add_language;
 mod config;
 
 use anyhow::{Context, Result};
@@ -49,10 +50,42 @@ enum Command {
         /// Optional learner UI language name (e.g. "French").
         #[arg(long, default_value = "English")]
         ui_language: String,
+
+        /// Comma-separated list of components to extract (e.g. "pedagogical_explanation,morphology").
+        /// When omitted, uses the legacy monolithic extraction.
+        #[arg(long)]
+        components: Option<String>,
     },
 
     /// List supported language codes.
     Languages,
+
+    /// Generate a new language implementation using an LLM.
+    AddLanguage {
+        /// Path to the TOML configuration file (for provider/model/api_key).
+        #[arg(long, default_value = "panini.toml")]
+        config: String,
+
+        /// The language to generate (English name, e.g. "Japanese", "Finnish").
+        #[arg(long)]
+        language: String,
+
+        /// ISO 639-3 code (e.g. "jpn", "fin"). If omitted, you must provide it.
+        #[arg(long)]
+        iso_code: Option<String>,
+
+        /// Whether the language is agglutinative (triggers Agglutinative trait generation).
+        #[arg(long, default_value_t = false)]
+        agglutinative: bool,
+
+        /// Sampling temperature for generation.
+        #[arg(long, default_value_t = 0.3)]
+        temperature: f32,
+
+        /// Skip the cargo check validation step.
+        #[arg(long, default_value_t = false)]
+        skip_check: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +110,27 @@ async fn main() -> Result<()> {
                 println!("{code}");
             }
         }
+        Command::AddLanguage {
+            config: config_path,
+            language,
+            iso_code,
+            agglutinative,
+            temperature,
+            skip_check,
+        } => {
+            let config = Config::load(&config_path)
+                .with_context(|| format!("Loading config from '{config_path}'"))?;
+
+            add_language::run(
+                &config,
+                &language,
+                iso_code.as_deref(),
+                agglutinative,
+                temperature,
+                skip_check,
+            )
+            .await?;
+        }
         Command::Extract {
             config: config_path,
             text,
@@ -84,6 +138,7 @@ async fn main() -> Result<()> {
             temperature,
             max_tokens,
             ui_language,
+            components,
         } => {
             let config = Config::load(&config_path)
                 .with_context(|| format!("Loading config from '{config_path}'"))?;
@@ -100,9 +155,16 @@ async fn main() -> Result<()> {
                 user_prompt: None,
             };
 
-            let result = run_extraction(&config, &prompts, &request, temperature, max_tokens)
-                .await
-                .context("Feature extraction failed")?;
+            let result = if let Some(comp_str) = components {
+                let keys: Vec<&str> = comp_str.split(',').map(|s| s.trim()).collect();
+                run_component_extraction(&config, &prompts, &request, &keys, temperature, max_tokens)
+                    .await
+                    .context("Component extraction failed")?
+            } else {
+                run_extraction(&config, &prompts, &request, temperature, max_tokens)
+                    .await
+                    .context("Feature extraction failed")?
+            };
 
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
@@ -167,6 +229,69 @@ async fn run_extraction(
                 prompts,
             )
             .await
+        }
+    }
+}
+
+async fn run_component_extraction(
+    config: &Config,
+    prompts: &ExtractorPrompts,
+    request: &ExtractionRequest,
+    component_keys: &[&str],
+    temperature: f32,
+    max_tokens: u32,
+) -> Result<serde_json::Value> {
+    match config.provider {
+        Provider::Openai => {
+            let client = rig::providers::openai::Client::new(&config.api_key)
+                .map_err(|e| anyhow::anyhow!("Failed to create OpenAI client: {e}"))?;
+            let model = client.completion_model(&config.model);
+            let result = registry::extract_erased_with_components(
+                &config.language,
+                &model,
+                request,
+                Some(component_keys),
+                temperature,
+                max_tokens,
+                None,
+                prompts,
+            )
+            .await?;
+            Ok(result.into_raw())
+        }
+        Provider::Anthropic => {
+            let client = rig::providers::anthropic::Client::new(&config.api_key)
+                .map_err(|e| anyhow::anyhow!("Failed to create Anthropic client: {e}"))?;
+            let model = client.completion_model(&config.model);
+            let result = registry::extract_erased_with_components(
+                &config.language,
+                &model,
+                request,
+                Some(component_keys),
+                temperature,
+                max_tokens,
+                None,
+                prompts,
+            )
+            .await?;
+            Ok(result.into_raw())
+        }
+        Provider::Google => {
+            let client = rig::providers::gemini::Client::new(&config.api_key)
+                .map_err(|e| anyhow::anyhow!("Failed to create Gemini client: {e}"))?;
+            let model = client.completion_model(&config.model);
+            let result = registry::extract_erased_with_components(
+                &config.language,
+                &model,
+                request,
+                Some(component_keys),
+                temperature,
+                max_tokens,
+                None,
+                prompts,
+            )
+            .await?;
+            Ok(result.into_raw())
         }
     }
 }
