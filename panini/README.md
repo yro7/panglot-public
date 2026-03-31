@@ -6,6 +6,135 @@ Pāṇini lets you define *what* linguistic features to extract and *how* to ext
 
 Pāṇini doesn't impose a universal schema — you define exactly the features that matter for your language, and the framework builds the extraction pipeline around your definitions.
 
+## Composable analysis components
+
+Extraction is built around **composable components** (`AnalysisComponent`). Each component owns one top-level key in the JSON output and contributes its own schema fragment and prompt fragment. You choose which components to run per request — pick only what you need.
+
+By default, all compatible components are run. You can restrict the selection with `--components`:
+
+```bash
+# Run only morphology and Leipzig glossing
+panini extract --components morphology,leipzig_alignment \
+  --text "Gila abur-u-n ferma güğüna amuq'-da-č." \
+  --target "amuq'-da-č"
+
+# Run everything (default)
+panini extract --text "Dał kotowi mleko." --target kotowi
+```
+
+From the Rust API, pass an optional list of component keys to `extract_erased_with_components()`:
+
+```rust
+let result = registry::extract_erased_with_components(
+    "pol", &model, &request,
+    Some(&["morphology", "pedagogical_explanation"]),
+    0.2, 4096, None, &prompts,
+).await?;
+```
+
+### Available components
+
+| Key                       | Component                | Description                                                                                     | Compatibility                 |
+| ------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------- |
+| `morphology`              | `MorphologyAnalysis`     | POS tagging, lemmatization, case/tense/aspect/gender — language-specific morphological features | All languages                 |
+| `pedagogical_explanation` | `PedagogicalExplanation` | Structured HTML explanation for learners (translations, analysis, grammar recap)                | All languages                 |
+| `morpheme_segmentation`   | `MorphemeSegmentation`   | Morpheme-by-morpheme segmentation with grammatical function labels                              | Agglutinative languages only* |
+| `multiword_expressions`   | `MultiwordExpressions`   | Extracts idioms, collocations, and phrasal expressions                                          | All languages                 |
+| `leipzig_alignment`       | `LeipzigAlignment`       | Leipzig-style interlinear morpheme-by-morpheme gloss (Leipzig Glossing Rules)                   | All languages                 |
+
+*Agglutinative languages are marked with a "Agglutinative" trait implementation in the framework. You can define the implementation for any language, even for low-agglutination languages like french, etc.
+
+### Output examples
+
+#### `morphology`
+
+Polish — `"Studentka czyta interesującą książkę w bibliotece."`
+
+```json
+{
+  "morphology": {
+    "target_features": [
+      { "word": "studentka", "morphology": { "pos": "noun", "lemma": "studentka", "gender": "feminine", "case": "nominative" } },
+      { "word": "czyta",     "morphology": { "pos": "verb", "lemma": "czytać", "tense": "present", "aspect": "imperfective" } }
+    ],
+    "context_features": [
+      { "word": "interesującą", "morphology": { "pos": "adjective", "lemma": "interesujący", "gender": "feminine", "case": "accusative" } },
+      { "word": "w",            "morphology": { "pos": "adposition", "lemma": "w", "governed_case": "locative" } },
+      { "word": "bibliotece",   "morphology": { "pos": "noun", "lemma": "biblioteka", "gender": "feminine", "case": "locative" } }
+    ]
+  }
+}
+```
+
+#### `pedagogical_explanation`
+
+```json
+{
+  "pedagogical_explanation": "<p><b>Translations:</b><br><i>Lit:</i> Student-female reads interesting book in library.<br><i>Nat:</i> The (female) student reads an interesting book in the library.</p><p><b>Analysis:</b></p><ul><li><span style='color:#3498db'><b>studentka</b></span> — nominative (subject)...</li></ul><div style='background-color:#3a3a3a;color:#e0e0e0;padding:10px;border-radius:5px;margin-top:10px;border-left:4px solid #3498db'><b>Grammar Recap:</b><br>Accusative case marks the direct object...</div>"
+}
+```
+
+#### `morpheme_segmentation`
+
+Turkish — `"Öğrenciler kütüphanede kitap okuyorlar."`
+
+```json
+{
+  "morpheme_segmentation": [
+    {
+      "word": "öğrenciler",
+      "morphemes": [
+        { "surface": "ler", "base_form": "lAr", "function": { "category": "number", "value": "plural" } }
+      ]
+    },
+    {
+      "word": "okuyorlar",
+      "morphemes": [
+        { "surface": "yor", "base_form": "(I)yor", "function": { "category": "tense", "value": "present" } },
+        { "surface": "lar", "base_form": "lAr", "function": { "category": "agreement", "person": "third", "number": "plural" } }
+      ]
+    }
+  ]
+}
+```
+
+#### `multiword_expressions`
+
+Polish — `"Dał nogę przed policją."`
+
+```json
+{
+  "multiword_expressions": [
+    {
+      "expression": "dać nogę",
+      "translation": "to run away / to bolt",
+      "type": "idiom"
+    }
+  ]
+}
+```
+
+#### `leipzig_alignment`
+
+Lezgian — `"Gila abur-u-n ferma hamišaluǧ güǧüna amuq'-da-č."`
+
+```json
+{
+  "leipzig_alignment": {
+    "original_script": "Gila abur-u-n ferma hamišaluǧ güǧüna amuq'-da-č.",
+    "words": [
+      { "source": "Gila",           "gloss": "now" },
+      { "source": "abur-u-n",       "gloss": "they-OBL-GEN" },
+      { "source": "ferma",          "gloss": "farm" },
+      { "source": "hamišaluǧ",      "gloss": "forever" },
+      { "source": "güǧüna",         "gloss": "behind" },
+      { "source": "amuq'-da-č",     "gloss": "stay-FUT-NEG" }
+    ],
+    "free_translation": "Now their farm will not stay behind forever."
+  }
+}
+```
+
 ## Usage
 
 ### As a library (Rust API)
@@ -91,76 +220,30 @@ panini extract \
   --text "Studentka czyta interesującą książkę." \
   --target studentka --target czyta --target książkę
 
+# Select specific components
+panini extract --config panini.toml \
+  --text "Dał kotowi mleko." --target kotowi \
+  --components morphology,leipzig_alignment
+
 # List supported languages
 panini languages
 
 # Pipe output to jq
 panini extract --config panini.toml --text "…" --target "…" \
-  | jq '.target_features'
+  | jq '.morphology.target_features'
 ```
 
 **CLI options**
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--config` | `panini.toml` | Path to TOML config |
-| `--text` | *(required)* | Sentence / card content to analyse |
-| `--target` | *(required, repeatable)* | Target word(s) to focus extraction on |
-| `--temperature` | `0.2` | Sampling temperature |
-| `--max-tokens` | `4096` | Max tokens for LLM response |
-| `--ui-language` | `English` | Learner's UI language for pedagogical explanation |
-
-## Examples
-
-### Polish — case & aspect
-
-**Input:** `Studentka czyta interesującą książkę w bibliotece.`  
-**Targets:** `studentka`, `czyta`, `książkę`
-
-```json
-{
-  "target_features": [
-    { "word": "studentka", "morphology": { "pos": "noun",  "lemma": "studentka", "gender": "feminine", "case": "nominative" } },
-    { "word": "czyta",     "morphology": { "pos": "verb",  "lemma": "czytać",    "tense": "present",   "aspect": "imperfective" } },
-    { "word": "książkę",   "morphology": { "pos": "noun",  "lemma": "książka",   "gender": "feminine", "case": "accusative" } }
-  ],
-  "context_features": [
-    { "word": "interesującą", "morphology": { "pos": "adjective",  "lemma": "interesujący", "gender": "feminine", "case": "accusative" } },
-    { "word": "w",            "morphology": { "pos": "adposition", "lemma": "w",            "governed_case": "locative" } },
-    { "word": "bibliotece",   "morphology": { "pos": "noun",       "lemma": "biblioteka",   "gender": "feminine", "case": "locative" } }
-  ]
-}
-```
-
----
-
-### Turkish — agglutinative morpheme segmentation
-
-**Input:** `Öğrenciler kütüphanede kitap okuyorlar.`  
-**Targets:** `öğrenciler`, `okuyorlar`
-
-```json
-{
-  "target_features": [
-    { "word": "öğrenciler", "morphology": { "pos": "noun", "lemma": "öğrenci", "case": "nominative", "number": "plural" } },
-    { "word": "okuyorlar",  "morphology": { "pos": "verb", "lemma": "okumak",  "tense": "present", "mood": "indicative",
-                                            "voice": "active", "person": "third", "number": "plural", "polarity": "positive" } }
-  ],
-  "morpheme_segmentation": [
-    {
-      "word": "öğrenciler",
-      "morphemes": [{ "surface": "ler", "base_form": "lAr", "function": { "category": "number", "value": "plural" } }]
-    },
-    {
-      "word": "okuyorlar",
-      "morphemes": [
-        { "surface": "yor", "base_form": "(I)yor", "function": { "category": "tense",     "value": "present" } },
-        { "surface": "lar", "base_form": "lAr",    "function": { "category": "agreement", "person": "third", "number": "plural" } }
-      ]
-    }
-  ]
-}
-```
+| Flag            | Default                  | Description                                       |
+| --------------- | ------------------------ | ------------------------------------------------- |
+| `--config`      | `panini.toml`            | Path to TOML config                               |
+| `--text`        | *(required)*             | Sentence / card content to analyse                |
+| `--target`      | *(required, repeatable)* | Target word(s) to focus extraction on             |
+| `--components`  | *(all)*                  | Comma-separated list of components to run         |
+| `--temperature` | `0.2`                    | Sampling temperature                              |
+| `--max-tokens`  | `4096`                   | Max tokens for LLM response                       |
+| `--ui-language` | `English`                | Learner's UI language for pedagogical explanation |
 
 ## What you define, what the framework does
 
@@ -188,13 +271,24 @@ panini extract --config panini.toml --text "…" --target "…" \
 
 ```
 panini/              # Facade crate, re-exports everything
-panini-core/         # Traits, domain types, morphology enums
-panini-engine/       # LLM extraction pipeline, prompt assembly
+panini-core/         # Traits, domain types, morphology enums, components
+  src/components/    # AnalysisComponent implementations
+panini-engine/       # LLM extraction pipeline, prompt assembly, schema composer
 panini-langs/        # Per-language implementations (Polish, Arabic, Turkish)
 panini-macro/        # #[derive(MorphologyInfo)] proc macro
 ```
 
 ## Adding a language
+
+### Automatically with the LLM script
+
+Fill your `panini.toml` config, choose a language (with its ISO 639-3 code) and run:
+
+`cargo run -p panini-cli -- add-language --language "French" --iso-code fra --config panini.toml`
+
+You should ALWAYS check the file output, especially for linguistic definitions, to ensure the LLM properly described the language.
+
+### Manually
 
 1. Create `panini-langs/src/<language>.rs`
 2. Define a `Morphology` enum with `#[derive(MorphologyInfo)]` and `#[serde(tag = "pos")]` -- every variant must have `lemma: String` as its first field
@@ -202,6 +296,67 @@ panini-macro/        # #[derive(MorphologyInfo)] proc macro
 4. For agglutinative languages, also implement `Agglutinative` with a morpheme inventory
 
 See `panini-langs/src/polish.rs` or `panini-langs/src/turkish.rs` as references.
+
+## Adding an analysis component
+
+To add a new component (e.g. `leipzig_alignment`), touch 3 files:
+
+**1. Create the component** in `panini-core/src/components/<name>.rs`:
+
+```rust
+use std::fmt::Debug;
+use crate::component::{AnalysisComponent, ComponentContext};
+use crate::traits::LinguisticDefinition;
+
+#[derive(Debug, Clone)]
+pub struct MyComponent;
+
+impl<L: LinguisticDefinition> AnalysisComponent<L> for MyComponent {
+    fn name(&self) -> &'static str { "My Component" }
+    fn schema_key(&self) -> &'static str { "my_component" }
+
+    fn schema_fragment(&self, _lang: &L) -> serde_json::Value {
+        // JSON Schema for the component's output
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "field": { "type": "string" }
+            },
+            "required": ["field"]
+        })
+    }
+
+    fn prompt_fragment(&self, _lang: &L, _ctx: &ComponentContext) -> String {
+        "Instructions for the LLM on how to produce this component's output.".to_string()
+    }
+
+    // Optional overrides:
+    // fn is_compatible(&self, lang: &L) -> bool  — filter by language/typology
+    // fn output_instruction(&self) -> Option<&str>  — extra output rules
+    // fn pre_process(&self, raw: &str) -> String  — clean raw JSON before parsing
+    // fn validate(&self, lang: &L, section: &Value) -> Result<(), String>
+    // fn post_process(&self, lang: &L, section: &mut Value) -> Result<(), String>
+}
+```
+
+**2. Register the module** in `panini-core/src/components/mod.rs`:
+
+```rust
+pub mod my_component;
+pub use my_component::MyComponent;
+```
+
+**3. Add to the registry** in `panini-langs/src/registry.rs` (`extract_for_language`):
+
+```rust
+let my_comp = MyComponent;
+let all_components: Vec<(&str, &dyn AnalysisComponent<L>)> = vec![
+    // ...existing...
+    ("my_component", &my_comp),
+];
+```
+
+That's it. The component is automatically integrated into the schema and prompt via `compose_schema()` / `compose_prompt()`. Use it with `--components my_component`.
 
 ## Building
 

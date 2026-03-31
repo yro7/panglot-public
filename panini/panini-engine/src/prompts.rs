@@ -53,12 +53,8 @@ impl ExtractorPrompts {
 
 // ----- Extraction Request -----
 
-/// A language-level known language + proficiency.
-#[derive(Debug, Clone)]
-pub struct LanguageLevel {
-    pub iso_639_3: String,
-    pub level: String,
-}
+/// Re-export from panini-core for backwards compatibility.
+pub use panini_core::component::LanguageLevel;
 
 /// Generic extraction request — decoupled from Panglot's GenerationRequest.
 pub struct ExtractionRequest {
