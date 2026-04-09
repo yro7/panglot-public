@@ -2377,9 +2377,11 @@ version = "0.1.0"
 dependencies = [
  "iso15924",
  "isolang",
+ "regex",
  "schemars",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

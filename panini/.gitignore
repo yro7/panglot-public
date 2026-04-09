@@ -6,3 +6,8 @@ Cargo.lock
 *.db
 .venv
 panini.toml
+
+techn_debt.md
+CLAUDE.md
+ROADMAP.md
+implementation_plan.md

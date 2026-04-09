@@ -8,111 +8,10 @@ use rig::completion::CompletionModel;
 
 use panini_core::component::{AnalysisComponent, ExtractionResult};
 use panini_core::components::*;
-use panini_engine::{extract_features_via_llm, extract_with_components, ExtractionRequest, PreviousAttempt};
+use panini_engine::{extract_features_via_llm, extract_with_components, ExtractionOptions, ExtractionRequest, PreviousAttempt};
 use panini_engine::prompts::ExtractorPrompts;
 
-use crate::{Arabic, French, Polish, Turkish};
-
-/// Extracts morphological features for any supported language, returning
-/// the result serialized as a `serde_json::Value`.
-///
-/// This is the legacy entry-point — returns the monolithic `FeatureExtractionResponse`.
-pub async fn extract_erased<M: CompletionModel>(
-    lang_code: &str,
-    model: &M,
-    request: &ExtractionRequest,
-    temperature: f32,
-    max_tokens: u32,
-    previous_attempt: Option<&PreviousAttempt>,
-    extractor_prompts: &ExtractorPrompts,
-) -> Result<serde_json::Value> {
-    match lang_code {
-        "pol" => {
-            let result = extract_features_via_llm(
-                &Polish,
-                model,
-                request,
-                temperature,
-                max_tokens,
-                previous_attempt,
-                extractor_prompts,
-            )
-            .await?;
-            Ok(serde_json::to_value(&result)?)
-        }
-        "tur" => {
-            let result = extract_features_via_llm(
-                &Turkish,
-                model,
-                request,
-                temperature,
-                max_tokens,
-                previous_attempt,
-                extractor_prompts,
-            )
-            .await?;
-            Ok(serde_json::to_value(&result)?)
-        }
-        "ara" => {
-            let result = extract_features_via_llm(
-                &Arabic,
-                model,
-                request,
-                temperature,
-                max_tokens,
-                previous_attempt,
-                extractor_prompts,
-            )
-            .await?;
-            Ok(serde_json::to_value(&result)?)
-        }
-        "fra" => {
-            let result = extract_features_via_llm(
-                &French,
-                model,
-                request,
-                temperature,
-                max_tokens,
-                previous_attempt,
-                extractor_prompts,
-            )
-            .await?;
-            Ok(serde_json::to_value(&result)?)
-        }
-        _ => Err(anyhow!("Unsupported language: {lang_code}")),
-    }
-}
-
-/// Extracts features using composable components for any supported language.
-///
-/// `component_keys` selects which analyses to include (e.g. `["pedagogical_explanation", "morphology"]`).
-/// If `None`, all compatible components are used.
-pub async fn extract_erased_with_components<M: CompletionModel>(
-    lang_code: &str,
-    model: &M,
-    request: &ExtractionRequest,
-    component_keys: Option<&[&str]>,
-    temperature: f32,
-    max_tokens: u32,
-    previous_attempt: Option<&PreviousAttempt>,
-    extractor_prompts: &ExtractorPrompts,
-) -> Result<ExtractionResult> {
-    match lang_code {
-        "pol" => {
-            extract_for_language(&Polish, model, request, component_keys, temperature, max_tokens, previous_attempt, extractor_prompts).await
-        }
-        "tur" => {
-            extract_for_language(&Turkish, model, request, component_keys, temperature, max_tokens, previous_attempt, extractor_prompts).await
-        }
-        "ara" => {
-            extract_for_language(&Arabic, model, request, component_keys, temperature, max_tokens, previous_attempt, extractor_prompts).await
-        }
-        "fra" => {
-            extract_for_language(&French, model, request, component_keys, temperature, max_tokens, previous_attempt, extractor_prompts).await
-        }
-        _ => Err(anyhow!("Unsupported language: {lang_code}")),
-    }
-}
+use crate::{Arabic, French, Italian, Polish, Turkish};
 
 /// Helper: build the component list for a concrete language and dispatch.
 async fn extract_for_language<L, M>(
@@ -171,23 +70,107 @@ where
         None => all_components.iter().map(|(_, c)| *c).collect(),
     };
 
-    extract_with_components(
-        lang,
-        model,
-        request,
-        &selected,
+    let options = ExtractionOptions {
         temperature,
         max_tokens,
         previous_attempt,
         extractor_prompts,
+    };
+
+    Ok(extract_with_components(
+        lang,
+        model,
+        request,
+        &selected,
+        options,
     )
-    .await
+    .await?)
 }
 
-/// Returns all supported ISO 639-3 language codes.
-pub fn supported_languages() -> &'static [&'static str] {
-    &["pol", "tur", "ara", "fra"]
+/// Macro to generate the registry functions for all languages.
+/// Each language must be a unit struct implementing LinguisticDefinition.
+macro_rules! generate_registry {
+    ($($lang:ident),* $(,)?) => {
+        /// Extracts morphological features for any supported language, returning
+        /// the result serialized as a `serde_json::Value`.
+        ///
+        /// This is the legacy entry-point — returns the monolithic `FeatureExtractionResponse`.
+        pub async fn extract_erased<M: CompletionModel>(
+            lang_code: &str,
+            model: &M,
+            request: &ExtractionRequest,
+            temperature: f32,
+            max_tokens: u32,
+            previous_attempt: Option<&PreviousAttempt>,
+            extractor_prompts: &ExtractorPrompts,
+        ) -> Result<serde_json::Value> {
+            let options = ExtractionOptions {
+                temperature,
+                max_tokens,
+                previous_attempt,
+                extractor_prompts,
+            };
+
+            match lang_code {
+                $(
+                    <$lang as panini_core::LinguisticDefinition>::ISO_CODE => {
+                        let result = extract_features_via_llm(
+                            &$lang,
+                            model,
+                            request,
+                            options,
+                        )
+                        .await?;
+                        Ok(serde_json::to_value(&result)?)
+                    }
+                )*
+                _ => Err(anyhow!("Unsupported language: {lang_code}")),
+            }
+        }
+
+        /// Extracts features using composable components for any supported language.
+        ///
+        /// `component_keys` selects which analyses to include (e.g. `["pedagogical_explanation", "morphology"]`).
+        /// If `None`, all compatible components are used.
+        pub async fn extract_erased_with_components<M: CompletionModel>(
+            lang_code: &str,
+            model: &M,
+            request: &ExtractionRequest,
+            component_keys: Option<&[&str]>,
+            temperature: f32,
+            max_tokens: u32,
+            previous_attempt: Option<&PreviousAttempt>,
+            extractor_prompts: &ExtractorPrompts,
+        ) -> Result<ExtractionResult> {
+            match lang_code {
+                $(
+                    <$lang as panini_core::LinguisticDefinition>::ISO_CODE => {
+                        extract_for_language(
+                            &$lang,
+                            model,
+                            request,
+                            component_keys,
+                            temperature,
+                            max_tokens,
+                            previous_attempt,
+                            extractor_prompts,
+                        )
+                        .await
+                    }
+                )*
+                _ => Err(anyhow!("Unsupported language: {lang_code}")),
+            }
+        }
+
+        /// Returns all supported ISO 639-3 language codes.
+        pub fn supported_languages() -> &'static [&'static str] {
+            &[$(<$lang as panini_core::LinguisticDefinition>::ISO_CODE),*]
+        }
+    };
 }
+
+// Generate the registry for all supported languages
+generate_registry!(Polish, Turkish, Arabic, French, Italian);
 
 #[cfg(test)]
 mod tests {

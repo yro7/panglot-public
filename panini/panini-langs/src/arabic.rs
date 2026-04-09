@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, IsoLang, Person, Script, TernaryNumber};
+use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, Person, Script, TernaryNumber};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -146,9 +146,7 @@ impl LinguisticDefinition for Arabic {
     type Morphology = ArabicMorphology;
     type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> IsoLang {
-        IsoLang::Ara
-    }
+    const ISO_CODE: &'static str = "ara";
 
     fn supported_scripts(&self) -> &[Script] {
         &[Script::ARAB]

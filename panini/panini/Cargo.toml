@@ -6,7 +6,9 @@ edition = "2024"
 [dependencies]
 panini-core = { path = "../panini-core" }
 panini-engine = { path = "../panini-engine" }
+panini-macro = { path = "../panini-macro" }
 panini-langs = { path = "../panini-langs", optional = true }
+rig-core = "0.33"
 
 [features]
 default = ["langs"]
