@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
 use panini_core::component::{AnalysisComponent, ExtractionResult};
 use panini_core::traits::LinguisticDefinition;
 use panini_core::morpheme::FeatureExtractionResponse;
@@ -9,6 +8,8 @@ use rig::message::Message;
 use crate::composer::{compose_schema, compose_prompt};
 use crate::llm_utils::clean_llm_json;
 use crate::prompts::{build_extraction_prompt, ExtractorPrompts, ExtractionRequest};
+
+// ─── Error types ──────────────────────────────────────────────────────────────
 
 /// Error returned when feature extraction parsing fails, carrying the raw LLM output.
 #[derive(Debug)]
@@ -25,11 +26,54 @@ impl std::fmt::Display for ExtractionParseError {
 
 impl std::error::Error for ExtractionParseError {}
 
+/// Typed error enum for the extraction pipeline.
+#[derive(Debug, thiserror::Error)]
+pub enum ExtractionError {
+    /// LLM provider errors (rig-core completion failures, network, auth, etc.)
+    #[error("LLM completion failed: {0}")]
+    Llm(#[from] rig::completion::request::CompletionError),
+
+    /// JSON serialization/deserialization errors (schema conversion, response parsing)
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// Prompt composition errors (missing placeholders, I/O, etc.)
+    #[error("prompt composition failed: {0}")]
+    PromptComposition(#[from] crate::prompts::PromptBuilderError),
+
+    /// LLM returned no text content in its response
+    #[error("LLM returned no text content")]
+    EmptyResponse,
+
+    /// Schema validation or component validation/parse failure — carries the raw
+    /// LLM output so callers can retry with `PreviousAttempt`
+    #[error("{0}")]
+    Parse(#[from] ExtractionParseError),
+
+    /// Failed to map raw `ExtractionResult` into a typed consumer struct
+    /// (used by `#[derive(PaniniResult)]` generated code)
+    #[error("failed to map extracted components to result struct")]
+    ResultMapping(#[from] panini_core::component::ExtractionResultError),
+}
+
+// ─── Extraction options ───────────────────────────────────────────────────────
+
 /// Previous failed attempt context for LLM self-correction retry.
 pub struct PreviousAttempt {
     pub raw_response: String,
     pub error: String,
 }
+
+/// Bundles extraction parameters
+#[derive(Clone)]
+pub struct ExtractionOptions<'a> {
+    pub temperature: f32,
+    pub max_tokens: u32,
+    pub previous_attempt: Option<&'a PreviousAttempt>,
+    pub extractor_prompts: &'a ExtractorPrompts,
+}
+
+// ─── Legacy entry point ───────────────────────────────────────────────────────
 
 /// Extracts morphological features from text using an LLM via rig-core.
 ///
@@ -40,11 +84,8 @@ pub async fn extract_features_via_llm<L, M>(
     language: &L,
     model: &M,
     request: &ExtractionRequest,
-    temperature: f32,
-    max_tokens: u32,
-    previous_attempt: Option<&PreviousAttempt>,
-    extractor_prompts: &ExtractorPrompts,
-) -> Result<FeatureExtractionResponse<L::Morphology, L::GrammaticalFunction>>
+    options: ExtractionOptions<'_>,
+) -> Result<FeatureExtractionResponse<L::Morphology, L::GrammaticalFunction>, ExtractionError>
 where
     L: LinguisticDefinition + Send + Sync,
     L::Morphology: std::fmt::Debug
@@ -67,7 +108,7 @@ where
         + Sync,
     M: CompletionModel,
 {
-    let system_prompt = build_extraction_prompt(language, request, extractor_prompts)?;
+    let system_prompt = build_extraction_prompt(language, request, options.extractor_prompts)?;
 
     // Convert panini's dynamic schema (serde_json::Value) into schemars::Schema.
     // schemars::Schema is a thin wrapper — this is a lossless round-trip.
@@ -84,12 +125,12 @@ where
     let mut builder: CompletionRequestBuilder<M> = model
         .completion_request(user_message.as_str())
         .preamble(system_prompt)
-        .temperature(temperature as f64)
-        .max_tokens(max_tokens as u64)
+        .temperature(options.temperature as f64)
+        .max_tokens(options.max_tokens as u64)
         .output_schema(rig_schema);
 
     // Append previous attempt context for self-correction if present.
-    if let Some(prev) = previous_attempt {
+    if let Some(prev) = options.previous_attempt {
         builder = builder
             .message(Message::assistant(&prev.raw_response))
             .message(Message::user(format!(
@@ -112,7 +153,7 @@ where
                 None
             }
         })
-        .ok_or_else(|| anyhow::anyhow!("LLM returned no text content"))?;
+        .ok_or(ExtractionError::EmptyResponse)?;
 
     let cleaned = clean_llm_json(&raw_text);
     let normalized = crate::llm_utils::normalize_pos_tags(cleaned);
@@ -172,6 +213,8 @@ where
     Ok(response_parsed)
 }
 
+// ─── Composable entry point ───────────────────────────────────────────────────
+
 /// Extracts features using composable `AnalysisComponent`s.
 ///
 /// This is the new entry-point that supports selecting which analyses to include.
@@ -181,11 +224,8 @@ pub async fn extract_with_components<L, M>(
     model: &M,
     request: &ExtractionRequest,
     components: &[&dyn AnalysisComponent<L>],
-    temperature: f32,
-    max_tokens: u32,
-    previous_attempt: Option<&PreviousAttempt>,
-    extractor_prompts: &ExtractorPrompts,
-) -> Result<ExtractionResult>
+    options: ExtractionOptions<'_>,
+) -> Result<ExtractionResult, ExtractionError>
 where
     L: LinguisticDefinition + Send + Sync,
     M: CompletionModel,
@@ -204,7 +244,7 @@ where
     let rig_schema: schemars::Schema = serde_json::from_value(schema_value.clone())?;
 
     // 3. Compose prompt
-    let system_prompt = compose_prompt(language, request, extractor_prompts, &compatible)?;
+    let system_prompt = compose_prompt(language, request, options.extractor_prompts, &compatible)?;
 
     let user_message = format!(
         "Extract features from this card:\n{}\n\nTARGET WORDS: {:?}",
@@ -215,11 +255,11 @@ where
     let mut builder: CompletionRequestBuilder<M> = model
         .completion_request(user_message.as_str())
         .preamble(system_prompt)
-        .temperature(temperature as f64)
-        .max_tokens(max_tokens as u64)
+        .temperature(options.temperature as f64)
+        .max_tokens(options.max_tokens as u64)
         .output_schema(rig_schema);
 
-    if let Some(prev) = previous_attempt {
+    if let Some(prev) = options.previous_attempt {
         builder = builder
             .message(Message::assistant(&prev.raw_response))
             .message(Message::user(format!(
@@ -241,7 +281,7 @@ where
                 None
             }
         })
-        .ok_or_else(|| anyhow::anyhow!("LLM returned no text content"))?;
+        .ok_or(ExtractionError::EmptyResponse)?;
 
     // 5. Chain pre_process from each component
     let cleaned = clean_llm_json(&raw_text);

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use panini_core::morpheme::{Agglutinative, MorphemeDefinition, WordSegmentation};
-use panini_core::traits::{BinaryNumber, LinguisticDefinition, IsoLang, MorphologyInfo, Person, Script, TypologicalFeature};
+use panini_core::traits::{
+    BinaryNumber, LinguisticDefinition, MorphologyInfo, Person, Script, TypologicalFeature,
+};
 
 // ─── Existing Turkish grammatical enums ──────────────────────────────────────
 
@@ -260,9 +262,8 @@ impl LinguisticDefinition for Turkish {
     type Morphology = TurkishMorphology;
     type GrammaticalFunction = TurkishGrammaticalFunction;
 
-    fn iso_code(&self) -> IsoLang {
-        IsoLang::Tur
-    }
+    const ISO_CODE: &'static str = "tur";
+
 
     fn supported_scripts(&self) -> &[Script] {
         &[Script::LATN]

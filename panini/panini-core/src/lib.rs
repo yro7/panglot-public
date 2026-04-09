@@ -8,5 +8,5 @@ pub mod traits;
 
 pub use traits::{LinguisticDefinition, MorphologyInfo};
 pub use component::{
-    AnalysisComponent, ComponentContext, ExtractionResult, ExtractionResultError, LanguageLevel,
+    AnalysisComponent, ComponentContext, ComponentRequires, ExtractionResult, ExtractionResultError, LanguageLevel,
 };

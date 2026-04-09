@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use panini_core::traits::{LinguisticDefinition, IsoLang, Script, SlavicAspect, TypologicalFeature};
+use panini_core::traits::{LinguisticDefinition, Script, SlavicAspect, TypologicalFeature};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -26,7 +26,10 @@ pub enum PolishGender {
 
 impl PolishGender {
     pub fn is_masculine(&self) -> bool {
-        matches!(self, Self::MasculinePersonal | Self::MasculineAnimate | Self::MasculineInanimate)
+        matches!(
+            self,
+            Self::MasculinePersonal | Self::MasculineAnimate | Self::MasculineInanimate
+        )
     }
 }
 
@@ -75,10 +78,7 @@ pub enum PolishMorphology {
     /// A particle (PART).
     Particle { lemma: String },
     /// A pronoun (PRON).
-    Pronoun {
-        lemma: String,
-        case: PolishCase,
-    },
+    Pronoun { lemma: String, case: PolishCase },
     /// A proper noun (PROPN).
     ProperNoun { lemma: String },
     /// Punctuation (PUNCT).
@@ -103,9 +103,7 @@ impl LinguisticDefinition for Polish {
     type Morphology = PolishMorphology;
     type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> IsoLang {
-        IsoLang::Pol
-    }
+    const ISO_CODE: &'static str = "pol";
 
     fn supported_scripts(&self) -> &[Script] {
         &[Script::LATN]

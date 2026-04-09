@@ -1,14 +1,37 @@
-# Pāṇini
+<div align="center">
+  <h1>Pāṇini</h1>
+  <p><b>A LLM-powered linguistic feature extraction framework</b></p>
+  <p>
+    <a href="https://crates.io/crates/panini-engine"><img src="https://img.shields.io/crates/v/panini-engine.svg" alt="Crates.io" /></a>
+    <a href="https://pypi.org/project/panini-lang/"><img src="https://img.shields.io/pypi/v/panini-lang.svg" alt="PyPI" /></a>
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
+    <a href="https://github.com/yro7/panini/actions/workflows/publish-panini-lang.yml"><img src="https://github.com/yro7/panini/actions/workflows/publish-panini-lang.yml/badge.svg" alt="Publish to PyPI" /></a>
+  </p>
+  <p>
+    Usage: <a href="#python">Python</a> | <a href="#as-a-library-rust-api">Rust</a> | <a href="#as-a-standalone-cli">CLI</a>
+  </p>
+</div>
 
-**A LLM-powered linguistic feature extraction framework.**
+<br>
 
-Pāṇini lets you define *what* linguistic features to extract and *how* to extract them, for any language : You describe your language's morphology as Rust types, write extraction directives, and the framework handles the rest: prompt assembly, JSON schema generation, LLM orchestration, response parsing, and validation.
+Pāṇini is a linguistic feature extraction framework: describe your language's morphology as Rust types, write extraction directives, and the pipeline handles the rest — prompt assembly, JSON schema generation, LLM orchestration, response parsing, and validation. No universal schema imposed; you define exactly the features your language needs.
 
-Pāṇini doesn't impose a universal schema — you define exactly the features that matter for your language, and the framework builds the extraction pipeline around your definitions.
+## Table of Contents
+- [Extraction Capabilities](#extraction-capabilities)
+  - [Available components](#available-components)
+  - [Examples](#output-examples)
+- [Usage](#usage)
+  - [As a library (Rust API)](#as-a-library-rust-api)
+  - [As a standalone CLI](#as-a-standalone-cli)
+  - [Python](#python)
+- [Adding a language](#adding-a-language)
+- [Adding an analysis component](#adding-an-analysis-component)
+- [Building](#building)
+- [License](#license)
 
-## Composable analysis components
+## Extraction Capabilities
 
-Extraction is built around **composable components** (`AnalysisComponent`). Each component owns one top-level key in the JSON output and contributes its own schema fragment and prompt fragment. You choose which components to run per request — pick only what you need.
+Extraction is built around **composable components** (`AnalysisComponent`). Each component provides a different axis of analysis or extracts specific features. You choose which components to run per request — pick only what you need.
 
 By default, all compatible components are run. You can restrict the selection with `--components`:
 
@@ -153,32 +176,26 @@ Then call `extract_features_via_llm` with any `rig::completion::CompletionModel`
 use panini_engine::{extract_features_via_llm, ExtractionRequest};
 use panini_engine::prompts::ExtractorPrompts;
 use panini_langs::polish::Polish;
-use rig::client::CompletionClient;
 use rig::providers::openai;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let client = openai::Client::new("sk-…")?;
+    let client = openai::Client::new(&std::env::var("OPENAI_API_KEY")?)?;
     let model  = client.completion_model("gpt-4o");
     let prompts = ExtractorPrompts::load("prompts/default.yml")?;
 
-    let request = ExtractionRequest {
-        content: "Dał kotowi mleko.".to_string(),
-        targets: vec!["kotowi".to_string()],
-        pedagogical_context: Some("Dative case".to_string()),
-        skill_path: Some("grammar/cases/dative".to_string()),
-        learner_ui_language: "English".to_string(),
-        linguistic_background: vec![],
-        user_prompt: None,
-    };
+    let request = ExtractionRequest::builder()
+        .content("Dał kotowi mleko.")
+        .targets(vec!["kotowi".to_string()])
+        .build();
 
     let result = extract_features_via_llm(
         &Polish,
         &model,
         &request,
-        0.2,   // temperature
-        4096,  // max tokens
-        None,  // no previous attempt
+        0.2,
+        4096,
+        None,
         &prompts,
     ).await?;
 
@@ -206,14 +223,14 @@ cargo build -p panini-cli --release
 provider     = "google"           # openai | anthropic | google
 model        = "gemini-2.0-flash"
 language     = "pol"              # pol | tur | ara
-api_key      = "${GEMINI_API_KEY}"
+api_key      = "$GEMINI_API_KEY"
 prompts_file = "panini-cli/prompts/default.yml"
 ```
 
 **3. Run**
 
 ```bash
-export GEMINI_API_KEY="…"
+export GEMINI_API_KEY="$GEMINI_API_KEY"
 
 panini extract \
   --config panini.toml \
@@ -244,6 +261,29 @@ panini extract --config panini.toml --text "…" --target "…" \
 | `--temperature` | `0.2`                    | Sampling temperature                              |
 | `--max-tokens`  | `4096`                   | Max tokens for LLM response                       |
 | `--ui-language` | `English`                | Learner's UI language for pedagogical explanation |
+
+### Python
+
+```bash
+pip install panini-lang
+```
+
+```python
+from panini import extract
+
+result = extract(
+    provider="openai",        # "openai" | "anthropic" | "google"
+    model="gpt-4o",
+    api_key="sk-...",
+    language="pol",           # ISO 639-3 code
+    text="Dał kotowi mleko.",
+    targets=["kotowi"],
+)
+```
+
+→ See [pynini/README.md](pynini/README.md) for the full Python API reference.
+
+---
 
 ## What you define, what the framework does
 
@@ -280,7 +320,7 @@ panini-macro/        # #[derive(MorphologyInfo)] proc macro
 
 ## Adding a language
 
-### Automatically with the LLM script
+### Automatically (LLM-assisted)
 
 Fill your `panini.toml` config, choose a language (with its ISO 639-3 code) and run:
 
@@ -288,7 +328,7 @@ Fill your `panini.toml` config, choose a language (with its ISO 639-3 code) and 
 
 You should ALWAYS check the file output, especially for linguistic definitions, to ensure the LLM properly described the language.
 
-### Manually
+### Manually (step by step)
 
 1. Create `panini-langs/src/<language>.rs`
 2. Define a `Morphology` enum with `#[derive(MorphologyInfo)]` and `#[serde(tag = "pos")]` -- every variant must have `lemma: String` as its first field

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -91,8 +92,9 @@ impl Serialize for Script {
 impl<'de> Deserialize<'de> for Script {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let code = String::deserialize(deserializer)?;
-        Script::new(&code)
-            .ok_or_else(|| serde::de::Error::custom(format!("Unknown ISO 15924 script code: {code}")))
+        Script::new(&code).ok_or_else(|| {
+            serde::de::Error::custom(format!("Unknown ISO 15924 script code: {code}"))
+        })
     }
 }
 
@@ -112,18 +114,35 @@ pub enum TypologicalFeature {
 pub trait LinguisticDefinition {
     /// The language-specific morphology enum. Each variant represents a PoS category
     /// with its morphological fields (lemma, case, gender, aspect, etc.).
-    type Morphology: Debug + Clone + Serialize + for<'de> Deserialize<'de>
-        + schemars::JsonSchema + MorphologyInfo + Send + Sync;
+    type Morphology: Debug
+        + Clone
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + MorphologyInfo
+        + Send
+        + Sync;
 
     /// The grammatical function type for morpheme segmentation.
     /// Non-agglutinative languages set this to `()`.
     /// Agglutinative languages set this to their wrapper enum (e.g., `TurkishGrammaticalFunction`).
-    type GrammaticalFunction: Debug + Clone + PartialEq
-        + Serialize + for<'de> Deserialize<'de>
-        + schemars::JsonSchema + Send + Sync;
+    type GrammaticalFunction: Debug
+        + Clone
+        + PartialEq
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + Send
+        + Sync;
 
-    /// The ISO 639-3 language identity.
-    fn iso_code(&self) -> IsoLang;
+    /// The ISO 639-3 language code as a const (e.g., "pol", "tur", "fra").
+    const ISO_CODE: &'static str;
+
+    /// Returns the IsoLang variant (derived from ISO_CODE).
+    fn iso_code(&self) -> IsoLang {
+        IsoLang::from_str(Self::ISO_CODE)
+            .unwrap_or_else(|_| panic!("Invalid ISO code: {}", Self::ISO_CODE))
+    }
 
     /// The English name of the language, auto-derived from `iso_code()`.
     fn name(&self) -> &str {
@@ -147,19 +166,25 @@ pub trait LinguisticDefinition {
     /// Build the full JSON schema for feature extraction.
     fn build_extraction_schema(&self) -> serde_json::Value {
         let r#gen = schemars::SchemaGenerator::default();
-        let schema = r#gen.into_root_schema_for::<
-            crate::morpheme::FeatureExtractionResponse<Self::Morphology, Self::GrammaticalFunction>
-        >();
+        let schema =
+            r#gen.into_root_schema_for::<crate::morpheme::FeatureExtractionResponse<
+                Self::Morphology,
+                Self::GrammaticalFunction,
+            >>();
         serde_json::to_value(&schema).unwrap()
     }
 
     /// Extra directives to append to the extraction prompt.
-    fn extra_extraction_directives(&self) -> Option<String> { None }
+    fn extra_extraction_directives(&self) -> Option<String> {
+        None
+    }
 
     /// Post-process the morpheme segmentation returned by the LLM.
     fn post_process_extraction(
         &self,
-        _segmentation: &mut Option<Vec<crate::morpheme::WordSegmentation<Self::GrammaticalFunction>>>,
+        _segmentation: &mut Option<
+            Vec<crate::morpheme::WordSegmentation<Self::GrammaticalFunction>>,
+        >,
     ) -> Result<(), String> {
         Ok(())
     }

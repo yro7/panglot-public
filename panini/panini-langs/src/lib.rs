@@ -9,5 +9,8 @@ pub use turkish::*;
 pub mod french;
 pub use french::*;
 
+pub mod italian;
+pub use italian::*;
+
 #[cfg(feature = "registry")]
 pub mod registry;

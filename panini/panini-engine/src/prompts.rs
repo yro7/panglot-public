@@ -1,5 +1,5 @@
 use panini_core::traits::LinguisticDefinition;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use regex::Regex;
 use isolang::Language as IsoLang;
@@ -18,7 +18,7 @@ pub enum PromptBuilderError {
 
 // ----- Prompt Config Structs -----
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExtractorPrompts {
     pub system_role: String,
     pub target_language: String,
@@ -29,14 +29,14 @@ pub struct ExtractorPrompts {
     pub output_instruction: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LearnerProfile {
     pub ui_language: String,
     pub linguistic_background_intro: String,
     pub linguistic_background_entry: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SkillContextPrompts {
     pub skill_tree_path: String,
     pub pedagogical_focus: String,
@@ -56,7 +56,8 @@ impl ExtractorPrompts {
 /// Re-export from panini-core for backwards compatibility.
 pub use panini_core::component::LanguageLevel;
 
-/// Generic extraction request — decoupled from Panglot's GenerationRequest.
+/// Generic extraction request
+#[derive(bon::Builder)]
 pub struct ExtractionRequest {
     /// The text/card JSON to extract features from.
     pub content: String,
@@ -67,8 +68,10 @@ pub struct ExtractionRequest {
     /// Optional skill/topic path for context.
     pub skill_path: Option<String>,
     /// Learner's UI language (for pedagogical explanation).
+    #[builder(default = "English".to_string())]
     pub learner_ui_language: String,
     /// Learner's linguistic background.
+    #[builder(default)]
     pub linguistic_background: Vec<LanguageLevel>,
     /// Optional user-provided context.
     pub user_prompt: Option<String>,
