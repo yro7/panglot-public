@@ -28,7 +28,12 @@ Cargo.lock
 # Build output
 output/
 lc_audio/
+panini/
+
 
 # Misc
 test_parse.rs
 ""
+*.md
+implementation_plan.md
+implementation_plan_2.md

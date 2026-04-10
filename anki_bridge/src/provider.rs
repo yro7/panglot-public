@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+// removed serde
 use std::collections::HashMap;
 use std::path::Path;
-use lc_core::storage::{StorageProvider, StoredCard, DeckInfo, NewDeckData, NewCardEntry};
+use lc_core::storage::{StorageProvider, StoredCard, DeckInfo, NewDeckData};
 
 // ----- Shared model definition (used by push_to_anki) -----
 

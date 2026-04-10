@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "panini-core",
+    "panini-macro",
+    "panini-engine",
+    "panini-langs",
+    "panini",
+    "panini-cli",
+    "pynini",
+]
+resolver = "2"

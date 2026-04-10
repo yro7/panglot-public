@@ -1,8 +1,7 @@
 pub mod analyzer;
 pub mod card_models;
-pub mod feature_extractor;
 pub mod generator;
-pub mod llm_client;
+pub mod llm_backend;
 pub mod llm_utils;
 pub mod pipeline;
 pub mod post_process;

@@ -1,0 +1,108 @@
+language_name: Turkish
+root:
+  id: root
+  name: Türkçe
+  children:
+    - id: grammar
+      name: Dilbilgisi (Grammar)
+      children:
+        - id: cases
+          name: Durum Ekleri (Cases)
+          children:
+            - id: accusative
+              name: Belirtme Durumu (Accusative)
+              node_instructions: >
+                Generate a cloze deletion exercise focused on the definite accusative case (-ı, -i, -u, -ü).
+                Create a sentence where the student must fill in a noun with the correct accusative suffix, respecting vowel harmony. Provide the noun's root as a hint.
+              children: []
+            - id: dative
+              name: Yönelme Durumu (Dative)
+              node_instructions: >
+                Generate a cloze deletion exercise focused on the dative case (-a, -e).
+                Create a sentence where the student must fill in a noun with the correct dative suffix, respecting vowel harmony and consonant mutation where applicable. Provide the noun's root as a hint.
+              children: []
+            - id: locative
+              name: Bulunma Durumu (Locative)
+              node_instructions: >
+                Generate a cloze deletion exercise focused on the locative case (-da, -de, -ta, -te).
+                Create a sentence where the student must fill in a noun with the correct locative suffix, respecting vowel harmony and consonant assimilation. Provide the noun's root as a hint.
+              children: []
+            - id: ablative
+              name: Ayrılma Durumu (Ablative)
+              node_instructions: >
+                Generate a cloze deletion exercise focused on the ablative case (-dan, -den, -tan, -ten).
+                Create a sentence where the student must fill in a noun with the correct ablative suffix, respecting vowel harmony and consonant assimilation. Provide the noun's root as a hint.
+              children: []
+        - id: verb_tenses
+          name: Fiil Zamanları (Verb Tenses)
+          children:
+            - id: present_continuous
+              name: Şimdiki Zaman (Present Continuous)
+              node_instructions: >
+                Generate a verb conjugation exercise focusing on the present continuous tense (-iyor).
+                Provide an infinitive verb and a pronoun, and ask the student to conjugate it correctly.
+              children: []
+            - id: past_simple
+              name: Görülen Geçmiş Zaman (Past Simple)
+              node_instructions: >
+                Generate a verb conjugation exercise focusing on the simple past tense (dî'li geçmiş zaman, -dı, -di, -du, -dü, -tı, -ti, -tu, -tü).
+                Provide an infinitive verb and a pronoun, and ask the student to conjugate it correctly.
+              children: []
+        - id: possession
+          name: İyelik Ekleri (Possessive Suffixes)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on possessive suffixes (e.g., -ım, -in, -i).
+            Create a sentence where the student must add the correct possessive suffix to a noun for a given pronoun, respecting vowel harmony. Provide the noun's root as a hint.
+          children: []
+        - id: question_particles
+          name: Soru Ekleri (Question Particles)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on the question particles (mı, mi, mu, mü).
+            Create a sentence where the student must place the correct question particle, respecting vowel harmony.
+          children: []
+    - id: vocabulary
+      name: Kelime Bilgisi (Vocabulary)
+      children:
+        - id: greetings
+          name: Selamlaşma ve Tanışma (Greetings & Introductions)
+          node_instructions: >
+            Generate an exercise about common Turkish greetings, farewells, and self-introduction phrases.
+          children: []
+        - id: daily_life
+          name: Günlük Yaşam (Daily Life)
+          node_instructions: >
+            Generate an exercise about daily life vocabulary (food, drinks, transport, shopping, family members).
+          children: []
+        - id: numbers_time
+          name: Sayılar ve Zaman (Numbers & Time)
+          node_instructions: >
+            Generate an exercise focusing on Turkish numbers (1-100) and basic time expressions (e.g., hours, days of the week).
+          children: []
+    - id: phonology
+      name: Telaffuz ve Sesbilgisi (Pronunciation & Phonology)
+      children:
+        - id: vowel_harmony
+          name: Ünlü Uyumu (Vowel Harmony)
+          node_instructions: >
+            Generate an exercise focused on identifying the correct vowel harmony for suffixes.
+            Present a noun/verb and a suffix type (e.g., dative case), and ask the student to choose the correct suffix variant.
+          children: []
+        - id: consonant_assimilation
+          name: Ünsüz Benzeşmesi (Consonant Assimilation)
+          node_instructions: >
+            Generate an exercise focused on applying consonant assimilation (fıstıkçı şahap rule) to suffixes.
+            Present a noun/verb ending in a voiceless consonant and a suffix, and ask the student to choose the correct assimilated form.
+          children: []
+    - id: sentence_structure
+      name: Cümle Yapısı (Sentence Structure)
+      children:
+        - id: basic_sov
+          name: Temel Özne-Nesne-Yüklem (Basic SOV Order)
+          node_instructions: >
+            Generate a sentence reordering exercise where students arrange words into a grammatically correct Turkish SOV sentence.
+          children: []
+        - id: existence
+          name: Var / Yok (Existence)
+          node_instructions: >
+            Generate a cloze deletion or translation exercise focused on expressing "there is/are" (var) and "there isn't/aren't" (yok).
+          children: []

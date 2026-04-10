@@ -1,6 +1,71 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{IpaConfig, Language, LinguisticDefinition, NoExtraFields, Person, Script, TtsConfig, TypologicalFeature, IsoLang};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanHonorifics {
+    Plain,
+    Polite,
+    Honorific,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanSpeechLevel {
+    FormalDeferential,
+    InformalPolite,
+    Intimate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanTense {
+    Past,
+    Present,
+    Future,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanMood {
+    Indicative,
+    Imperative,
+    Propositive,
+    Interrogative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanVoice {
+    Active,
+    Passive,
+    Causative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanNumeralType {
+    CardinalNative,
+    CardinalSino,
+    Ordinal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KoreanParticleFunction {
+    SubjectMarker,
+    ObjectMarker,
+    TopicMarker,
+    Possessive,
+    Instrumental,
+    Locative,
+    Directional,
+    Comitative,
+    Conjunctive,
+    Adverbial,
+    VocativeMarker,
+}
 
 /// A morphological feature representing a Part of Speech (PoS) in Korean.
 /// The `pos` field determines the variant type.
@@ -11,15 +76,12 @@ pub enum KoreanMorphology {
     /// An adjective (형용사). In Korean, adjectives conjugate like verbs.
     Adjective {
         lemma: String,
-        /// Indicates the level of politeness or respect (e.g., "plain", "polite", "honorific").
         #[serde(skip_serializing_if = "Option::is_none")]
-        honorifics: Option<String>,
-        /// The grammatical tense (e.g., "present", "past", "future").
+        honorifics: Option<KoreanHonorifics>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        tense: Option<String>,
-        /// The speech level or formality (e.g., "formal_deferential", "informal_polite", "intimate").
+        tense: Option<KoreanTense>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        speech_level: Option<String>,
+        speech_level: Option<KoreanSpeechLevel>,
     },
     /// An adverb (부사).
     Adverb { lemma: String },
@@ -36,25 +98,21 @@ pub enum KoreanMorphology {
     /// A numeral (수사).
     Numeral {
         lemma: String,
-        /// The type of numeral (e.g., "cardinal_native", "cardinal_sino", "ordinal").
         #[serde(skip_serializing_if = "Option::is_none")]
-        numeral_type: Option<String>,
+        numeral_type: Option<KoreanNumeralType>,
     },
     /// A grammatical particle (조사). These are postpositions that mark case, topic, etc.
     Particle {
         lemma: String,
-        /// The grammatical function of the particle (e.g., "subject_marker", "object_marker", "topic_marker", "conjunctive", "adverbial").
-        function: String,
+        function: KoreanParticleFunction,
     },
     /// A pronoun (대명사).
     Pronoun {
         lemma: String,
-        /// The grammatical person (e.g., "first", "second", "third").
         #[serde(skip_serializing_if = "Option::is_none")]
-        person: Option<String>,
-        /// Indicates the level of politeness or respect (e.g., "plain", "honorific").
+        person: Option<Person>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        honorifics: Option<String>,
+        honorifics: Option<KoreanHonorifics>,
     },
     /// A proper noun (고유 명사).
     ProperNoun { lemma: String },
@@ -67,21 +125,16 @@ pub enum KoreanMorphology {
     /// A verb (동사).
     Verb {
         lemma: String,
-        /// Indicates the level of politeness or respect (e.g., "plain", "polite", "honorific").
         #[serde(skip_serializing_if = "Option::is_none")]
-        honorifics: Option<String>,
-        /// The grammatical tense (e.g., "present", "past", "future").
+        honorifics: Option<KoreanHonorifics>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        tense: Option<String>,
-        /// The grammatical mood (e.g., "indicative", "imperative", "propositive", "interrogative").
+        tense: Option<KoreanTense>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        mood: Option<String>,
-        /// The speech level or formality (e.g., "formal_deferential", "informal_polite", "intimate").
+        mood: Option<KoreanMood>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        speech_level: Option<String>,
-        /// The grammatical voice (e.g., "active", "passive", "causative").
+        speech_level: Option<KoreanSpeechLevel>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        voice: Option<String>,
+        voice: Option<KoreanVoice>,
     },
     /// Other (기타) for unanalyzable tokens.
     Other { lemma: String },
@@ -89,12 +142,14 @@ pub enum KoreanMorphology {
 
 pub struct Korean;
 
-impl Language for Korean {
+impl LinguisticDefinition for Korean {
     type Morphology = KoreanMorphology;
-    type ExtraFields = NoExtraFields;
+    type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> lc_core::traits::IsoLang {
-        lc_core::traits::IsoLang::Kor
+    const ISO_CODE: &'static str = "kor";
+
+    fn iso_code(&self) -> IsoLang {
+        IsoLang::Kor
     }
 
     fn supported_scripts(&self) -> &[Script] {
@@ -106,7 +161,7 @@ impl Language for Korean {
     }
 
     fn typological_features(&self) -> &[TypologicalFeature] {
-        &[TypologicalFeature::Conjugation] // Korean is highly agglutinative with extensive conjugation.
+        &[TypologicalFeature::Conjugation]
     }
 
     fn extraction_directives(&self) -> &str {
@@ -125,16 +180,25 @@ impl Language for Korean {
          6. For pronouns (대명사): provide lemma, person, and honorifics.\n\
          7. For numerals (수사): provide lemma and numeral type (e.g., 'cardinal_native', 'cardinal_sino')."
     }
+}
+
+impl Language for Korean {
+    type Morphology = KoreanMorphology;
+    type GrammaticalFunction = ();
+    type ExtraFields = NoExtraFields;
+    type LinguisticDef = Self;
+
+    fn linguistic_def(&self) -> &Self { self }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("When generating Korean text, ensure correct usage of honorifics and speech levels based on context and speaker/listener relationship. Korean is a pro-drop language; omit subject pronouns when contextually clear. Adjectives conjugate like verbs.")
     }
 
     fn ipa_strategy(&self) -> IpaConfig {
-        IpaConfig::Epitran("kor-Hang") // Epitran supports Korean Hangul to IPA
+        IpaConfig::Epitran("kor-Hang")
     }
 
     fn tts_strategy(&self) -> TtsConfig {
-        TtsConfig::Edge { voice: "ko-KR-SunHiNeural" } // A suitable Korean voice from Edge TTS
+        TtsConfig::Edge { voice: "ko-KR-SunHiNeural" }
     }
 }

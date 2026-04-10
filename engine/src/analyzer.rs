@@ -322,7 +322,7 @@ impl LibraryAnalyzer {
         let mut tracker = LexiconTracker::new();
 
         for card in &cards {
-            if let Some(metadata) = self.extract_metadata::<M>(card) {
+            if let Some(metadata) = self.extract_metadata::<M, ()>(card) {
                 // Skip cards from other languages
                 if let Some(lang) = language_filter {
                     if !metadata.language.is_empty() && metadata.language != lang {
@@ -348,9 +348,10 @@ impl LibraryAnalyzer {
         Ok(tracker)
     }
 
-    fn extract_metadata<M>(&self, card: &StoredCard) -> Option<CardMetadata<M>>
+    fn extract_metadata<M, F>(&self, card: &StoredCard) -> Option<CardMetadata<M, F>>
     where
         M: for<'de> Deserialize<'de>,
+        F: for<'de> Deserialize<'de>,
     {
         // In Anki, fields are separated by \x1f
         let fields: Vec<&str> = card.fields.split('\x1f').collect();
@@ -413,6 +414,7 @@ mod tests {
             multiword_expressions: vec![],
             ipa: None,
             audio_file: None,
+            morpheme_segmentation: None::<Vec<lc_core::morpheme::WordSegmentation<()>>>,
         };
         let metadata_json = serde_json::to_string(&metadata).unwrap();
         // Fields format: front \x1f back \x1f metadata
@@ -433,8 +435,8 @@ mod tests {
             word: word.to_string(),
             morphology: PolishMorphology::Noun {
                 lemma: lemma.to_string(),
-                gender: String::new(),
-                case: String::new(),
+                gender: langs::polish::PolishGender::MasculineInanimate,
+                case: langs::polish::PolishCase::Nominative,
             },
         }
     }
@@ -444,8 +446,8 @@ mod tests {
             word: word.to_string(),
             morphology: PolishMorphology::Verb {
                 lemma: lemma.to_string(),
-                tense: String::new(),
-                aspect: String::new(),
+                tense: langs::polish::PolishTense::Present,
+                aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
             },
         }
     }
@@ -559,8 +561,8 @@ mod tests {
             word: "książkę".to_string(),
             morphology: PolishMorphology::Noun {
                 lemma: "książka".to_string(),
-                gender: "Feminine".to_string(),
-                case: "Accusative".to_string(),
+                gender: langs::polish::PolishGender::Feminine,
+                case: langs::polish::PolishCase::Accusative,
             },
         }, "polish_acc");
 
@@ -568,8 +570,8 @@ mod tests {
             word: "czytam".to_string(),
             morphology: PolishMorphology::Verb {
                 lemma: "czytać".to_string(),
-                aspect: "Imperfective".to_string(),
-                tense: "Present".to_string(),
+                aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
+                tense: langs::polish::PolishTense::Present,
             },
         }, "polish_acc");
 
@@ -578,8 +580,8 @@ mod tests {
             word: "nowy".to_string(),
             morphology: PolishMorphology::Adjective {
                 lemma: "nowy".to_string(),
-                gender: "Masculine".to_string(),
-                case: "Nominative".to_string(),
+                gender: langs::polish::PolishGender::MasculinePersonal,
+                case: langs::polish::PolishCase::Nominative,
             },
         }, "polish_nom");
 

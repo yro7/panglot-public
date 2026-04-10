@@ -1,6 +1,51 @@
 use serde::{Deserialize, Serialize};
 
-use lc_core::traits::{IpaConfig, Language, NoExtraFields, Script, TtsConfig, TypologicalFeature};
+use lc_core::traits::{BinaryNumber, BinaryVoice, IpaConfig, Language, LinguisticDefinition, NoExtraFields, Person, Script, SlavicAspect, TernaryGender, TtsConfig, TypologicalFeature, IsoLang};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RussianCase {
+    Nominative,
+    Genitive,
+    Dative,
+    Accusative,
+    Instrumental,
+    Prepositional,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RussianAnimacy {
+    Animate,
+    Inanimate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RussianDegree {
+    Positive,
+    Comparative,
+    Superlative,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RussianTense {
+    Past,
+    Present,
+    Future,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RussianMood {
+    Indicative,
+    Imperative,
+    Conditional,
+}
+
 
 /// A morphological feature representing a Part of Speech (PoS) in Russian.
 /// The `pos` field determines the variant type.
@@ -11,22 +56,22 @@ pub enum RussianMorphology {
     /// An adjective (ADJ) - Прилагательное.
     Adjective {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
-        degree: String,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
+        degree: RussianDegree,
     },
     /// An adposition (ADP) - Предлог.
     Adposition {
         lemma: String,
         /// The grammatical case this adposition governs.
-        governed_case: String,
+        governed_case: RussianCase,
     },
     /// An adverb (ADV) - Наречие.
     Adverb {
         lemma: String,
-        degree: String,
+        degree: RussianDegree,
     },
     /// An auxiliary (AUX) - Вспомогательный глагол.
     Auxiliary { lemma: String },
@@ -35,47 +80,47 @@ pub enum RussianMorphology {
     /// A determiner (DET) - Определитель.
     Determiner {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
     },
     /// An interjection (INTJ) - Междометие.
     Interjection { lemma: String },
     /// A noun (NOUN) - Существительное.
     Noun {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
     },
     /// A numeral (NUM) - Числительное.
     Numeral {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
     },
     /// A particle (PART) - Частица.
     Particle { lemma: String },
     /// A pronoun (PRON) - Местоимение.
     Pronoun {
         lemma: String,
-        person: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
+        person: Person,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
     },
     /// A proper noun (PROPN) - Имя собственное.
     ProperNoun {
         lemma: String,
-        gender: String,
-        number: String,
-        case: String,
-        animacy: String,
+        gender: TernaryGender,
+        number: BinaryNumber,
+        case: RussianCase,
+        animacy: RussianAnimacy,
     },
     /// Punctuation (PUNCT) - Пунктуация.
     Punctuation { lemma: String },
@@ -86,13 +131,13 @@ pub enum RussianMorphology {
     /// A verb (VERB) - Глагол.
     Verb {
         lemma: String,
-        aspect: String,
-        tense: String,
-        mood: String,
-        person: String,
-        number: String,
-        gender: String,
-        voice: String,
+        aspect: SlavicAspect,
+        tense: RussianTense,
+        mood: RussianMood,
+        person: Person,
+        number: BinaryNumber,
+        gender: TernaryGender,
+        voice: BinaryVoice,
     },
     /// Other (X) for unanalyzable tokens - Прочее.
     Other { lemma: String },
@@ -100,12 +145,14 @@ pub enum RussianMorphology {
 
 pub struct Russian;
 
-impl Language for Russian {
+impl LinguisticDefinition for Russian {
     type Morphology = RussianMorphology;
-    type ExtraFields = NoExtraFields;
+    type GrammaticalFunction = ();
 
-    fn iso_code(&self) -> lc_core::traits::IsoLang {
-        lc_core::traits::IsoLang::Rus
+    const ISO_CODE: &'static str = "rus";
+
+    fn iso_code(&self) -> IsoLang {
+        IsoLang::Rus
     }
 
     fn supported_scripts(&self) -> &[Script] {
@@ -134,6 +181,15 @@ impl Language for Russian {
          4. For adpositions: provide the case they govern (governed_case).\n\
          5. For adjectives and adverbs: provide the degree (positive, comparative, superlative)."
     }
+}
+
+impl Language for Russian {
+    type Morphology = RussianMorphology;
+    type GrammaticalFunction = ();
+    type ExtraFields = NoExtraFields;
+    type LinguisticDef = Self;
+
+    fn linguistic_def(&self) -> &Self { self }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("When generating Russian text, ensure correct case, gender, number, and animacy agreement between nouns, adjectives, determiners, and pronouns. Pay attention to verb aspect and tense usage. Russian is a pro-drop language; omit subject pronouns when contextually clear.")
