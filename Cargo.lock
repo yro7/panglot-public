@@ -967,6 +967,7 @@ dependencies = [
  "isolang",
  "langs",
  "lc_core",
+ "panini",
  "panini-core",
  "panini-engine",
  "regex",

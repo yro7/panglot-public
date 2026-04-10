@@ -163,17 +163,6 @@ pub trait LinguisticDefinition {
         &[]
     }
 
-    /// Build the full JSON schema for feature extraction.
-    fn build_extraction_schema(&self) -> serde_json::Value {
-        let r#gen = schemars::SchemaGenerator::default();
-        let schema =
-            r#gen.into_root_schema_for::<crate::morpheme::FeatureExtractionResponse<
-                Self::Morphology,
-                Self::GrammaticalFunction,
-            >>();
-        serde_json::to_value(&schema).unwrap()
-    }
-
     /// Extra directives to append to the extraction prompt.
     fn extra_extraction_directives(&self) -> Option<String> {
         None

@@ -3,7 +3,6 @@ use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{ExtractedFeature, MultiwordExpression};
 use crate::traits::{LinguisticDefinition, MorphologyInfo};
 
 // ─── Morpheme types ───────────────────────────────────────────────────────────
@@ -48,9 +47,8 @@ pub struct WordSegmentation<F> {
 /// Opt-in trait for agglutinative languages.
 ///
 /// Provides the morpheme-specific methods: static inventory, LLM directives, and
-/// typed validation. The three extension points on `LinguisticDefinition`
-/// (`build_extraction_schema`, `extra_extraction_directives`, `post_process_extraction`)
-/// should delegate here.
+/// typed validation. The `LinguisticDefinition` extension points
+/// (`extra_extraction_directives`, `post_process_extraction`) should delegate here.
 pub trait Agglutinative: LinguisticDefinition
 where
     <Self::Morphology as MorphologyInfo>::PosTag: Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
@@ -117,52 +115,4 @@ where
             Err(errors.join("\n"))
         }
     }
-
-    /// Generate the full extraction JSON schema (base morphology + morpheme fields).
-    fn build_full_schema() -> serde_json::Value
-    where
-        Self::Morphology: schemars::JsonSchema,
-    {
-        let r#gen = schemars::SchemaGenerator::default();
-        let schema = r#gen.into_root_schema_for::<
-            FeatureExtractionResponse<Self::Morphology, Self::GrammaticalFunction>
-        >();
-        serde_json::to_value(&schema).unwrap()
-    }
-}
-
-// Lives in `panini-core` so that `LinguisticDefinition::build_extraction_schema()`
-// can reference it without a circular dependency.
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-#[schemars(bound = "M: schemars::JsonSchema, F: schemars::JsonSchema")]
-#[serde(bound(deserialize = "M: for<'de2> Deserialize<'de2>, F: for<'de2> Deserialize<'de2>"))]
-pub struct FeatureExtractionResponse<M, F = ()> {
-    /// PEDAGOGICAL EXPLANATION FORMAT:
-    /// Write the ENTIRE explanation in the learner's interface language.
-    /// The field must be an HTML string (no markdown). Structure it as follows:
-    ///
-    /// 1. **Translations**: Start with literal and natural translations (if they differ).
-    ///    Use: <p><b>Translations:</b><br><i>Lit:</i> ...<br><i>Nat:</i> ...</p>
-    ///
-    /// 2. **Analysis**: A bullet list analyzing key grammatical components of the sentence.
-    ///    - Focus on the grammar concepts relevant to the skill being tested.
-    ///    - Highlight verbs in <span style='color:#e74c3c'><b>red</b></span>, nouns/subjects in <span style='color:#3498db'><b>blue</b></span>, grammar rules/cases in <span style='color:#27ae60'><b>green</b></span>.
-    ///    - Do NOT analyze every single trivial word. Merge concepts where natural.
-    ///    Use: <p><b>Analysis:</b></p><ul><li>...</li></ul>
-    ///
-    /// 3. **Grammar Recap**: A summary box of the specific declensions, conjugations, or rules used.
-    ///    Use: <div style='background-color:#3a3a3a;color:#e0e0e0;padding:10px;border-radius:5px;margin-top:10px;border-left:4px solid #3498db'><b>Grammar Recap:</b><br>...</div>
-    ///
-    /// IMPORTANT: No introductory or concluding chatter. No "Here is..." or "Great example!". Just the structured analysis.
-    pub pedagogical_explanation: String,
-    /// Morphological features of the TARGET word(s) — what the card tests.
-    pub target_features: Vec<ExtractedFeature<M>>,
-    /// Morphological features of the surrounding CONTEXT words.
-    pub context_features: Vec<ExtractedFeature<M>>,
-    /// Multi-word expressions (idioms, collocations, phrasal expressions) found in the sentence.
-    #[serde(default)]
-    pub multiword_expressions: Vec<MultiwordExpression>,
-    /// Morpheme segmentation — present only for agglutinative languages.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub morpheme_segmentation: Option<Vec<WordSegmentation<F>>>,
 }

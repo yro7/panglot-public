@@ -52,7 +52,7 @@ enum Command {
         ui_language: String,
 
         /// Comma-separated list of components to extract (e.g. "pedagogical_explanation,morphology").
-        /// When omitted, uses the legacy monolithic extraction.
+        /// When omitted, all compatible components are extracted.
         #[arg(long)]
         components: Option<String>,
     },
@@ -155,16 +155,19 @@ async fn main() -> Result<()> {
                 user_prompt: None,
             };
 
-            let result = if let Some(comp_str) = components {
-                let keys: Vec<&str> = comp_str.split(',').map(|s| s.trim()).collect();
-                run_component_extraction(&config, &prompts, &request, &keys, temperature, max_tokens)
-                    .await
-                    .context("Component extraction failed")?
-            } else {
-                run_extraction(&config, &prompts, &request, temperature, max_tokens)
-                    .await
-                    .context("Feature extraction failed")?
-            };
+            let keys: Option<Vec<&str>> = components
+                .as_ref()
+                .map(|s| s.split(',').map(|k| k.trim()).collect());
+            let result = run_component_extraction(
+                &config,
+                &prompts,
+                &request,
+                keys.as_deref(),
+                temperature,
+                max_tokens,
+            )
+            .await
+            .context("Feature extraction failed")?;
 
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
@@ -174,70 +177,14 @@ async fn main() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Extraction dispatch: resolve provider → rig model → extract_erased
+// Extraction dispatch: resolve provider → rig model → extract_erased_with_components
 // ---------------------------------------------------------------------------
-
-async fn run_extraction(
-    config: &Config,
-    prompts: &ExtractorPrompts,
-    request: &ExtractionRequest,
-    temperature: f32,
-    max_tokens: u32,
-) -> Result<serde_json::Value> {
-    match config.provider {
-        Provider::Openai => {
-            let client = rig::providers::openai::Client::new(&config.api_key)
-                .map_err(|e| anyhow::anyhow!("Failed to create OpenAI client: {e}"))?;
-            let model = client.completion_model(&config.model);
-            registry::extract_erased(
-                &config.language,
-                &model,
-                request,
-                temperature,
-                max_tokens,
-                None,
-                prompts,
-            )
-            .await
-        }
-        Provider::Anthropic => {
-            let client = rig::providers::anthropic::Client::new(&config.api_key)
-                .map_err(|e| anyhow::anyhow!("Failed to create Anthropic client: {e}"))?;
-            let model = client.completion_model(&config.model);
-            registry::extract_erased(
-                &config.language,
-                &model,
-                request,
-                temperature,
-                max_tokens,
-                None,
-                prompts,
-            )
-            .await
-        }
-        Provider::Google => {
-            let client = rig::providers::gemini::Client::new(&config.api_key)
-                .map_err(|e| anyhow::anyhow!("Failed to create Gemini client: {e}"))?;
-            let model = client.completion_model(&config.model);
-            registry::extract_erased(
-                &config.language,
-                &model,
-                request,
-                temperature,
-                max_tokens,
-                None,
-                prompts,
-            )
-            .await
-        }
-    }
-}
 
 async fn run_component_extraction(
     config: &Config,
     prompts: &ExtractorPrompts,
     request: &ExtractionRequest,
-    component_keys: &[&str],
+    component_keys: Option<&[&str]>,
     temperature: f32,
     max_tokens: u32,
 ) -> Result<serde_json::Value> {
@@ -250,7 +197,7 @@ async fn run_component_extraction(
                 &config.language,
                 &model,
                 request,
-                Some(component_keys),
+                component_keys,
                 temperature,
                 max_tokens,
                 None,
@@ -267,7 +214,7 @@ async fn run_component_extraction(
                 &config.language,
                 &model,
                 request,
-                Some(component_keys),
+                component_keys,
                 temperature,
                 max_tokens,
                 None,
@@ -284,7 +231,7 @@ async fn run_component_extraction(
                 &config.language,
                 &model,
                 request,
-                Some(component_keys),
+                component_keys,
                 temperature,
                 max_tokens,
                 None,

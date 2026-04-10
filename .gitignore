@@ -34,5 +34,6 @@ panini/
 # Misc
 test_parse.rs
 ""
+*.md
 implementation_plan.md
-implementation_plan.md
+implementation_plan_2.md

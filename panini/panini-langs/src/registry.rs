@@ -1,14 +1,14 @@
 //! Language registry for panini.
 //!
-//! Provides type-erased extraction entry-points: `extract_erased()` (legacy)
-//! and `extract_erased_with_components()` (composable).
+//! Provides the type-erased extraction entry-point `extract_erased_with_components()`
+//! which dispatches on an ISO code and runs the composable component pipeline.
 
 use anyhow::{anyhow, Result};
 use rig::completion::CompletionModel;
 
 use panini_core::component::{AnalysisComponent, ExtractionResult};
 use panini_core::components::*;
-use panini_engine::{extract_features_via_llm, extract_with_components, ExtractionOptions, ExtractionRequest, PreviousAttempt};
+use panini_engine::{extract_with_components, ExtractionOptions, ExtractionRequest, PreviousAttempt};
 use panini_engine::prompts::ExtractorPrompts;
 
 use crate::{Arabic, French, Italian, Polish, Turkish};
@@ -91,43 +91,6 @@ where
 /// Each language must be a unit struct implementing LinguisticDefinition.
 macro_rules! generate_registry {
     ($($lang:ident),* $(,)?) => {
-        /// Extracts morphological features for any supported language, returning
-        /// the result serialized as a `serde_json::Value`.
-        ///
-        /// This is the legacy entry-point — returns the monolithic `FeatureExtractionResponse`.
-        pub async fn extract_erased<M: CompletionModel>(
-            lang_code: &str,
-            model: &M,
-            request: &ExtractionRequest,
-            temperature: f32,
-            max_tokens: u32,
-            previous_attempt: Option<&PreviousAttempt>,
-            extractor_prompts: &ExtractorPrompts,
-        ) -> Result<serde_json::Value> {
-            let options = ExtractionOptions {
-                temperature,
-                max_tokens,
-                previous_attempt,
-                extractor_prompts,
-            };
-
-            match lang_code {
-                $(
-                    <$lang as panini_core::LinguisticDefinition>::ISO_CODE => {
-                        let result = extract_features_via_llm(
-                            &$lang,
-                            model,
-                            request,
-                            options,
-                        )
-                        .await?;
-                        Ok(serde_json::to_value(&result)?)
-                    }
-                )*
-                _ => Err(anyhow!("Unsupported language: {lang_code}")),
-            }
-        }
-
         /// Extracts features using composable components for any supported language.
         ///
         /// `component_keys` selects which analyses to include (e.g. `["pedagogical_explanation", "morphology"]`).

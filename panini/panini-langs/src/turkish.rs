@@ -285,10 +285,6 @@ impl LinguisticDefinition for Turkish {
          5. Question Particle 'mi': Extract the question particle 'mi' (and its vowel-harmonized variants) as a separate particle."
     }
 
-    fn build_extraction_schema(&self) -> serde_json::Value {
-        <Self as Agglutinative>::build_full_schema()
-    }
-
     fn extra_extraction_directives(&self) -> Option<String> {
         Some(self.morpheme_directives())
     }

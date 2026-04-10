@@ -155,6 +155,29 @@ where
             .build()
             .generate_prompt()?;
 
+        // Build component list (mirrors worker.rs / panini-langs registry composition).
+        // `MorphemeSegmentation` self-filters via `is_compatible` at compose time, so
+        // including it unconditionally is safe across all languages.
+        use panini_core::component::AnalysisComponent;
+        use panini_core::components::{
+            MorphemeSegmentation, MorphologyAnalysis, MultiwordExpressions, PedagogicalExplanation,
+        };
+        let pedagogical = PedagogicalExplanation;
+        let morphology = MorphologyAnalysis;
+        let multiword = MultiwordExpressions;
+        let morpheme_seg = MorphemeSegmentation;
+        let lang_def = self.language.linguistic_def();
+        let all_components: Vec<&dyn AnalysisComponent<L::LinguisticDef>> = vec![
+            &pedagogical,
+            &morphology,
+            &multiword,
+            &morpheme_seg,
+        ];
+        let selected: Vec<&dyn AnalysisComponent<L::LinguisticDef>> = all_components
+            .into_iter()
+            .filter(|c| c.is_compatible(lang_def))
+            .collect();
+
         let system_prompt_call_2 = {
             let extraction_req = panini_engine::prompts::ExtractionRequest {
                 content: String::new(),
@@ -165,15 +188,16 @@ where
                 linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
                 user_prompt: req.user_prompt.clone(),
             };
-            panini_engine::prompts::build_extraction_prompt(
-                self.language.linguistic_def(),
+            panini_engine::composer::compose_prompt(
+                lang_def,
                 &extraction_req,
                 &self.prompt_config.extractor,
+                &selected,
             )?
         };
 
         let schema_call_1 = crate::card_models::AnyCard::schema_json_value::<L>(card_model_id);
-        let schema_call_2 = self.language.linguistic_def().build_extraction_schema();
+        let schema_call_2 = panini_engine::composer::compose_schema(lang_def, &selected);
 
         Ok(DynPromptPreview {
             system_prompt_call_1,
