@@ -146,6 +146,8 @@ impl LinguisticDefinition for Korean {
     type Morphology = KoreanMorphology;
     type GrammaticalFunction = ();
 
+    const ISO_CODE: &'static str = "kor";
+
     fn iso_code(&self) -> IsoLang {
         IsoLang::Kor
     }

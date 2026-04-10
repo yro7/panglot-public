@@ -14,6 +14,7 @@ fn main() {
     let struct_re = Regex::new(r"impl\s+Language\s+for\s+(\w+)").unwrap();
     let morph_re = Regex::new(r"type\s+Morphology\s*=\s*(\w+)").unwrap();
     let iso_re = Regex::new(r"IsoLang::(\w+)").unwrap();
+    let iso_code_const_re = Regex::new(r#"ISO_CODE\s*:\s*&'static\s+str\s*=\s*"([^"]+)""#).unwrap();
     let extra_re = Regex::new(r"type\s+ExtraFields\s*=\s*(\w+)").unwrap();
     let gf_re = Regex::new(r"type\s+GrammaticalFunction\s*=\s*([\w()]+)").unwrap();
     let panini_re = Regex::new(r"pub\s+use\s+panini_langs::(\w+)::\*").unwrap();
@@ -68,9 +69,10 @@ fn main() {
                 .unwrap_or_else(|| panic!("No Morphology type found in panini-langs/{panini_mod}.rs"))
                 .get(1).unwrap().as_str().to_string();
 
-            let iso = iso_re.captures(&panini_content)
-                .unwrap_or_else(|| panic!("No IsoLang found in panini-langs/{panini_mod}.rs"))
-                .get(1).unwrap().as_str().to_string();
+            let iso = iso_code_const_re.captures(&panini_content)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .or_else(|| iso_re.captures(&panini_content).map(|c| c.get(1).unwrap().as_str().to_lowercase()))
+                .unwrap_or_else(|| panic!("No ISO_CODE const or IsoLang found in panini-langs/{panini_mod}.rs"));
 
             let gf = gf_re.captures(&panini_content)
                 .map(|c| c.get(1).unwrap().as_str().to_string())
