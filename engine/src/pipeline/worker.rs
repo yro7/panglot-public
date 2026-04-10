@@ -132,11 +132,15 @@ where
 
         macro_rules! call_panini {
             ($m:expr, $request:expr, $prev:expr) => {
-                panini_engine::extractor::extract_features_via_llm(
+                panini_engine::extract_features_via_llm(
                     self.language.linguistic_def(),
                     $m, $request,
-                    self.extractor_temperature, self.extractor_max_tokens,
-                    $prev, &self.prompt_config.extractor,
+                    panini_engine::ExtractionOptions {
+                        temperature: self.extractor_temperature,
+                        max_tokens: self.extractor_max_tokens,
+                        previous_attempt: $prev,
+                        extractor_prompts: &self.prompt_config.extractor,
+                    },
                 ).await
             }
         }
@@ -161,32 +165,39 @@ where
                     LlmBackend::Anthropic(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
                     LlmBackend::Google(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
                 }
-            }).await;
+            })
+            .await
+            .map_err(|_| panini_engine::ExtractionError::Parse(
+                panini_engine::ExtractionParseError {
+                    raw_response: String::new(),
+                    error_message: format!("Feature extraction timed out after {:?}", self.llm_call_timeout),
+                }
+            ))
+            .and_then(|inner| inner); // Flatten nested Result
             drop(_permit);
-
-            // Flatten timeout into the error path
-            let r = match r {
-                Ok(inner) => inner,
-                Err(_) => Err(anyhow::anyhow!("Feature extraction timed out after {:?}", self.llm_call_timeout)),
-            };
 
             match r {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
+                    // Convert ExtractionError to anyhow::Error for downcast + retry logic
+                    let e_anyhow: anyhow::Error = e.into();
+
                     // Determine next backoff interval; None means max elapsed time exceeded
                     let Some(wait) = backoff::backoff::Backoff::next_backoff(&mut backoff) else {
-                        return Err(e);
+                        return Err(e_anyhow);
                     };
 
                     // Build correction context for the next attempt
-                    if let Some(pe) = e.downcast_ref::<panini_engine::ExtractionParseError>() {
-                        prev_attempt = Some(panini_engine::PreviousAttempt {
-                            raw_response: pe.raw_response.clone(),
-                            error: pe.error_message.clone(),
-                        });
+                    if let Some(ext_err) = e_anyhow.downcast_ref::<panini_engine::ExtractionError>() {
+                        if let panini_engine::ExtractionError::Parse(pe) = ext_err {
+                            prev_attempt = Some(panini_engine::PreviousAttempt {
+                                raw_response: pe.raw_response.clone(),
+                                error: pe.error_message.clone(),
+                            });
+                        }
                     }
 
-                    tracing::warn!(?wait, %e, "Feature extraction attempt failed, retrying");
+                    tracing::warn!(?wait, %e_anyhow, "Feature extraction attempt failed, retrying");
                     tokio::time::sleep(wait).await;
                 }
             }

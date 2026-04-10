@@ -149,6 +149,8 @@ impl LinguisticDefinition for Russian {
     type Morphology = RussianMorphology;
     type GrammaticalFunction = ();
 
+    const ISO_CODE: &'static str = "rus";
+
     fn iso_code(&self) -> IsoLang {
         IsoLang::Rus
     }
