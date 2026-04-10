@@ -6,6 +6,12 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+use panini_core::component::AnalysisComponent;
+use panini_core::components::{
+    MorphemeSegmentation, MorphologyAnalysis, MultiwordExpressions, PedagogicalExplanation,
+};
+use panini_core::domain::ExtractedFeature;
+
 use crate::generator::GenerationRequest;
 use crate::llm_backend::LlmBackend;
 use crate::skill_tree::SkillNode;
@@ -131,10 +137,10 @@ where
         };
 
         macro_rules! call_panini {
-            ($m:expr, $request:expr, $prev:expr) => {
-                panini_engine::extract_features_via_llm(
+            ($m:expr, $request:expr, $prev:expr, $components:expr) => {
+                panini_engine::extract_with_components(
                     self.language.linguistic_def(),
-                    $m, $request,
+                    $m, $request, $components,
                     panini_engine::ExtractionOptions {
                         temperature: self.extractor_temperature,
                         max_tokens: self.extractor_max_tokens,
@@ -144,6 +150,13 @@ where
                 ).await
             }
         }
+
+        // `MorphemeSegmentation` auto-filters at runtime for non-agglutinative languages.
+        let ped: &dyn AnalysisComponent<L::LinguisticDef> = &PedagogicalExplanation;
+        let morph: &dyn AnalysisComponent<L::LinguisticDef> = &MorphologyAnalysis;
+        let mw: &dyn AnalysisComponent<L::LinguisticDef> = &MultiwordExpressions;
+        let ms: &dyn AnalysisComponent<L::LinguisticDef> = &MorphemeSegmentation;
+        let components = [ped, morph, mw, ms];
 
         let mut prev_attempt: Option<panini_engine::PreviousAttempt> = None;
         let mut backoff = backoff::ExponentialBackoffBuilder::new()
@@ -161,9 +174,9 @@ where
 
             let r = tokio::time::timeout(self.llm_call_timeout, async {
                 match &backend {
-                    LlmBackend::OpenAi(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
-                    LlmBackend::Anthropic(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
-                    LlmBackend::Google(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
+                    LlmBackend::OpenAi(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref(), &components),
+                    LlmBackend::Anthropic(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref(), &components),
+                    LlmBackend::Google(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref(), &components),
                 }
             })
             .await
@@ -177,7 +190,22 @@ where
             drop(_permit);
 
             match r {
-                Ok(resp) => return Ok(resp),
+                Ok(result) => {
+                    #[derive(serde::Deserialize)]
+                    struct Morph<M> {
+                        #[serde(default = "Vec::new")] target_features: Vec<ExtractedFeature<M>>,
+                        #[serde(default = "Vec::new")] context_features: Vec<ExtractedFeature<M>>,
+                    }
+                    let m: Morph<L::Morphology> = result.get(morph.schema_key())
+                        .unwrap_or_else(|_| Morph { target_features: vec![], context_features: vec![] });
+                    return Ok(panini_core::morpheme::FeatureExtractionResponse {
+                        pedagogical_explanation: result.get(ped.schema_key()).unwrap_or_default(),
+                        target_features: m.target_features,
+                        context_features: m.context_features,
+                        multiword_expressions: result.get(mw.schema_key()).unwrap_or_default(),
+                        morpheme_segmentation: result.get(ms.schema_key()).ok(),
+                    });
+                }
                 Err(e) => {
                     // Convert ExtractionError to anyhow::Error for downcast + retry logic
                     let e_anyhow: anyhow::Error = e.into();

@@ -182,9 +182,16 @@ pub fn panini_result_derive(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    // Generate ComponentRequires<L> bounds for each component
+    // Generate ComponentRequires<L> bounds only for required (non-Option) fields.
+    // Option<T> fields are tolerated at runtime via `is_compatible()` filtering
+    // in `extract_with_components`, matching the semantics of the untyped path.
+    // This lets cross-language pipelines declare e.g. `Option<MorphemeSegmentation>`
+    // without requiring `L: Agglutinative`.
+    // TODO: check eventual refactor: bcs we SOULDNT allow the field MorphemeSegmentation AT ALL
+    // if the language does not implement aglgutinative.
     let requires_bounds: Vec<_> = component_fields
         .iter()
+        .filter(|(_, _, is_option)| !*is_option)
         .map(|(_, path, _)| {
             quote! { #path: ::panini::__macro_support::panini_core::component::ComponentRequires<#lang_ident> }
         })
