@@ -1,4 +1,4 @@
-use lc_core::traits::{Language, MorphologyInfo};
+use lc_core::traits::{Language, LinguisticDefinition, MorphologyInfo};
 use crate::generator::GenerationRequest;
 use crate::skill_tree::SkillNode;
 use serde::{Deserialize};
@@ -43,29 +43,10 @@ pub struct GenerationParams {
     pub ui_language: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExtractorPrompts {
-    pub system_role: String,
-    pub target_language: String,
-    pub extraction_directives: String,
-    pub learner_profile: LearnerProfile,
-    pub skill_context: SkillContextPrompts,
-    pub user_context: String,
-    pub output_instruction: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct LearnerProfile {
-    pub ui_language: String,
-    pub linguistic_background_intro: String,
-    pub linguistic_background_entry: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct SkillContextPrompts {
-    pub skill_tree_path: String,
-    pub pedagogical_focus: String,
-}
+// Extractor prompt structs — single source of truth in panini-engine.
+pub use panini_engine::prompts::{
+    ExtractorPrompts, LearnerProfile, SkillContextPrompts,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserMessages {
@@ -257,7 +238,7 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
 
         // Global context with ALL placeholders available to all sections
         let mut global_ctx = HashMap::new();
-        global_ctx.insert("language", self.language.name());
+        global_ctx.insert("language", self.language.linguistic_def().name());
         global_ctx.insert("directives", directives);
         global_ctx.insert("node_path", self.node_path);
         global_ctx.insert("instructions", instructions);
@@ -343,105 +324,8 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
     }
 }
 
-// ----- Feature Extractor Prompt Context -----
-
-#[derive(typed_builder::TypedBuilder)]
-pub struct FeatureExtractorContext<'a, L: Language> {
-    pub language: &'a L,
-    pub skill_node: &'a SkillNode,
-    pub node_path: &'a str,
-    pub request: &'a GenerationRequest<L>,
-    pub prompt_config: &'a PromptConfig,
-}
-
-impl<'a, L: Language> FeatureExtractorContext<'a, L> {
-    pub fn generate_prompt(self) -> Result<String, PromptBuilderError> {
-        let cfg = &self.prompt_config.extractor;
-
-        // === BUILD GLOBAL PLACEHOLDER CONTEXT ===
-        let ui_lang_name = self.request.user_profile.ui_language.clone();
-        let ui_lang_iso_code = IsoLang::from_name(&ui_lang_name)
-            .map(|lang| lang.to_639_3().to_string())
-            .unwrap_or_else(|| "eng".to_string());
-
-        let context_description = self.request.user_prompt.as_deref().unwrap_or("");
-
-        // Global context with ALL placeholders available to all sections
-        let mut global_ctx = HashMap::new();
-        global_ctx.insert("language", self.language.name());
-        global_ctx.insert("directives", self.language.extraction_directives());
-        global_ctx.insert("path", self.node_path);
-        global_ctx.insert("instructions", self.skill_node.node_instructions.as_deref().unwrap_or(""));
-        global_ctx.insert("iso", ui_lang_iso_code.as_str());
-        global_ctx.insert("name", &ui_lang_name);
-        global_ctx.insert("context_description", context_description);
-
-        let mut blocks = Vec::new();
-
-        // System role
-        blocks.push(cfg.system_role.clone());
-
-        // Target language section
-        let language_context = interpolate(&cfg.target_language, &global_ctx)?;
-        blocks.push(wrap_tag("target_language", &language_context));
-
-        // Extraction directives section
-        let extraction_directives = interpolate(&cfg.extraction_directives, &global_ctx)?;
-        blocks.push(wrap_tag("extraction_directives", &extraction_directives));
-
-        // Learner profile section
-        let mut learner_profile_content = String::new();
-
-        // For learner_profile.ui_language, {language} refers to UI language, not target language
-        let mut ui_lang_ctx = global_ctx.clone();
-        ui_lang_ctx.insert("language", &ui_lang_name);
-        let ui_lang_str = interpolate(&cfg.learner_profile.ui_language, &ui_lang_ctx)?;
-        learner_profile_content.push_str(&ui_lang_str);
-
-        if !self.request.user_profile.linguistic_background.is_empty() {
-            learner_profile_content.push_str("\n\n");
-            learner_profile_content.push_str(&cfg.learner_profile.linguistic_background_intro);
-            learner_profile_content.push('\n');
-
-            for lang in &self.request.user_profile.linguistic_background {
-                let level_str = format!("{:?}", lang.level);
-                let mut ctx = global_ctx.clone();
-                ctx.insert("iso", lang.iso_639_3.as_str());
-                ctx.insert("level", level_str.as_str());
-                let entry = interpolate(&cfg.learner_profile.linguistic_background_entry, &ctx)?;
-                learner_profile_content.push_str(&entry);
-                learner_profile_content.push('\n');
-            }
-        }
-
-        blocks.push(wrap_tag("learner_profile", &learner_profile_content));
-
-        // Skill context section
-        let mut skill_context_content = String::new();
-
-        let skill_path_str = interpolate(&cfg.skill_context.skill_tree_path, &global_ctx)?;
-        skill_context_content.push_str(&skill_path_str);
-
-        if let Some(_) = &self.skill_node.node_instructions {
-            skill_context_content.push('\n');
-            let ped_focus_str = interpolate(&cfg.skill_context.pedagogical_focus, &global_ctx)?;
-            skill_context_content.push_str(&ped_focus_str);
-        }
-
-        blocks.push(wrap_tag("skill_context", &skill_context_content));
-
-        // User context section (if provided)
-        if !context_description.is_empty() {
-            let user_context_str = interpolate(&cfg.user_context, &global_ctx)?;
-            blocks.push(wrap_tag("user_context", &user_context_str));
-        }
-
-        // Output instruction section
-        blocks.push(wrap_tag("output", &cfg.output_instruction));
-
-        Ok(blocks.join("\n\n"))
-    }
-}
+// Feature extractor prompt logic has been migrated to panini-engine.
+// See panini_engine::prompts::build_extraction_prompt.
 
 // ----- Tests -----
 
@@ -596,15 +480,25 @@ mod tests {
         let node = tree.find_node(acc_id).unwrap();
         let path = tree.get_node_path(acc_id).unwrap();
 
-        let prompt = FeatureExtractorContext::builder()
-            .language(&tree.language)
-            .skill_node(node)
-            .node_path(&path)
-            .request(&req)
-            .prompt_config(&config)
-            .build()
-            .generate_prompt()
-            .unwrap();
+        let extraction_req = panini_engine::prompts::ExtractionRequest {
+            content: String::new(),
+            targets: Vec::new(),
+            pedagogical_context: node.node_instructions.clone(),
+            skill_path: Some(path.clone()),
+            learner_ui_language: req.user_profile.ui_language.clone(),
+            linguistic_background: req.user_profile.linguistic_background.iter().map(|l| {
+                panini_engine::prompts::LanguageLevel {
+                    iso_639_3: l.iso_639_3.clone(),
+                    level: format!("{:?}", l.level),
+                }
+            }).collect(),
+            user_prompt: req.user_prompt.clone(),
+        };
+        let prompt = panini_engine::prompts::build_extraction_prompt(
+            tree.language.linguistic_def(),
+            &extraction_req,
+            &config.extractor,
+        ).unwrap();
 
         assert!(prompt.contains("expert computational linguist"));
         assert!(prompt.contains("Polish"));
@@ -651,14 +545,5 @@ mod tests {
 
         assert!(prompt.contains("EXACTLY ONE JSON object"));
         assert!(!prompt.contains("distinct objects"));
-    }
-
-    #[test]
-    fn dump_feature_extractor_schema() {
-        let schema_value = serde_json::to_value(
-            &schemars::schema_for!(crate::feature_extractor::FeatureExtractionResponse<langs::PolishMorphology>)
-        ).unwrap();
-        let schema = serde_json::to_string_pretty(&schema_value).unwrap();
-        eprintln!("FEATURE EXTRACTOR SCHEMA\n{}", schema);
     }
 }

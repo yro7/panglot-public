@@ -117,7 +117,12 @@ pub struct LlmConfig {
     pub api_key_env: Option<String>,
     pub retry: RetryConfig,
     pub concurrency: ConcurrencyConfig,
+    /// Timeout in seconds for each individual LLM call. Defaults to 120.
+    #[serde(default = "default_llm_call_timeout_secs")]
+    pub call_timeout_secs: u64,
 }
+
+fn default_llm_call_timeout_secs() -> u64 { 120 }
 
 impl LlmConfig {
     /// Returns the first model from the chosen provider's list.
@@ -184,6 +189,7 @@ impl Default for UserSettingsDefaultsConfig {
 #[derive(Debug, Deserialize)]
 pub struct PathsConfig {
     pub output_dir: String,
+    #[allow(dead_code)]
     pub audio_staging_dir: String,
     /// URL to the AnkiConnect add-on running locally.
     /// Default: http://localhost:8765

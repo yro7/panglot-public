@@ -9,7 +9,7 @@ use dashmap::DashSet;
 use lc_core::srs::SrsRegistry;
 use engine::analyzer::DynLexiconTracker;
 use engine::pipeline::{DynPipeline, LexiconStatus};
-use engine::llm_client::LlmProvider;
+use engine::llm_backend::LlmProvider;
 
 use crate::config::{DefaultsConfig, LlmCallConfig, LlmConfig};
 use crate::auth::AuthUser;

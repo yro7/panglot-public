@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use engine::analyzer::DynLexiconTracker;
 use engine::card_models::CardModelId;
-use engine::llm_client::RequestContext;
+use engine::llm_backend::RequestContext;
 use engine::pipeline::DynGeneratedCard;
 use engine::skill_tree;
 use lc_core::db::DraftCard;
@@ -206,15 +206,22 @@ pub async fn generate_and_save(
 
     let tracker = user_tracker(&data, &auth.user_id, lang).await;
 
-    let result = pipeline.generate_cards_and_deck_dyn(
+    let result = pipeline.generate_cards_dyn(
         &req.user_tree, req.node_id, req.card_model_id, req.card_count, req.difficulty,
         body.user_profile.clone(), body.user_prompt.as_deref().map(String::from),
         body.lexicon_options.clone(), req.req_ctx, req.llm_sem, req.pp_sem, tracker,
     ).await;
 
     match result {
-        Ok((dyn_cards, deck_data)) => {
+        Ok(dyn_cards) => {
             let skill_name = req.skill_name.clone();
+
+            // Build deck data for storage
+            let deck_name = pipeline.build_deck_name_dyn(&req.user_tree, req.node_id, req.card_model_id)
+                .unwrap_or_else(|_| format!("{}::{}", req.node_id, req.card_model_id));
+            let language_code = pipeline.iso_code_str().to_string();
+            let deck_data = engine::pipeline::cards_to_deck_data(&dyn_cards, deck_name, language_code);
+
             drop(pipelines);
             let cards_json = finalize_cards(dyn_cards, req.node_id, &skill_name, &data, &auth).await;
 

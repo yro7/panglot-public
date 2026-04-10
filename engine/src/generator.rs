@@ -3,7 +3,7 @@ use lc_core::traits::Language;
 use serde::{Deserialize, Serialize};
 
 use crate::card_models::CardModelId;
-use crate::llm_client::RequestContext;
+use crate::llm_backend::RequestContext;
 
 // ----- Generation Request -----
 

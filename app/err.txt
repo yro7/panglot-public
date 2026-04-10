@@ -1,0 +1,141 @@
+warning: unused variable: `ld_struct_re`
+  --> langs/build.rs:22:9
+   |
+22 |     let ld_struct_re = Regex:...
+   |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ld_struct_re`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `langs` (build script) generated 1 warning
+warning: unused imports: `Deserialize` and `Serialize`
+ --> anki_bridge/src/provider.rs:1:13
+  |
+1 | ...::{Deserialize, Serialize};
+  |       ^^^^^^^^^^^  ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `NewCardEntry`
+ --> anki_bridge/src/provider.rs:4:76
+  |
+4 | ...kData, NewCardEntry};
+  |           ^^^^^^^^^^^^
+
+warning: unused import: `NewCardEntry`
+ --> anki_bridge/src/deck_builder.rs:6:37
+  |
+6 | ...kData, NewCardEntry};
+  |           ^^^^^^^^^^^^
+
+warning: `anki_bridge` (lib) generated 3 warnings (run `cargo fix --lib -p anki_bridge` to apply 3 suggestions)
+warning: unused import: `RequestContext`
+  --> engine/src/pipeline.rs:13:38
+   |
+13 | ...mBackend, RequestContext};
+   |              ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Prompt`
+  --> engine/src/pipeline.rs:20:40
+   |
+20 | ...pletionModel, Prompt};
+   |                  ^^^^^^
+
+warning: unused import: `rig::message::Message`
+  --> engine/src/pipeline.rs:21:5
+   |
+21 | use rig::message::Message;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::llm_backend::RequestContext`
+ --> engine/src/usage.rs:3:5
+  |
+3 | use crate::llm_backend::RequestContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `base_url`
+  --> engine/src/llm_backend.rs:88:69
+   |
+88 | ...key: &str, base_url: &str) -> anyho...
+   |               ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_base_url`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `call_start`
+   --> engine/src/pipeline.rs:421:35
+    |
+421 | ...     let call_start = std::time::I...
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_call_start`
+
+warning: `engine` (lib) generated 6 warnings (run `cargo fix --lib -p engine` to apply 6 suggestions)
+    Checking panglot v0.1.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/app)
+error[E0432]: unresolved import `engine::analyzer::AnalyzerConfig`
+  --> app/src/main.rs:12:5
+   |
+12 | use engine::analyzer::AnalyzerConfig;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `AnalyzerConfig` in `analyzer`
+
+error[E0432]: unresolved import `engine::llm_backend::LlmHttpClient`
+  --> app/src/main.rs:13:27
+   |
+13 | ...ackend::{LlmHttpClient, LlmProvider};
+   |             ^^^^^^^^^^^^^ no `LlmHttpClient` in `llm_backend`
+
+error[E0432]: unresolved import `engine::llm_client`
+  --> app/src/state.rs:12:13
+   |
+12 | use engine::llm_client::LlmProvider;
+   |             ^^^^^^^^^^ could not find `llm_client` in `engine`
+
+error[E0432]: unresolved import `engine::llm_client`
+ --> app/src/api/generation.rs:4:13
+  |
+4 | use engine::llm_client::RequestContext;
+  |             ^^^^^^^^^^ could not find `llm_client` in `engine`
+
+error[E0432]: unresolved import `engine::llm_client`
+ --> app/src/api/export.rs:3:13
+  |
+3 | use engine::llm_client::RequestContext;
+  |             ^^^^^^^^^^ could not find `llm_client` in `engine`
+
+error[E0432]: unresolved import `engine::llm_client`
+ --> app/src/api/config.rs:2:13
+  |
+2 | use engine::llm_client::{LlmProvider, L...
+  |             ^^^^^^^^^^ could not find `llm_client` in `engine`
+
+error[E0433]: failed to resolve: could not find `llm_client` in `engine`
+  --> app/src/api/config.rs:77:52
+   |
+77 | ... engine::llm_client::LlmClient> {
+   |             ^^^^^^^^^^ could not find `llm_client` in `engine`
+
+error[E0425]: cannot find value `prompt_config` in this scope
+  --> app/src/main.rs:58:9
+   |
+58 |         prompt_config.clone(),
+   |         ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `recorder` in this scope
+  --> app/src/main.rs:60:33
+   |
+60 | ...e_recorder(recorder.clone());
+   |               ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `sidecar` in this scope
+  --> app/src/main.rs:61:83
+   |
+61 | ...rator::new(sidecar.clone())));
+   |               ^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `sidecar` in this scope
+  --> app/src/main.rs:62:83
+   |
+62 | ...rator::new(sidecar.clone())));
+   |               ^^^^^^^ not found in this scope
+
+Some errors have detailed explanations: E0425, E0432, E0433.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `panglot` (bin "panglot") due to 11 previous errors

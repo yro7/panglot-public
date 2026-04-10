@@ -52,6 +52,10 @@ pub fn to_fields_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// Re-export MorphologyInfo derive from panini-macro.
+/// This is a wrapper that generates code referencing `panini_core::traits::MorphologyInfo`
+/// but also generates a backwards-compatible impl via `lc_core::traits::MorphologyInfo`
+/// since lc_core re-exports the trait from panini_core.
 #[proc_macro_derive(MorphologyInfo)]
 pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -79,6 +83,11 @@ pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
         }
     }
 
+    // Generate the PosTag enum name: <Name>PosTag
+    let pos_tag_name = quote::format_ident!("{}PosTag", name);
+
+    let pos_tag_variants: Vec<_> = variants.iter().map(|v| &v.ident).collect();
+
     let lemma_arms = variants.iter().map(|v| {
         let ident = &v.ident;
         quote! { Self::#ident { lemma, .. } => lemma, }
@@ -90,11 +99,30 @@ pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
         quote! { Self::#ident { .. } => #label, }
     });
 
+    let pos_tag_arms = variants.iter().map(|v| {
+        let ident = &v.ident;
+        quote! { Self::#ident { .. } => #pos_tag_name::#ident, }
+    });
+
     let expanded = quote! {
+        /// Auto-generated POS tag enum for use in `MorphemeDefinition::applies_to`.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum #pos_tag_name {
+            #(#pos_tag_variants,)*
+        }
+
         impl lc_core::traits::MorphologyInfo for #name {
+            type PosTag = #pos_tag_name;
+
             fn lemma(&self) -> &str {
                 match self {
                     #(#lemma_arms)*
+                }
+            }
+
+            fn pos_tag(&self) -> #pos_tag_name {
+                match self {
+                    #(#pos_tag_arms)*
                 }
             }
 

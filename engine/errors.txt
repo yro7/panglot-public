@@ -1,0 +1,87 @@
+warning: unused variable: `ld_struct_re`
+  --> langs/build.rs:22:9
+   |
+22 |     let ld_struct_re = Regex:...
+   |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ld_struct_re`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `langs` (build script) generated 1 warning
+    Checking engine v0.1.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/engine)
+error[E0432]: unresolved import `crate::llm_client`
+  --> engine/src/feature_extractor.rs:11:12
+   |
+11 | use crate::llm_client::LlmClient;
+   |            ^^^^^^^^^^ could not find `llm_client` in the crate root
+
+error[E0432]: unresolved import `crate::panini_adapter`
+  --> engine/src/feature_extractor.rs:12:12
+   |
+12 | use crate::panini_adapter::{PaniniLlmAdap...
+   |            ^^^^^^^^^^^^^^ could not find `panini_adapter` in the crate root
+
+error[E0432]: unresolved import `crate::llm_client`
+ --> engine/src/generator.rs:6:12
+  |
+6 | use crate::llm_client::RequestContext;
+  |            ^^^^^^^^^^ could not find `llm_client` in the crate root
+
+error[E0433]: failed to resolve: could not find `panini_adapter` in the crate root
+   --> engine/src/pipeline.rs:963:47
+    |
+963 | ...: crate::panini_adapter::to_panini_la...
+    |             ^^^^^^^^^^^^^^ could not find `panini_adapter` in the crate root
+
+error[E0425]: cannot find type `CompletionModel` in module `rig::providers::anthropic`
+  --> engine/src/llm_backend.rs:82:42
+   |
+82 | ...thropic::CompletionModel),
+   |             ^^^^^^^^^^^^^^^ not found in `rig::providers::anthropic`
+   |
+help: consider importing one of these items
+   |
+ 1 + use rig::completion::CompletionModel;
+   |
+ 1 + use rig::providers::anthropic::completion::CompletionModel;
+   |
+ 1 + use rig::providers::azure::CompletionModel;
+   |
+ 1 + use rig::providers::cohere::CompletionModel;
+   |
+   = and 16 other candidates
+help: if you import `CompletionModel`, refer to it directly
+   |
+82 -     Anthropic(rig::providers::anthropic::CompletionModel),
+82 +     Anthropic(CompletionModel),
+   |
+
+warning: unused import: `RequestContext`
+  --> engine/src/pipeline.rs:13:38
+   |
+13 | ...LlmBackend, RequestContext};
+   |                ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Prompt`
+  --> engine/src/pipeline.rs:20:40
+   |
+20 | ...ompletionModel, Prompt};
+   |                    ^^^^^^
+
+warning: unused import: `rig::message::Message`
+  --> engine/src/pipeline.rs:21:5
+   |
+21 | use rig::message::Message;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::llm_backend::RequestContext`
+ --> engine/src/usage.rs:3:5
+  |
+3 | use crate::llm_backend::RequestContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some errors have detailed explanations: E0425, E0432, E0433.
+For more information about an error, try `rustc --explain E0425`.
+warning: `engine` (lib) generated 4 warnings
+error: could not compile `engine` (lib) due to 5 previous errors; 4 warnings emitted

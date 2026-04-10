@@ -57,10 +57,11 @@ macro_rules! define_card_models {
 
         impl CardModelId {
              pub fn available_models<L: lc_core::traits::Language>(language: &L) -> Vec<CardModelId> {
+                 use lc_core::traits::LinguisticDefinition;
                  let mut models = vec![
                      $(CardModelId::$model,)+
                  ];
-                 let features = language.typological_features();
+                 let features = language.linguistic_def().typological_features();
                  if features.contains(&lc_core::traits::TypologicalFeature::Conjugation) {
                      models.push(CardModelId::Conjugation);
                  }
