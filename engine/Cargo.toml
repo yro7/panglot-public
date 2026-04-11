@@ -29,5 +29,9 @@ isolang = { version = "2.4.0", features = ["english_names"] }
 tracing = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 
+[[bin]]
+name = "lexicon-debug"
+path = "src/bin/lexicon_debug.rs"
+
 [dev-dependencies]
 static_assertions = "1.1"

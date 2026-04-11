@@ -1,3 +1,6 @@
+pub mod aggregable {
+    pub use panini_core::aggregable::*;
+}
 pub mod domain;
 pub mod morpheme;
 pub mod morphology_enums;

@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod digest;
 pub mod card_models;
 pub mod generator;
 pub mod llm_backend;

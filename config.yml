@@ -17,6 +17,7 @@ llm:
   # Modeles par provider (le premier de la liste du provider choisi est utilise)
   models:
     google:
+      - "gemini-3.1-flash-lite-preview"
       - "gemini-2.5-flash"
       - "gemini-2.5-pro"
     anthropic:

@@ -2445,6 +2445,7 @@ version = "0.1.0"
 dependencies = [
  "iso15924",
  "isolang",
+ "panini-macro",
  "regex",
  "schemars",
  "serde",

@@ -3,6 +3,8 @@ use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
+use crate::aggregable::{Aggregable, AggregableFields, FieldDescriptor, FieldKind};
+use crate::domain::ExtractedFeature;
 use crate::traits::{LinguisticDefinition, MorphologyInfo};
 
 // ─── Morpheme types ───────────────────────────────────────────────────────────
@@ -40,6 +42,51 @@ pub struct WordSegmentation<F> {
     pub word: String,
     /// Ordered list of extracted morphemes (excluding the root/stem, which is in `lemma`).
     pub morphemes: Vec<ExtractedMorpheme<F>>,
+}
+
+// ─── Aggregable impls ─────────────────────────────────────────────────────────
+
+/// Each morpheme in a `WordSegmentation` is one observation.
+/// Fields: `base_form` (open) + whatever `F: AggregableFields` contributes.
+impl<F: AggregableFields> Aggregable for WordSegmentation<F> {
+    fn group_key(&self) -> String {
+        "morpheme".to_string()
+    }
+
+    fn instance_descriptors(&self) -> Vec<FieldDescriptor> {
+        let mut d = vec![FieldDescriptor {
+            name: "base_form".into(),
+            kind: FieldKind::Open,
+        }];
+        d.extend(F::descriptors());
+        d
+    }
+
+    fn observations(&self) -> Vec<Vec<(String, String)>> {
+        self.morphemes
+            .iter()
+            .map(|m| {
+                let mut obs = vec![("base_form".to_string(), m.base_form.clone())];
+                obs.extend(m.function.field_values());
+                obs
+            })
+            .collect()
+    }
+}
+
+/// Delegate `Aggregable` from `ExtractedFeature<M>` to the inner `morphology`.
+impl<M: Aggregable> Aggregable for ExtractedFeature<M> {
+    fn group_key(&self) -> String {
+        self.morphology.group_key()
+    }
+
+    fn instance_descriptors(&self) -> Vec<FieldDescriptor> {
+        self.morphology.instance_descriptors()
+    }
+
+    fn observations(&self) -> Vec<Vec<(String, String)>> {
+        self.morphology.observations()
+    }
 }
 
 // ─── Agglutinative trait ──────────────────────────────────────────────────────
