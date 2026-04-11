@@ -1,7 +1,7 @@
 pub mod analyzer;
-pub mod digest;
 pub mod card_models;
 pub mod generator;
+pub mod learner_profile;
 pub mod llm_backend;
 pub mod llm_utils;
 pub mod pipeline;

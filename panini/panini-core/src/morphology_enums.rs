@@ -12,7 +12,18 @@ use serde::{Deserialize, Serialize};
 // Person
 
 /// Grammatical person
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum Person {
@@ -24,7 +35,18 @@ pub enum Person {
 // Number
 
 /// Binary grammatical number (singular / plural).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum BinaryNumber {
@@ -33,7 +55,18 @@ pub enum BinaryNumber {
 }
 
 /// Ternary grammatical number (singular / dual / plural).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum TernaryNumber {
@@ -45,7 +78,18 @@ pub enum TernaryNumber {
 // Gender
 
 /// Two-gender system (masculine / feminine).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum BinaryGender {
@@ -54,7 +98,18 @@ pub enum BinaryGender {
 }
 
 /// Three-gender system (masculine / feminine / neuter).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum TernaryGender {
@@ -66,7 +121,18 @@ pub enum TernaryGender {
 // Aspect
 
 /// Slavic verbal aspect (perfective / imperfective).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum SlavicAspect {
@@ -77,7 +143,18 @@ pub enum SlavicAspect {
 // Voice
 
 /// Binary voice (active / passive).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, ClosedValues)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    ClosedValues,
+)]
 #[closed_values(crate = "crate")]
 #[serde(rename_all = "snake_case")]
 pub enum BinaryVoice {

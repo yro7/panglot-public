@@ -1,7 +1,7 @@
 mod core;
 mod builder;
 mod generation;
-mod worker;
+pub mod worker;
 mod dyn_trait;
 mod types;
 

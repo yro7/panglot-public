@@ -98,8 +98,11 @@ impl<M: Aggregable> Aggregable for ExtractedFeature<M> {
 /// (`extra_extraction_directives`, `post_process_extraction`) should delegate here.
 pub trait Agglutinative: LinguisticDefinition
 where
-    <Self::Morphology as MorphologyInfo>::PosTag: Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
-    Self::GrammaticalFunction: Debug + Clone + PartialEq
+    <Self::Morphology as MorphologyInfo>::PosTag:
+        Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
+    Self::GrammaticalFunction: Debug
+        + Clone
+        + PartialEq
         + Serialize
         + for<'de> Deserialize<'de>
         + schemars::JsonSchema
@@ -131,9 +134,7 @@ where
         for seg in segs.iter_mut() {
             let word = &seg.word;
             for morpheme in seg.morphemes.iter_mut() {
-                let definition = inventory
-                    .iter()
-                    .find(|d| d.base_form == morpheme.base_form);
+                let definition = inventory.iter().find(|d| d.base_form == morpheme.base_form);
 
                 let Some(def) = definition else {
                     errors.push(format!(

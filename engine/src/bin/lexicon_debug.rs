@@ -1,9 +1,11 @@
-use engine::digest::LexiconDigest;
-use langs::tur::TurkishGrammaticalFunction;
-use langs::TurkishMorphology;
+use lc_core::aggregable::digest::Aggregator;
 use lc_core::db::LocalStorageProvider;
 use lc_core::domain::CardMetadata;
 use lc_core::storage::{StorageProvider, StoredCard};
+use panini_core::aggregable::digest::{AggregationResult, BasicAggregator};
+
+use langs::tur::TurkishGrammaticalFunction;
+use langs::TurkishMorphology;
 
 const DB_PATH: &str = "output/panglot.db";
 const USER_ID: &str = "80512005-26ae-4cce-9cdd-48ccc1a3d950";
@@ -12,8 +14,8 @@ const USER_ID: &str = "80512005-26ae-4cce-9cdd-48ccc1a3d950";
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("=== Lexicon Digest (Turkish) ===");
 
-    let mut morph_digest = LexiconDigest::default();
-    let mut seg_digest = LexiconDigest::default();
+    let mut morph_agg = BasicAggregator::new();
+    let mut seg_agg = BasicAggregator::new();
 
     if let Ok(init) = LocalStorageProvider::init(DB_PATH).await {
         let provider = LocalStorageProvider::for_user(init.pool, USER_ID.to_string());
@@ -24,18 +26,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         continue;
                     }
 
-                    // Morphology digest
+                    // Morphology aggregation
                     let features = metadata
                         .target_features
                         .iter()
                         .chain(metadata.context_features.iter());
-                    let card_morph = LexiconDigest::from_iter(features.cloned());
-                    morph_digest.merge(card_morph);
+                    for feature in features {
+                        morph_agg.record(feature);
+                    }
 
-                    // Morpheme segmentation digest (Turkish-specific)
-                    if let Some(segs) = metadata.morpheme_segmentation {
-                        let card_seg = LexiconDigest::from_iter(segs);
-                        seg_digest.merge(card_seg);
+                    // Morpheme segmentation aggregation (Turkish-specific)
+                    if let Some(segs) = &metadata.morpheme_segmentation {
+                        for seg in segs {
+                            seg_agg.record(seg);
+                        }
                     }
 
                     for mwe in &metadata.multiword_expressions {
@@ -46,17 +50,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     }
 
-    if morph_digest.by_pos.is_empty() {
+    let morph_result: AggregationResult = morph_agg.finish();
+    let seg_result: AggregationResult = seg_agg.finish();
+
+    if morph_result.by_group.is_empty() {
         println!("(No data in DB — injecting mock data)");
-        inject_mock_data(&mut morph_digest, &mut seg_digest);
-    }
+        // For mock data, recreate aggregators
+        let mut morph_mock = BasicAggregator::new();
+        let mut seg_mock = BasicAggregator::new();
+        inject_mock_data(&mut morph_mock, &mut seg_mock);
+        morph_mock.finish().print();
+        seg_mock.finish().print();
+    } else {
+        println!("\n--- Morphology ---");
+        morph_result.print();
 
-    println!("\n--- Morphology ---");
-    morph_digest.print();
-
-    if !seg_digest.by_pos.is_empty() {
-        println!("\n--- Morpheme Segmentation ---");
-        seg_digest.print();
+        if !seg_result.by_group.is_empty() {
+            println!("\n--- Morpheme Segmentation ---");
+            seg_result.print();
+        }
     }
 
     Ok(())
@@ -78,7 +90,7 @@ where
     None
 }
 
-fn inject_mock_data(morph_digest: &mut LexiconDigest, seg_digest: &mut LexiconDigest) {
+fn inject_mock_data(morph_agg: &mut BasicAggregator, seg_agg: &mut BasicAggregator) {
     use langs::tur::{TurkishCase, TurkishGrammaticalFunction, TurkishTense};
     use lc_core::morpheme::{ExtractedMorpheme, WordSegmentation};
     use lc_core::traits::BinaryNumber;
@@ -101,7 +113,9 @@ fn inject_mock_data(morph_digest: &mut LexiconDigest, seg_digest: &mut LexiconDi
             number: BinaryNumber::Plural,
         },
     ];
-    *morph_digest = LexiconDigest::from_iter(features);
+    for feature in features {
+        morph_agg.record(&feature);
+    }
 
     // Mock morpheme segmentation
     let segs = vec![
@@ -136,5 +150,7 @@ fn inject_mock_data(morph_digest: &mut LexiconDigest, seg_digest: &mut LexiconDi
             ],
         },
     ];
-    *seg_digest = LexiconDigest::from_iter(segs);
+    for seg in segs {
+        seg_agg.record(&seg);
+    }
 }
