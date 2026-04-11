@@ -8,7 +8,8 @@ pub mod text_processing;
 pub mod traits;
 
 pub use aggregable::{Aggregable, AggregableFields, ClosedValues, FieldDescriptor, FieldKind};
-pub use traits::{LinguisticDefinition, MorphologyInfo};
 pub use component::{
-    AnalysisComponent, ComponentContext, ComponentRequires, ExtractionResult, ExtractionResultError, LanguageLevel,
+    AnalysisComponent, ComponentContext, ComponentRequires, ExtractionResult,
+    ExtractionResultError, LanguageLevel,
 };
+pub use traits::{LinguisticDefinition, MorphologyInfo};
