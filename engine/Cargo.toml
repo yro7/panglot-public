@@ -28,10 +28,15 @@ regex = "1"
 isolang = { version = "2.4.0", features = ["english_names"] }
 tracing = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
+petgraph = "0.7"
 
 [[bin]]
 name = "lexicon-debug"
 path = "src/bin/lexicon_debug.rs"
+
+[[bin]]
+name = "lexicon-graph-debug"
+path = "src/bin/lexicon_graph_debug.rs"
 
 [dev-dependencies]
 static_assertions = "1.1"
