@@ -7,7 +7,7 @@ use panini_core::traits::{
 
 // ─── Existing Turkish grammatical enums ──────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishCase {
     Nominative,  // Yalın hâl
@@ -18,7 +18,7 @@ pub enum TurkishCase {
     Genitive,    // Tamlayan hâli
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishTense {
     Past,     // Geçmiş zaman
@@ -27,7 +27,7 @@ pub enum TurkishTense {
     Aorist,   // Geniş zaman
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishMood {
     Indicative,     // Bildirme kipi
@@ -37,7 +37,7 @@ pub enum TurkishMood {
     Conditional,    // Şart kipi
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishVoice {
     Active,      // Etken çatı
@@ -47,7 +47,7 @@ pub enum TurkishVoice {
     Causative,   // Ettirgen çatı
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishPolarity {
     Positive,  // Olumlu
@@ -56,7 +56,7 @@ pub enum TurkishPolarity {
 
 // ─── New enums for morpheme-level functions ───────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishDerivation {
     Nominalization,
@@ -68,7 +68,7 @@ pub enum TurkishDerivation {
     Possessional,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum TurkishCopula {
     Epistemic,
@@ -76,7 +76,7 @@ pub enum TurkishCopula {
 
 // ─── GrammaticalFunction wrapper enum ────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema, panini_macro::AggregableFields)]
 #[serde(tag = "category", rename_all = "snake_case")]
 pub enum TurkishGrammaticalFunction {
     Case { value: TurkishCase },

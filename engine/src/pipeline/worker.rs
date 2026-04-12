@@ -26,7 +26,7 @@ use super::types::{GeneratedCard, to_panini_language_levels};
 /// `context_features` under that key.
 #[derive(Deserialize)]
 #[serde(bound(deserialize = "M: serde::de::DeserializeOwned"))]
-struct MorphSection<M> {
+pub struct MorphSection<M> {
     #[serde(default = "Vec::new")]
     pub target_features: Vec<ExtractedFeature<M>>,
     #[serde(default = "Vec::new")]

@@ -3,6 +3,8 @@ use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
+use crate::aggregable::{Aggregable, AggregableFields, FieldDescriptor, FieldKind};
+use crate::domain::ExtractedFeature;
 use crate::traits::{LinguisticDefinition, MorphologyInfo};
 
 // ─── Morpheme types ───────────────────────────────────────────────────────────
@@ -42,6 +44,51 @@ pub struct WordSegmentation<F> {
     pub morphemes: Vec<ExtractedMorpheme<F>>,
 }
 
+// ─── Aggregable impls ─────────────────────────────────────────────────────────
+
+/// Each morpheme in a `WordSegmentation` is one observation.
+/// Fields: `base_form` (open) + whatever `F: AggregableFields` contributes.
+impl<F: AggregableFields> Aggregable for WordSegmentation<F> {
+    fn group_key(&self) -> String {
+        "morpheme".to_string()
+    }
+
+    fn instance_descriptors(&self) -> Vec<FieldDescriptor> {
+        let mut d = vec![FieldDescriptor {
+            name: "base_form".into(),
+            kind: FieldKind::Open,
+        }];
+        d.extend(F::descriptors());
+        d
+    }
+
+    fn observations(&self) -> Vec<Vec<(String, String)>> {
+        self.morphemes
+            .iter()
+            .map(|m| {
+                let mut obs = vec![("base_form".to_string(), m.base_form.clone())];
+                obs.extend(m.function.field_values());
+                obs
+            })
+            .collect()
+    }
+}
+
+/// Delegate `Aggregable` from `ExtractedFeature<M>` to the inner `morphology`.
+impl<M: Aggregable> Aggregable for ExtractedFeature<M> {
+    fn group_key(&self) -> String {
+        self.morphology.group_key()
+    }
+
+    fn instance_descriptors(&self) -> Vec<FieldDescriptor> {
+        self.morphology.instance_descriptors()
+    }
+
+    fn observations(&self) -> Vec<Vec<(String, String)>> {
+        self.morphology.observations()
+    }
+}
+
 // ─── Agglutinative trait ──────────────────────────────────────────────────────
 
 /// Opt-in trait for agglutinative languages.
@@ -51,8 +98,11 @@ pub struct WordSegmentation<F> {
 /// (`extra_extraction_directives`, `post_process_extraction`) should delegate here.
 pub trait Agglutinative: LinguisticDefinition
 where
-    <Self::Morphology as MorphologyInfo>::PosTag: Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
-    Self::GrammaticalFunction: Debug + Clone + PartialEq
+    <Self::Morphology as MorphologyInfo>::PosTag:
+        Debug + Clone + Copy + PartialEq + Eq + Hash + 'static,
+    Self::GrammaticalFunction: Debug
+        + Clone
+        + PartialEq
         + Serialize
         + for<'de> Deserialize<'de>
         + schemars::JsonSchema
@@ -84,9 +134,7 @@ where
         for seg in segs.iter_mut() {
             let word = &seg.word;
             for morpheme in seg.morphemes.iter_mut() {
-                let definition = inventory
-                    .iter()
-                    .find(|d| d.base_form == morpheme.base_form);
+                let definition = inventory.iter().find(|d| d.base_form == morpheme.base_form);
 
                 let Some(def) = definition else {
                     errors.push(format!(

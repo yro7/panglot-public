@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, Person, Script, TernaryNumber};
+use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, MorphologyInfo, Person, Script, TernaryNumber};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicCase {
     Nominative,
@@ -10,7 +10,7 @@ pub enum ArabicCase {
     Genitive,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicTense {
     Past,
@@ -18,7 +18,7 @@ pub enum ArabicTense {
     Future,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicMood {
     Indicative,
@@ -26,28 +26,28 @@ pub enum ArabicMood {
     Jussive,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicState {
     Construct,
     Absolute,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicDefiniteness {
     Definite,
     Indefinite,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicPronounType {
     Independent,
     Attached,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicParticleFunction {
     Negation,
@@ -60,7 +60,7 @@ pub enum ArabicParticleFunction {
     Attention,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
 pub enum ArabicAttachmentType {
     Possessive,
@@ -68,7 +68,7 @@ pub enum ArabicAttachmentType {
     Prepositional,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 pub enum ArabicVerbForm {
     I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII, XIV, XV,
 }
