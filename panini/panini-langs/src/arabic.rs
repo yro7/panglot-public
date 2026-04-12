@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, Person, Script, TernaryNumber};
+use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, MorphologyInfo, Person, Script, TernaryNumber};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
