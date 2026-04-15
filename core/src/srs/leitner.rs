@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn all_again_stays_box_0() {
         let algo = Leitner;
-        let h = make_history(&vec![Rating::Again; 10]);
+        let h = make_history(&[Rating::Again; 10]);
         let out = algo.compute(&h, Rating::Again, NOW + 20 * DAY);
         assert_eq!(out.interval_days, 1.0);
     }
