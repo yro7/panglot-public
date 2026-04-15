@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use engine::llm_client::{ChatMessage, LlmClient, LlmHttpClient, LlmProvider, LlmRequest, Role};
+use rig::client::CompletionClient as _;
+use rig::completion::CompletionModel as _;
+use rig::providers::gemini;
 
 const MODEL: &str = "gemini-2.5-flash";
 
@@ -54,7 +56,7 @@ fn strip_code_fences(s: &str) -> String {
     s.to_string()
 }
 
-async fn generate_rs(client: &LlmHttpClient, iso: &str, lang_name: &str) -> Result<String> {
+async fn generate_rs(client: &gemini::CompletionModel, iso: &str, lang_name: &str) -> Result<String> {
     let examples = read_examples(EXAMPLE_RS_FILES)?;
 
     let system = "\
@@ -83,23 +85,23 @@ The code must compile as-is when placed in the project.";
         iso_variant = capitalize_first(iso),
     );
 
-    let request = LlmRequest {
-        messages: vec![
-            ChatMessage { role: Role::System, content: system.to_string() },
-            ChatMessage { role: Role::User, content: user },
-        ],
-        temperature: 0.3,
-        max_tokens: Some(8000),
-        response_schema: None,
-        request_context: None,
-        call_type: engine::llm_client::CallType::Generation,
-    };
-
-    let response = client.chat_completion(&request).await?;
-    Ok(strip_code_fences(&response.content))
+    let raw = client.completion_request(&user)
+        .preamble(system.to_string())
+        .temperature(0.3)
+        .max_tokens(8000)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("LLM request failed: {e}"))?
+        .choice
+        .into_iter()
+        .find_map(|c| {
+            if let rig::completion::message::AssistantContent::Text(t) = c { Some(t.text) } else { None }
+        })
+        .ok_or_else(|| anyhow::anyhow!("LLM returned no text"))?;
+    Ok(strip_code_fences(&raw))
 }
 
-async fn generate_tree(client: &LlmHttpClient, iso: &str, lang_name: &str) -> Result<String> {
+async fn generate_tree(client: &gemini::CompletionModel, iso: &str, lang_name: &str) -> Result<String> {
     let examples = read_examples(EXAMPLE_TREE_FILES)?;
 
     let system = "\
@@ -122,20 +124,20 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
          Output ONLY the YAML, nothing else.",
     );
 
-    let request = LlmRequest {
-        messages: vec![
-            ChatMessage { role: Role::System, content: system.to_string() },
-            ChatMessage { role: Role::User, content: user },
-        ],
-        temperature: 0.5,
-        max_tokens: Some(4000),
-        response_schema: None,
-        request_context: None,
-        call_type: engine::llm_client::CallType::Generation,
-    };
-
-    let response = client.chat_completion(&request).await?;
-    Ok(strip_code_fences(&response.content))
+    let raw = client.completion_request(&user)
+        .preamble(system.to_string())
+        .temperature(0.5)
+        .max_tokens(4000)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("LLM request failed: {e}"))?
+        .choice
+        .into_iter()
+        .find_map(|c| {
+            if let rig::completion::message::AssistantContent::Text(t) = c { Some(t.text) } else { None }
+        })
+        .ok_or_else(|| anyhow::anyhow!("LLM returned no text"))?;
+    Ok(strip_code_fences(&raw))
 }
 
 fn capitalize_first(s: &str) -> String {
@@ -171,8 +173,10 @@ async fn main() -> Result<()> {
     }
 
     // Init LLM client — codegen always uses Google/Gemini
-    let client = LlmHttpClient::from_provider(LlmProvider::Google, MODEL)
-        .context("Failed to init Google LLM client for codegen")?;
+    let api_key = std::env::var("GOOGLE_API_KEY").context("GOOGLE_API_KEY not set")?;
+    let client = gemini::Client::new(&api_key)
+        .map_err(|e| anyhow::anyhow!("Failed to init Gemini client: {e}"))?
+        .completion_model(MODEL);
 
     // Step 1: Generate .rs file
     println!("\n[1/2] Generating {rs_path}...");
