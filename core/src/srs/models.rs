@@ -10,24 +10,23 @@ pub enum Rating {
 }
 
 impl Rating {
-    pub fn from_u8(val: u8) -> Option<Rating> {
+    pub const fn from_u8(val: u8) -> Option<Self> {
         match val {
-            1 => Some(Rating::Again),
-            2 => Some(Rating::Hard),
-            3 => Some(Rating::Good),
-            4 => Some(Rating::Easy),
+            1 => Some(Self::Again),
+            2 => Some(Self::Hard),
+            3 => Some(Self::Good),
+            4 => Some(Self::Easy),
             _ => None,
         }
     }
 
-    /// Parse from string (case-insensitive). Returns Again for unrecognized values.
-    pub fn from_str_lossy(s: &str) -> Rating {
+    /// Parse from string (case-insensitive). Returns `Again` for unrecognized values.
+    pub fn from_str_lossy(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
-            "again" | "1" => Rating::Again,
-            "hard"  | "2" => Rating::Hard,
-            "good"  | "3" => Rating::Good,
-            "easy"  | "4" => Rating::Easy,
-            _ => Rating::Again,
+            "hard"  | "2" => Self::Hard,
+            "good"  | "3" => Self::Good,
+            "easy"  | "4" => Self::Easy,
+            _ => Self::Again,
         }
     }
 }

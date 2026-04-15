@@ -19,7 +19,8 @@ impl Leitner {
         // Apply the new rating
         current_box = next_box(current_box, rating);
         let interval = BOX_INTERVALS[current_box];
-        let due_date = now + (interval * MS_PER_DAY) as i64;
+        let total_ms = interval * MS_PER_DAY;
+        let due_date = now + total_ms as i64;
 
         SchedulingOutput {
             due_date,
@@ -28,7 +29,7 @@ impl Leitner {
     }
 }
 
-fn next_box(current: usize, rating: Rating) -> usize {
+const fn next_box(current: usize, rating: Rating) -> usize {
     match rating {
         Rating::Again => 0,
         Rating::Hard => {

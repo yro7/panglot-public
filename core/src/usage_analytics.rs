@@ -15,7 +15,7 @@ pub enum TimePeriod {
 
 impl TimePeriod {
     /// Duration in milliseconds.
-    pub fn as_millis(&self) -> i64 {
+    pub const fn as_millis(&self) -> i64 {
         match self {
             Self::LastHour => 3_600_000,
             Self::Last24Hours => 86_400_000,

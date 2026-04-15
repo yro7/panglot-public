@@ -2,6 +2,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields};
 
+/// # Panics
+///
+/// Panics if the input is not a struct with named fields.
 #[proc_macro_derive(ToFields)]
 pub fn to_fields_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -32,7 +35,7 @@ pub fn to_fields_derive(input: TokenStream) -> TokenStream {
             }
         } else {
             quote! {
-                if let Some(val) = lc_core::traits::IntoFieldString::into_field_string(&self.#field_name) {
+                if let Some(val) = lc_core::traits::ToFieldString::to_field_string(&self.#field_name) {
                     fields.insert(#field_name_str.to_string(), val);
                 }
             }
@@ -52,10 +55,15 @@ pub fn to_fields_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Re-export MorphologyInfo derive from panini-macro.
+/// Re-export `MorphologyInfo` derive from panini-macro.
+///
 /// This is a wrapper that generates code referencing `panini_core::traits::MorphologyInfo`
 /// but also generates a backwards-compatible impl via `lc_core::traits::MorphologyInfo`
-/// since lc_core re-exports the trait from panini_core.
+/// since `lc_core` re-exports the trait from `panini_core`.
+///
+/// # Panics
+///
+/// Panics if the input is not an enum or if any variant is missing a `lemma` field.
 #[proc_macro_derive(MorphologyInfo)]
 pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -75,12 +83,11 @@ pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
                 .any(|f| f.ident.as_ref().is_some_and(|id| id == "lemma")),
             _ => false,
         };
-        if !has_lemma {
-            panic!(
-                "MorphologyInfo: variant `{}` must have a named `lemma` field",
-                variant.ident
-            );
-        }
+        assert!(
+            has_lemma,
+            "MorphologyInfo: variant `{}` must have a named `lemma` field",
+            variant.ident
+        );
     }
 
     // Generate the PosTag enum name: <Name>PosTag

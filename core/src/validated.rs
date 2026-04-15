@@ -12,8 +12,11 @@ macro_rules! bounded_int {
             pub const MIN: $inner = $min;
             pub const MAX: $inner = $max;
 
+            /// # Errors
+            ///
+            /// Returns an error if the value is out of the allowed range.
             pub fn new(value: $inner) -> Result<Self, String> {
-                if value < Self::MIN || value > Self::MAX {
+                if !(Self::MIN..=Self::MAX).contains(&value) {
                     Err(format!(
                         "{}: value {} is out of range {}..={}",
                         $label, value, Self::MIN, Self::MAX
@@ -23,7 +26,7 @@ macro_rules! bounded_int {
                 }
             }
 
-            pub fn get(&self) -> $inner {
+            pub const fn get(&self) -> $inner {
                 self.0
             }
         }
@@ -59,6 +62,9 @@ macro_rules! bounded_string {
         impl $name {
             pub const MAX_LEN: usize = $max;
 
+            /// # Errors
+            ///
+            /// Returns an error if the string length exceeds the maximum allowed length.
             pub fn new(value: String) -> Result<Self, String> {
                 if value.len() > Self::MAX_LEN {
                     Err(format!(
@@ -131,8 +137,8 @@ macro_rules! int_schema {
                     .schema_type(utoipa::openapi::schema::SchemaType::Type(
                         utoipa::openapi::schema::Type::Integer,
                     ))
-                    .minimum(Some($name::MIN as f64))
-                    .maximum(Some($name::MAX as f64))
+                    .minimum(Some(f64::from($name::MIN)))
+                    .maximum(Some(f64::from($name::MAX)))
                     .description(Some($desc))
                     .build()
                     .into()

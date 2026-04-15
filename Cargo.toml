@@ -24,3 +24,6 @@ license = "MIT"
 keywords = ["linguistics", "nlp", "language-learning", "extraction", "anki"]
 categories = ["science", "text-processing", "education"]
 readme = "README.md"
+
+[workspace.lints.clippy]
+must_use_candidate = "allow"

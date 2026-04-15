@@ -19,3 +19,6 @@ isolang = { version = "2.4.0", features = ["english_names"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 dotenvy = "0.15"
+
+[lints]
+workspace = true

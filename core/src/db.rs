@@ -47,7 +47,7 @@ fn now_ms() -> i64 {
     Utc::now().timestamp_millis()
 }
 
-/// A SQLite-backed implementation of the StorageProvider trait for local studies.
+/// A SQLite-backed implementation of the `StorageProvider` trait for local studies.
 pub struct LocalStorageProvider {
     pub pool: SqlitePool,
     pub user_id: String,
@@ -55,12 +55,15 @@ pub struct LocalStorageProvider {
 
 impl LocalStorageProvider {
     /// Creates a provider scoped to a specific user (from JWT `sub` claim).
-    pub fn for_user(pool: SqlitePool, user_id: String) -> Self {
+    pub const fn for_user(pool: SqlitePool, user_id: String) -> Self {
         Self { pool, user_id }
     }
 
     /// Auto-provision user from JWT claims. Provider-agnostic:
     /// works with email, GitHub, Google, phone, anonymous sign-in.
+    ///
+    /// # Errors
+    /// Returns a database error if the user cannot be provisioned.
     pub async fn ensure_user(&self, claims: &serde_json::Value) -> Result<(), sqlx::Error> {
         let display_name = claims["user_metadata"]["full_name"].as_str()
             .or_else(|| claims["user_metadata"]["preferred_username"].as_str())
@@ -84,6 +87,9 @@ impl LocalStorageProvider {
     }
 
     /// Initializes the database connection and runs migrations.
+    ///
+    /// # Errors
+    /// Returns a database error if the connection fails or migrations fail.
     pub async fn init(db_path: impl AsRef<Path>) -> Result<Self, sqlx::Error> {
         let db_path = db_path.as_ref();
 
@@ -132,7 +138,7 @@ impl LocalStorageProvider {
         Ok(())
     }
 
-    /// Recursively creates parent decks if they don't exist based on a "A::B::C" path format.
+    /// Recursively creates parent decks if they don't exist based on a "`A::B::C`" path format.
     /// Uses INSERT OR IGNORE to avoid SELECT-then-INSERT race and reduce round-trips.
     async fn get_or_create_deck_hierarchy(
         &self,
@@ -149,11 +155,10 @@ impl LocalStorageProvider {
         let now = Utc::now().timestamp_millis();
 
         for part in parts {
-            if current_path.is_empty() {
-                current_path = part.to_string();
-            } else {
-                current_path = format!("{}::{}", current_path, part);
+            if !current_path.is_empty() {
+                current_path.push_str("::");
             }
+            current_path.push_str(part);
 
             let deck_id = Uuid::new_v4().to_string();
             sqlx::query(
@@ -184,19 +189,26 @@ impl LocalStorageProvider {
     }
 
     /// Fetch user settings from the database
+    ///
+    /// # Errors
+    /// Returns a database error if the settings cannot be fetched.
     pub async fn get_user_settings(&self) -> Result<crate::user::UserSettings, sqlx::Error> {
+        use sqlx::Row;
         let row = sqlx::query("SELECT settings FROM users WHERE id = ?")
             .bind(&self.user_id)
             .fetch_one(&self.pool)
             .await?;
 
-        use sqlx::Row;
+
         let settings_json: String = row.get("settings");
         let settings = serde_json::from_str(&settings_json).unwrap_or_default();
         Ok(settings)
     }
 
     /// Update user settings
+    ///
+    /// # Errors
+    /// Returns a database error if the settings cannot be updated.
     pub async fn update_user_settings(&self, settings: &crate::user::UserSettings) -> Result<(), sqlx::Error> {
         let settings_json = serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string());
         sqlx::query("UPDATE users SET settings = ? WHERE id = ?")
@@ -208,6 +220,9 @@ impl LocalStorageProvider {
     }
 
     /// Verify if the current user owns the specified deck.
+    ///
+    /// # Errors
+    /// Returns a database error if the verification fails.
     pub async fn verify_deck_ownership(&self, deck_id: &str) -> Result<bool, sqlx::Error> {
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM decks WHERE id = ? AND user_id = ?"
@@ -220,9 +235,12 @@ impl LocalStorageProvider {
     }
 
     /// Fetches due cards for a given deck, including all sub-decks recursively.
+    ///
+    /// # Errors
+    /// Returns a database error if the query fails.
     pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
         let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = (settings.learn_ahead_minutes.get() as i64) * 60 * 1000;
+        let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
         let now = Utc::now().timestamp_millis() + learn_ahead_ms;
         
         let records = sqlx::query(
@@ -252,7 +270,7 @@ impl LocalStorageProvider {
             use sqlx::Row;
             let fields_json_str: String = r.get("fields_json");
             let fields: serde_json::Value = serde_json::from_str(&fields_json_str)
-                .unwrap_or(serde_json::json!({}));
+                .unwrap_or_else(|_| serde_json::json!({}));
             LocalStudyCard {
                 id: r.get("id"),
                 front_html: r.get("front_html"),
@@ -267,7 +285,12 @@ impl LocalStorageProvider {
     }
 
     /// Fetches all cards from the local DB grouped by deck, ready for .apkg export.
+    ///
+    /// # Errors
+    /// Returns a database error if the query fails.
     pub async fn fetch_decks_for_export(&self) -> Result<Vec<NewDeckData>, sqlx::Error> {
+        use sqlx::Row;
+        use std::collections::BTreeMap;
         let records = sqlx::query(
             r#"
             SELECT d.full_path, d.target_language,
@@ -282,9 +305,6 @@ impl LocalStorageProvider {
         .bind(&self.user_id)
         .fetch_all(&self.pool)
         .await?;
-
-        use sqlx::Row;
-        use std::collections::BTreeMap;
 
         let mut decks_map: BTreeMap<String, NewDeckData> = BTreeMap::new();
 
@@ -327,7 +347,10 @@ impl LocalStorageProvider {
     }
 
     /// Submits a review rating for a specific card using the given SRS algorithm.
-    /// Returns the scheduling output (due_date, interval_days).
+    /// Returns the scheduling output (`due_date`, `interval_days`).
+    ///
+    /// # Errors
+    /// Returns a database error if the review cannot be saved or history cannot be fetched.
     pub async fn submit_review(
         &self,
         card_id: &str,
@@ -341,7 +364,7 @@ impl LocalStorageProvider {
         )
         .bind(card_id)
         .bind(&self.user_id)
-        .bind(rating as u8 as i64)
+        .bind(i64::from(rating as u8))
         .bind(now)
         .execute(&self.pool)
         .await?;
@@ -378,6 +401,9 @@ impl LocalStorageProvider {
     }
 
     /// Fetches the full review history for a card (for the current user).
+    ///
+    /// # Errors
+    /// Returns a database error if the query fails.
     pub async fn get_review_history(&self, card_id: &str) -> Result<Vec<crate::srs::ReviewEvent>, sqlx::Error> {
         let records = sqlx::query(
             "SELECT rating, reviewed_at FROM review_log WHERE card_id = ? AND user_id = ? ORDER BY reviewed_at"
