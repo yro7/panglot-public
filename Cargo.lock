@@ -1948,8 +1948,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dotenvy",
- "engine",
  "isolang",
+ "rig-core",
  "tokio",
 ]
 

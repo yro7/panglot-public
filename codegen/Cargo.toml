@@ -8,7 +8,7 @@ name = "lc-codegen"
 path = "src/main.rs"
 
 [dependencies]
-engine = { path = "../engine" }
+rig-core = "0.33"
 isolang = { version = "2.4.0", features = ["english_names"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
