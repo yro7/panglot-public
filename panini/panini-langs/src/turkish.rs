@@ -66,6 +66,8 @@ pub enum TurkishDerivation {
     AbstractSuffix,
     Privative,
     Possessional,
+    Verbalization,
+    Adverbial,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
@@ -206,6 +208,10 @@ static TURKISH_MORPHEMES: &[MorphemeDefinition<F, P>] = &[
     MorphemeDefinition { base_form: "DIk", functions: &[F::Derivation { value: TurkishDerivation::FactNominalization }], applies_to: &[P::Verb] },
     // === Ability ===
     MorphemeDefinition { base_form: "(y)Abil", functions: &[F::Mood { value: TurkishMood::Optative }], applies_to: &[P::Verb] },
+    // === New Additions ===
+    MorphemeDefinition { base_form: "(y)ken", functions: &[F::Derivation { value: TurkishDerivation::Adverbial }], applies_to: &[P::Verb, P::Noun, P::Adjective] },
+    MorphemeDefinition { base_form: "lAş", functions: &[F::Derivation { value: TurkishDerivation::Verbalization }], applies_to: &[P::Noun, P::Adjective] },
+    MorphemeDefinition { base_form: "mAk", functions: &[F::Derivation { value: TurkishDerivation::Nominalization }], applies_to: &[P::Verb] },
 ];
 
 // ─── Agglutinative implementation ────────────────────────────────────────────

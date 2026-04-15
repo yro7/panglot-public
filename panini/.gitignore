@@ -7,6 +7,8 @@ Cargo.lock
 .venv
 panini.toml
 
+examples/rust/target
+examples/python/__pycache__
 techn_debt.md
 CLAUDE.md
 ROADMAP.md

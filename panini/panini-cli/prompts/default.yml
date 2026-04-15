@@ -44,22 +44,9 @@ user_context: |
 output_instruction: |
   Return a single valid JSON object that strictly conforms to the provided JSON schema.
 
-  ── STRUCTURE ───────────────────────────────────────────────────────────────
-  The output must contain exactly two lists:
-  • "target_features"  — morphological features for each constituent word of
-                         the TARGET WORDS supplied in the user message.
-  • "context_features" — morphological features for every OTHER word in the
-                         sentence (for grammatical context).
-
-  ── SCHEMA RULES (MANDATORY) ────────────────────────────────────────────────
-  1. The `pos` key is an internally-tagged discriminant. Use ONLY the variants
-     defined in the schema. NEVER invent variants such as "phrase", "punctuation",
-     "clause", or anything not listed.
-  2. Punctuation tokens (`,` `.` `!` `?` `—` `«» ` etc.) must be OMITTED entirely.
-     Do not include them even with pos = "punctuation".
-  3. Every required field for the chosen `pos` variant MUST be present.
-     Optional fields must match the schema's definition (omit if not applicable).
-  4. The JSON schema is the SINGLE SOURCE OF TRUTH. If the prompt text and the
+  MANDATORY RULES
+  1. The JSON schema is the SINGLE SOURCE OF TRUTH. If the prompt text and the
      schema disagree, follow the schema.
-  5. Lemmas must always be in the dictionary (citation) form of the target language.
-  6. Do not include any text outside the JSON object — no markdown, no comments.
+  2. Every required field in the schema MUST be present.
+  3. Do not include any text outside the JSON object — no markdown, no comments.
+  4. Accuracy is paramount. Ensure all extracted features match the provided text.
