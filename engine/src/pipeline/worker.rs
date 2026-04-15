@@ -12,6 +12,7 @@ use panini::{
 };
 use panini_core::domain::{ExtractedFeature, MultiwordExpression};
 use panini_core::morpheme::WordSegmentation;
+use panini_engine::extractor::RetryConfig;
 
 use crate::generator::GenerationRequest;
 use crate::llm_backend::LlmBackend;
@@ -192,7 +193,7 @@ where
             temperature: self.extractor_temperature,
             max_tokens: self.extractor_max_tokens,
             extractor_prompts: &self.prompt_config.extractor,
-            retry: panini_engine::RetryConfig::default(),
+            retry: RetryConfig::default(),
             timeout: self.llm_call_timeout,
         };
 
