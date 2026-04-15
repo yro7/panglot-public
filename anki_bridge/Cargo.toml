@@ -1,7 +1,13 @@
 [package]
 name = "anki_bridge"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
 
 [dependencies]
 lc_core = { path = "../core" }
