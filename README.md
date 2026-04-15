@@ -45,4 +45,4 @@ cargo build --release
 
 ## License
 
-
+MIT

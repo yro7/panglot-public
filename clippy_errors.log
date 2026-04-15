@@ -1,0 +1,305 @@
+    Blocking waiting for file lock on build directory
+   Compiling aws-lc-rs v1.16.0
+    Checking aws-lc-sys v0.37.1
+   Compiling rustls v0.23.36
+   Compiling panini-macro v0.2.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/panini/panini-macro)
+   Compiling zstd-safe v7.2.4
+   Compiling sqlx-macros-core v0.8.6
+    Checking zstd-sys v2.0.16+zstd.1.5.7
+    Checking utoipa v5.4.0
+    Checking sqlx-sqlite v0.8.6
+   Compiling lc_core v0.1.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/core)
+    Checking local-waker v0.1.4
+    Checking fluent-uri v0.4.1
+    Checking bit-set v0.8.0
+    Checking alloc-stdlib v0.2.2
+error: package `lc_core` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+  = note: `-F clippy::cargo-common-metadata` implied by `-F clippy::cargo`
+
+error: package `lc_core` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_core` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_core` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_core` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_core` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc_macro` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `engine` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `langs` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `anki_bridge` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `panglot` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `package.description` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `either package.license or package.license_file` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `package.repository` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `package.readme` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `package.keywords` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+error: package `lc-codegen` is missing `package.categories` metadata
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#cargo_common_metadata
+
+    Checking include_dir v0.7.4
+    Checking num v0.4.3
+    Checking async-stream v0.3.6
+    Checking tracing-futures v0.2.5
+    Checking zstd v0.13.3
+    Checking eventsource-stream v0.2.3
+    Checking flate2 v1.1.9
+    Checking nanoid v0.4.0
+    Checking rand_core v0.9.5
+    Checking http v0.2.12
+    Checking ordered-float v5.3.0
+   Compiling lc_macro v0.1.0 (/Users/marin.decanini/Documents/PROJETS/Panglot/lc_macro)
+error: could not compile `lc_core` (build script) due to 42 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `panini-macro` (lib) due to 42 previous errors
+error: docs for function which may panic missing `# Panics` section
+  --> lc_macro/src/lib.rs:6:1
+   |
+ 6 | pub fn to_fields_derive(input: TokenStream) -> TokenStream {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: first possible panic found here
+  --> lc_macro/src/lib.rs:13:18
+   |
+13 |             _ => panic!("ToFields can only be derived for structs with named fields"),
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#missing_panics_doc
+   = note: `-F clippy::missing-panics-doc` implied by `-F clippy::pedantic`
+
+error: item in documentation is missing backticks
+  --> lc_macro/src/lib.rs:55:15
+   |
+55 | /// Re-export MorphologyInfo derive from panini-macro.
+   |               ^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#doc_markdown
+   = note: `-F clippy::doc-markdown` implied by `-F clippy::pedantic`
+help: try
+   |
+55 - /// Re-export MorphologyInfo derive from panini-macro.
+55 + /// Re-export `MorphologyInfo` derive from panini-macro.
+   |
+
+error: item in documentation is missing backticks
+  --> lc_macro/src/lib.rs:58:11
+   |
+58 | /// since lc_core re-exports the trait from panini_core.
+   |           ^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#doc_markdown
+help: try
+   |
+58 - /// since lc_core re-exports the trait from panini_core.
+58 + /// since `lc_core` re-exports the trait from panini_core.
+   |
+
+error: item in documentation is missing backticks
+  --> lc_macro/src/lib.rs:58:45
+   |
+58 | /// since lc_core re-exports the trait from panini_core.
+   |                                             ^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#doc_markdown
+help: try
+   |
+58 - /// since lc_core re-exports the trait from panini_core.
+58 + /// since lc_core re-exports the trait from `panini_core`.
+   |
+
+error: first doc comment paragraph is too long
+  --> lc_macro/src/lib.rs:55:1
+   |
+55 | / /// Re-export MorphologyInfo derive from panini-macro.
+56 | | /// This is a wrapper that generates code referencing `panini_core::traits::MorphologyInfo`
+57 | | /// but also generates a backwards-compatible impl via `lc_core::traits::MorphologyInfo`
+58 | | /// since lc_core re-exports the trait from panini_core.
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#too_long_first_doc_paragraph
+   = note: `-F clippy::too-long-first-doc-paragraph` implied by `-F clippy::nursery`
+help: add an empty line
+   |
+55 | /// Re-export MorphologyInfo derive from panini-macro.
+56 + ///
+   |
+
+error: docs for function which may panic missing `# Panics` section
+  --> lc_macro/src/lib.rs:60:1
+   |
+60 | pub fn morphology_info_derive(input: TokenStream) -> TokenStream {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: first possible panic found here
+  --> lc_macro/src/lib.rs:66:14
+   |
+66 |         _ => panic!("MorphologyInfo can only be derived for enums"),
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#missing_panics_doc
+
+error: only a `panic!` in `if`-then statement
+  --> lc_macro/src/lib.rs:78:9
+   |
+78 | /         if !has_lemma {
+79 | |             panic!(
+80 | |                 "MorphologyInfo: variant `{}` must have a named `lemma` field",
+81 | |                 variant.ident
+82 | |             );
+83 | |         }
+   | |_________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#manual_assert
+   = note: `-F clippy::manual-assert` implied by `-F clippy::pedantic`
+help: replace `if`-then-`panic!` with `assert!`
+   |
+78 ~         assert!(has_lemma, 
+79 +             "MorphologyInfo: variant `{}` must have a named `lemma` field",
+80 +             variant.ident
+81 +         )
+   |
+
+error: could not compile `lc_macro` (lib) due to 49 previous errors
