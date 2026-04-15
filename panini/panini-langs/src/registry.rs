@@ -8,7 +8,7 @@ use rig::completion::CompletionModel;
 
 use panini_core::component::{AnalysisComponent, ExtractionResult};
 use panini_core::components::*;
-use panini_engine::{extract_with_components, ExtractionOptions, ExtractionRequest, PreviousAttempt};
+use panini_engine::{extract_with_components, ExtractionOptions, ExtractionRequest};
 use panini_engine::prompts::ExtractorPrompts;
 
 use crate::{Arabic, French, Italian, Polish, Turkish};
@@ -21,7 +21,6 @@ async fn extract_for_language<L, M>(
     component_keys: Option<&[&str]>,
     temperature: f32,
     max_tokens: u32,
-    previous_attempt: Option<&PreviousAttempt>,
     extractor_prompts: &ExtractorPrompts,
 ) -> Result<ExtractionResult>
 where
@@ -70,12 +69,9 @@ where
         None => all_components.iter().map(|(_, c)| *c).collect(),
     };
 
-    let options = ExtractionOptions {
-        temperature,
-        max_tokens,
-        previous_attempt,
-        extractor_prompts,
-    };
+    let mut options = ExtractionOptions::new(extractor_prompts);
+    options.temperature = temperature;
+    options.max_tokens = max_tokens;
 
     Ok(extract_with_components(
         lang,
@@ -102,7 +98,6 @@ macro_rules! generate_registry {
             component_keys: Option<&[&str]>,
             temperature: f32,
             max_tokens: u32,
-            previous_attempt: Option<&PreviousAttempt>,
             extractor_prompts: &ExtractorPrompts,
         ) -> Result<ExtractionResult> {
             match lang_code {
@@ -115,7 +110,6 @@ macro_rules! generate_registry {
                             component_keys,
                             temperature,
                             max_tokens,
-                            previous_attempt,
                             extractor_prompts,
                         )
                         .await

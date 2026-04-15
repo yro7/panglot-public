@@ -188,80 +188,33 @@ where
             user_prompt: req.user_prompt.clone(),
         };
 
-        macro_rules! call_panini {
-            ($m:expr, $request:expr, $prev:expr) => {
-                CardExtractionResult::<L::LinguisticDef>::extract(
-                    self.language.linguistic_def(),
-                    $m,
-                    $request,
-                    panini_engine::ExtractionOptions {
-                        temperature: self.extractor_temperature,
-                        max_tokens: self.extractor_max_tokens,
-                        previous_attempt: $prev,
-                        extractor_prompts: &self.prompt_config.extractor,
-                    },
-                )
-                .await
-            };
-        }
+        let options = panini_engine::ExtractionOptions {
+            temperature: self.extractor_temperature,
+            max_tokens: self.extractor_max_tokens,
+            extractor_prompts: &self.prompt_config.extractor,
+            retry: panini_engine::RetryConfig::default(),
+            timeout: self.llm_call_timeout,
+        };
 
-        let mut prev_attempt: Option<panini_engine::PreviousAttempt> = None;
-        let mut backoff = backoff::ExponentialBackoffBuilder::new()
-            .with_initial_interval(std::time::Duration::from_secs(1))
-            .with_multiplier(2.0)
-            .with_max_elapsed_time(Some(std::time::Duration::from_secs(30)))
-            .build();
+        let _permit = llm_sem.acquire().await
+            .map_err(|_| anyhow::anyhow!("LLM semaphore closed"))?;
+        let backend = self.llm_backend.read()
+            .map_err(|e| anyhow::anyhow!("LLM backend lock poisoned: {}", e))?.clone();
+        let extraction_request = build_extraction_request();
 
-        loop {
-            let _permit = llm_sem.acquire().await
-                .map_err(|_| anyhow::anyhow!("LLM semaphore closed"))?;
-            let backend = self.llm_backend.read()
-                .map_err(|e| anyhow::anyhow!("LLM backend lock poisoned: {}", e))?.clone();
-            let extraction_request = build_extraction_request();
+        let result = match &backend {
+            LlmBackend::OpenAi(m) => CardExtractionResult::<L::LinguisticDef>::extract(
+                self.language.linguistic_def(), m, &extraction_request, options,
+            ).await,
+            LlmBackend::Anthropic(m) => CardExtractionResult::<L::LinguisticDef>::extract(
+                self.language.linguistic_def(), m, &extraction_request, options,
+            ).await,
+            LlmBackend::Google(m) => CardExtractionResult::<L::LinguisticDef>::extract(
+                self.language.linguistic_def(), m, &extraction_request, options,
+            ).await,
+        };
 
-            let r = tokio::time::timeout(self.llm_call_timeout, async {
-                match &backend {
-                    LlmBackend::OpenAi(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
-                    LlmBackend::Anthropic(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
-                    LlmBackend::Google(m) => call_panini!(m, &extraction_request, prev_attempt.as_ref()),
-                }
-            })
-            .await
-            .map_err(|_| panini_engine::ExtractionError::Parse(
-                panini_engine::ExtractionParseError {
-                    raw_response: String::new(),
-                    error_message: format!("Feature extraction timed out after {:?}", self.llm_call_timeout),
-                }
-            ))
-            .and_then(|inner| inner); // Flatten nested Result
-            drop(_permit);
-
-            match r {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    // Convert ExtractionError to anyhow::Error for downcast + retry logic
-                    let e_anyhow: anyhow::Error = e.into();
-
-                    // Determine next backoff interval; None means max elapsed time exceeded
-                    let Some(wait) = backoff::backoff::Backoff::next_backoff(&mut backoff) else {
-                        return Err(e_anyhow);
-                    };
-
-                    // Build correction context for the next attempt
-                    if let Some(ext_err) = e_anyhow.downcast_ref::<panini_engine::ExtractionError>() {
-                        if let panini_engine::ExtractionError::Parse(pe) = ext_err {
-                            prev_attempt = Some(panini_engine::PreviousAttempt {
-                                raw_response: pe.raw_response.clone(),
-                                error: pe.error_message.clone(),
-                            });
-                        }
-                    }
-
-                    tracing::warn!(?wait, %e_anyhow, "Feature extraction attempt failed, retrying");
-                    tokio::time::sleep(wait).await;
-                }
-            }
-        }
+        result.map_err(Into::into)
     }
 
     /// Runs all early post-processors (IPA, TTS) for a single card.

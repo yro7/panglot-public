@@ -5,12 +5,15 @@
     <a href="https://crates.io/crates/panini-engine"><img src="https://img.shields.io/crates/v/panini-engine.svg" alt="Crates.io" /></a>
     <a href="https://pypi.org/project/panini-lang/"><img src="https://img.shields.io/pypi/v/panini-lang.svg" alt="PyPI" /></a>
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
-    <a href="https://github.com/yro7/panini/actions/workflows/publish-panini-lang.yml"><img src="https://github.com/yro7/panini/actions/workflows/publish-panini-lang.yml/badge.svg" alt="Publish to PyPI" /></a>
   </p>
   <p>
-    Usage: <a href="#python">Python</a> | <a href="#as-a-library-rust-api">Rust</a> | <a href="#as-a-standalone-cli">CLI</a>
+    <b><a href="https://yro7.github.io/panini/">Official Documentation (MkDocs)</a></b>
+  </p>
+  <p>
+    Usage: <a href="docs/guides/python.md">Python</a> | <a href="docs/guides/rust.md">Rust</a> | <a href="docs/guides/cli.md">CLI</a>
   </p>
 </div>
+
 
 <br>
 
@@ -173,7 +176,7 @@ rig-core       = "0.33"
 Then call `extract_features_via_llm` with any `rig::completion::CompletionModel`:
 
 ```rust
-use panini_engine::{extract_features_via_llm, ExtractionRequest};
+use panini_engine::{extract_features_via_llm, ExtractionOptions, ExtractionRequest};
 use panini_engine::prompts::ExtractorPrompts;
 use panini_langs::polish::Polish;
 use rig::providers::openai;
@@ -189,15 +192,14 @@ async fn main() -> anyhow::Result<()> {
         .targets(vec!["kotowi".to_string()])
         .build();
 
-    let result = extract_features_via_llm(
-        &Polish,
-        &model,
-        &request,
-        0.2,
-        4096,
-        None,
-        &prompts,
-    ).await?;
+    let options = ExtractionOptions {
+        temperature: 0.2,
+        max_tokens: 4096,
+        previous_attempt: None,
+        extractor_prompts: &prompts,
+    };
+
+    let result = extract_features_via_llm(&Polish, &model, &request, options).await?;
 
     println!("{:#?}", result.target_features);
     Ok(())
@@ -315,7 +317,7 @@ panini-core/         # Traits, domain types, morphology enums, components
   src/components/    # AnalysisComponent implementations
 panini-engine/       # LLM extraction pipeline, prompt assembly, schema composer
 panini-langs/        # Per-language implementations (Polish, Arabic, Turkish)
-panini-macro/        # #[derive(MorphologyInfo)] proc macro
+panini-macro/        # #[derive(MorphologyInfo)], #[derive(PaniniResult)] proc macros
 ```
 
 ## Adding a language
@@ -348,7 +350,7 @@ use std::fmt::Debug;
 use crate::component::{AnalysisComponent, ComponentContext};
 use crate::traits::LinguisticDefinition;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MyComponent;
 
 impl<L: LinguisticDefinition> AnalysisComponent<L> for MyComponent {

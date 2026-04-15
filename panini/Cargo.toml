@@ -7,5 +7,6 @@ members = [
     "panini",
     "panini-cli",
     "pynini",
+    "examples/rust",
 ]
 resolver = "2"

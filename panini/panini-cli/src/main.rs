@@ -200,7 +200,6 @@ async fn run_component_extraction(
                 component_keys,
                 temperature,
                 max_tokens,
-                None,
                 prompts,
             )
             .await?;
@@ -217,7 +216,6 @@ async fn run_component_extraction(
                 component_keys,
                 temperature,
                 max_tokens,
-                None,
                 prompts,
             )
             .await?;
@@ -234,7 +232,6 @@ async fn run_component_extraction(
                 component_keys,
                 temperature,
                 max_tokens,
-                None,
                 prompts,
             )
             .await?;

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, MorphologyInfo, Person, Script, TernaryNumber};
+use panini_core::traits::{BinaryGender, BinaryVoice, LinguisticDefinition, Person, Script, TernaryNumber};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema, panini_macro::ClosedValues)]
 #[serde(rename_all = "snake_case")]
@@ -159,10 +159,14 @@ impl LinguisticDefinition for Arabic {
     fn extraction_directives(&self) -> &str {
         "1. Extract lemma and root.\n\
          2. Provide the pattern only if the word is derived.\n\
-         3. For nouns: include gender, number, case, state, and definiteness.\n\
+         3. For nouns: include gender (masculine/feminine), number, case, state, and definiteness.\n\
          4. For adjectives: include gender, number, case, and definiteness.\n\
-         5. For verbs: include form (I-X), person, number, gender, tense, mood, and voice.\n\
+         5. For verbs: include form (I-XV), person, number, gender, tense, mood, and voice.\n\
          6. For pronouns: specify independent or attached, person, number, and gender.\n\
-         7. Separate clitics from the base word."
+         7. Separate clitics from the base word.\n\
+         CRITICAL VALUE RULES:\n\
+         - `number` MUST be exactly one of: \"singular\", \"dual\", \"plural\".\n\
+         - `gender` MUST be exactly one of: \"masculine\", \"feminine\".\n\
+         - NEVER use gender values (masculine/feminine) in the number field."
     }
 }

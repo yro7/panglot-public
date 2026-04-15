@@ -1948,8 +1948,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dotenvy",
- "engine",
  "isolang",
+ "rig-core",
  "tokio",
 ]
 
@@ -2437,7 +2437,7 @@ dependencies = [
 
 [[package]]
 name = "panini"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "panini-core",
  "panini-engine",
@@ -2448,7 +2448,7 @@ dependencies = [
 
 [[package]]
 name = "panini-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "iso15924",
  "isolang",
@@ -2462,9 +2462,10 @@ dependencies = [
 
 [[package]]
 name = "panini-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
+ "backoff",
  "bon",
  "isolang",
  "jsonschema",
@@ -2476,12 +2477,13 @@ dependencies = [
  "serde_json",
  "serde_yml",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "panini-langs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "panini-core",
@@ -2495,7 +2497,7 @@ dependencies = [
 
 [[package]]
 name = "panini-macro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",

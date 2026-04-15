@@ -5,6 +5,6 @@ pub mod prompts;
 
 pub use extractor::{
     extract_with_components, ExtractionError, ExtractionOptions,
-    ExtractionParseError, PreviousAttempt,
+    ExtractionParseError, RetryConfig,
 };
 pub use prompts::ExtractionRequest;
