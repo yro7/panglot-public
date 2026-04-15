@@ -25,6 +25,20 @@ pub enum TtsConfig {
     None,
 }
 
+/// Imports a language definition from Panini. 
+#[macro_export]
+macro_rules! import_from_panini {
+    ($panini_path:path) => {
+        type Morphology = <$panini_path as $crate::traits::LinguisticDefinition>::Morphology;
+        type GrammaticalFunction = <$panini_path as $crate::traits::LinguisticDefinition>::GrammaticalFunction;
+        type LinguisticDef = $panini_path;
+
+        fn linguistic_def(&self) -> &Self::LinguisticDef {
+            &$panini_path
+        }
+    };
+}
+
 /// Defines a Language with its morphological system and generation capabilities.
 ///
 /// Uses composition to access the linguistic definition (from panini-core)

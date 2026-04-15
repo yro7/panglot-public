@@ -7,14 +7,8 @@ use lc_core::traits::{IpaConfig, Language, NoExtraFields, TtsConfig};
 pub struct Polish;
 
 impl Language for Polish {
-    type Morphology = PolishMorphology;
-    type GrammaticalFunction = ();
+    lc_core::import_from_panini!(panini_langs::polish::Polish);
     type ExtraFields = NoExtraFields;
-    type LinguisticDef = panini_langs::polish::Polish;
-
-    fn linguistic_def(&self) -> &panini_langs::polish::Polish {
-        &panini_langs::polish::Polish
-    }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("When generating Polish text, use standard Polish orthography with correct diacritics. Polish is a pro-drop language; omit subject pronouns when they are contextually clear.")
