@@ -5,6 +5,11 @@ use serde::Deserialize;
 static TREES: Dir = include_dir!("$CARGO_MANIFEST_DIR/trees");
 
 /// Resolve the default skill-tree config for a language by its ISO 639-3 code.
+///
+/// # Panics
+///
+/// Panics if no matching YAML file is found in the embedded trees directory,
+/// or if the file contains invalid UTF-8 or YAML.
 pub fn resolve_config(iso_639_3: &str) -> SkillTreeConfig {
     let filename = format!("{iso_639_3}_tree.yaml");
     let file = TREES
@@ -32,5 +37,5 @@ pub struct SkillNodeConfig {
     pub id: String,
     pub name: String,
     pub node_instructions: Option<String>,
-    pub children: Vec<SkillNodeConfig>,
+    pub children: Vec<Self>,
 }

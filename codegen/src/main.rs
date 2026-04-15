@@ -25,11 +25,12 @@ const EXAMPLE_TREE_FILES: &[&str] = &[
 ];
 
 fn read_examples(paths: &[&str]) -> Result<String> {
+    use std::fmt::Write;
     let mut buf = String::new();
     for path in paths {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read example file: {path}"))?;
-        buf.push_str(&format!("--- {path} ---\n{content}\n\n"));
+        write!(buf, "--- {path} ---\n{content}\n\n").expect("String write failed");
     }
     Ok(buf)
 }
@@ -46,11 +47,7 @@ fn strip_code_fences(s: &str) -> String {
     // Try to strip ```rust or ```yaml or ``` prefix/suffix
     if let Some(rest) = s.strip_prefix("```") {
         // Skip the language tag line
-        let rest = if let Some(pos) = rest.find('\n') {
-            &rest[pos + 1..]
-        } else {
-            rest
-        };
+        let rest = rest.find('\n').map_or(rest, |pos| &rest[pos + 1..]);
         if let Some(content) = rest.strip_suffix("```") {
             return content.trim().to_string();
         }
@@ -145,18 +142,16 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
 
 fn capitalize_first(s: &str) -> String {
     let mut chars = s.chars();
-    match chars.next() {
-        Some(c) => c.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
-        None => String::new(),
-    }
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+    })
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
-        bail!("Usage: lc-codegen <iso-639-3-code>\nExample: lc-codegen swh");
-        bail!("Build: cargo run -p lc-codegen <iso-639-3-code>");
+        bail!("Usage: lc-codegen <iso-639-3-code>\nExample: lc-codegen swh\nBuild: cargo run -p lc-codegen <iso-639-3-code>");
     }
     let iso = &args[1];
 

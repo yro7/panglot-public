@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub use panini_core::domain::{ExtractedFeature, MultiwordExpression};
 
 /// The metadata of a card. It contains the card id, the skill id
-/// and the list of features extracted from the context text by the FeatureExtractor.
+/// and the list of features extracted from the context text by the `FeatureExtractor`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound(deserialize = "M: for<'de2> Deserialize<'de2>, F: for<'de2> Deserialize<'de2>"))]
 pub struct CardMetadata<M, F = ()> {

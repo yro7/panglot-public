@@ -10,6 +10,12 @@ pub struct SrsRegistry {
     algorithms: HashMap<&'static str, Box<dyn SrsAlgorithm>>,
 }
 
+impl Default for SrsRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SrsRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
@@ -28,9 +34,12 @@ impl SrsRegistry {
     }
 
     pub fn get(&self, id: &str) -> Option<&dyn SrsAlgorithm> {
-        self.algorithms.get(id).map(|b| b.as_ref())
+        self.algorithms.get(id).map(AsRef::as_ref)
     }
 
+    /// # Panics
+    ///
+    /// Panics if the "sm2" algorithm is not registered.
     pub fn default(&self) -> &dyn SrsAlgorithm {
         self.get("sm2").expect("SM-2 must always be registered")
     }

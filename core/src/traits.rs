@@ -97,7 +97,7 @@ pub trait CardModel {
     fn back_html(&self) -> String;
 }
 
-/// Trait for converting a struct's fields into a HashMap<String, String>.
+/// Trait for converting a struct's fields into a `HashMap<String, String>`.
 pub trait ToFields {
     fn to_fields(&self) -> HashMap<String, String>;
 }
@@ -105,31 +105,29 @@ pub trait ToFields {
 /// Derive macro for the `ToFields` trait.
 pub use lc_macro::ToFields;
 
-pub trait IntoFieldString {
-    fn into_field_string(&self) -> Option<String>;
+pub trait ToFieldString {
+    fn to_field_string(&self) -> Option<String>;
 }
 
-impl IntoFieldString for String {
-    fn into_field_string(&self) -> Option<String> {
+impl ToFieldString for String {
+    fn to_field_string(&self) -> Option<String> {
         Some(self.clone())
     }
 }
 
-impl IntoFieldString for Option<String> {
-    fn into_field_string(&self) -> Option<String> {
+impl ToFieldString for Vec<String> {
+    fn to_field_string(&self) -> Option<String> {
+        Some(self.join(", "))
+    }
+}
+
+impl ToFieldString for Option<String> {
+    fn to_field_string(&self) -> Option<String> {
         self.clone()
     }
 }
 
-impl IntoFieldString for Vec<String> {
-    fn into_field_string(&self) -> Option<String> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self.join(", "))
-        }
-    }
-}
+
 
 #[cfg(test)]
 mod tests {

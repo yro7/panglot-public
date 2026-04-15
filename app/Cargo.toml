@@ -46,3 +46,6 @@ tracing-actix-web = "0.7"
 
 [dev-dependencies]
 static_assertions = "1.1"
+
+[lints]
+workspace = true
