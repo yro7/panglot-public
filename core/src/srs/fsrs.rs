@@ -97,7 +97,7 @@ impl Fsrs {
     fn next_interval(&self, stability: f64) -> f64 {
         let interval =
             (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
-        interval.max(1.0).min(MAX_INTERVAL)
+        interval.clamp(1.0, MAX_INTERVAL)
     }
 
     /// S′r(D,S,R,G) = S·(e^w8·(11−D)·S^(−w9)·(e^(w10·(1−R))−1)·penalty·bonus + 1),  SInc≥1
@@ -280,7 +280,7 @@ impl Fsrs5 {
     fn next_interval(&self, stability: f64) -> f64 {
         let interval =
             (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
-        interval.max(1.0).min(MAX_INTERVAL)
+        interval.clamp(1.0, MAX_INTERVAL)
     }
 
     /// Short-term (same-day) stability:  S′ = S·e^(w17·(G−3+w18))
@@ -494,7 +494,7 @@ impl Fsrs6 {
         let decay = self.decay();
         let factor = self.factor();
         let interval = (stability / factor) * (DESIRED_RETENTION.powf(1.0 / decay) - 1.0);
-        interval.max(1.0).min(MAX_INTERVAL)
+        interval.clamp(1.0, MAX_INTERVAL)
     }
 
     /// Short-term stability with S-dampening:
