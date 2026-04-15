@@ -8,11 +8,14 @@ use rig::providers::gemini;
 
 const MODEL: &str = "gemini-2.5-flash";
 
-// Example files used as few-shot context for the LLM
+// Example files used as few-shot context for the LLM.
+// Use languages that implement LinguisticDefinition directly (type LinguisticDef = Self),
+// not the panini-langs delegation pattern (Polish, Arabic, Turkish) — new languages never
+// have a panini-langs counterpart.
 const EXAMPLE_RS_FILES: &[&str] = &[
-    "langs/src/polish.rs",
-    "langs/src/japanese.rs",
-    "langs/src/arabic.rs",
+    "langs/src/japanese.rs", // ExtraFields, rich extraction directives
+    "langs/src/rus.rs",      // Standard pattern, no ExtraFields
+    "langs/src/kor.rs",      // Agglutinative, GrammaticalFunction = ()
 ];
 
 const EXAMPLE_TREE_FILES: &[&str] = &[

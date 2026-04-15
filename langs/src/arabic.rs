@@ -15,14 +15,8 @@ pub struct ArabicExtraFields {
 pub struct Arabic;
 
 impl Language for Arabic {
-    type Morphology = ArabicMorphology;
-    type GrammaticalFunction = ();
+    lc_core::import_from_panini!(panini_langs::arabic::Arabic);
     type ExtraFields = ArabicExtraFields;
-    type LinguisticDef = panini_langs::arabic::Arabic;
-
-    fn linguistic_def(&self) -> &panini_langs::arabic::Arabic {
-        &panini_langs::arabic::Arabic
-    }
 
     fn generation_directives(&self) -> Option<&str> {
         Some("Output Modern Standard Arabic without diacritics unless explicitly required. Ensure correct agreement for duals and reverse gender agreement for numbers 3-10.")
