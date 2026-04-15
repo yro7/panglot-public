@@ -1949,11 +1949,13 @@ dependencies = [
  "lc_macro",
  "panini-core",
  "panini-langs",
- "regex",
+ "proc-macro2",
+ "quote",
  "schemars",
  "serde",
  "serde_json",
  "static_assertions",
+ "syn",
 ]
 
 [[package]]
