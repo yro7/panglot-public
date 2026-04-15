@@ -1,6 +1,6 @@
 [package]
 name = "panini-engine"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -17,3 +17,5 @@ tracing = "0.1"
 thiserror = "2.0.18"
 isolang = { version = "2.4.0", features = ["english_names"] }
 jsonschema = "0.45.0"
+backoff = { version = "0.4", features = ["tokio"] }
+tokio = { version = "1", features = ["full"] }
