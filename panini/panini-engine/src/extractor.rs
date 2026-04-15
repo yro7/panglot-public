@@ -1,3 +1,4 @@
+use std::time::Duration;
 use panini_core::component::{AnalysisComponent, ExtractionResult};
 use panini_core::traits::LinguisticDefinition;
 use rig::completion::{CompletionModel, CompletionRequestBuilder};
@@ -57,9 +58,25 @@ pub enum ExtractionError {
 // ─── Extraction options ───────────────────────────────────────────────────────
 
 /// Previous failed attempt context for LLM self-correction retry.
-pub struct PreviousAttempt {
+struct PreviousAttempt {
     pub raw_response: String,
     pub error: String,
+}
+
+/// Configuration for the retry mechanism
+#[derive(Clone, Debug)]
+pub struct RetryConfig {
+    pub max_retries: usize,
+    pub initial_backoff_secs: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 2,
+            initial_backoff_secs: 1,
+        }
+    }
 }
 
 /// Bundles extraction parameters
@@ -67,22 +84,91 @@ pub struct PreviousAttempt {
 pub struct ExtractionOptions<'a> {
     pub temperature: f32,
     pub max_tokens: u32,
-    pub previous_attempt: Option<&'a PreviousAttempt>,
     pub extractor_prompts: &'a ExtractorPrompts,
+    pub retry: RetryConfig,
+    pub timeout: Duration,
+}
+
+impl<'a> ExtractionOptions<'a> {
+    pub fn new(extractor_prompts: &'a ExtractorPrompts) -> Self {
+        Self {
+            temperature: 0.2,
+            max_tokens: 4096,
+            extractor_prompts,
+            retry: RetryConfig::default(),
+            timeout: Duration::from_secs(30),
+        }
+    }
 }
 
 // ─── Composable entry point ───────────────────────────────────────────────────
 
 /// Extracts features using composable `AnalysisComponent`s.
 ///
-/// This is the new entry-point that supports selecting which analyses to include.
-/// The schema and prompt are composed dynamically from the provided components.
+/// This is the entry-point that supports selecting which analyses to include.
+/// It includes an automatic self-correction loop (Retry) in case of validation errors.
 pub async fn extract_with_components<L, M>(
     language: &L,
     model: &M,
     request: &ExtractionRequest,
     components: &[&dyn AnalysisComponent<L>],
     options: ExtractionOptions<'_>,
+) -> Result<ExtractionResult, ExtractionError>
+where
+    L: LinguisticDefinition + Send + Sync,
+    M: CompletionModel,
+{
+    let mut prev_attempt: Option<PreviousAttempt> = None;
+    let mut backoff = backoff::ExponentialBackoffBuilder::new()
+        .with_initial_interval(Duration::from_secs(options.retry.initial_backoff_secs))
+        .with_multiplier(2.0)
+        .with_max_elapsed_time(Some(options.timeout))
+        .build();
+
+    loop {
+        let result = perform_single_shot_extraction(
+            language,
+            model,
+            request,
+            components,
+            &options,
+            prev_attempt.as_ref(),
+        )
+        .await;
+
+        match result {
+            Ok(res) => return Ok(res),
+            Err(e) => {
+                // Only retry on parsing/validation errors
+                if let ExtractionError::Parse(pe) = &e {
+                    if let Some(wait) = backoff::backoff::Backoff::next_backoff(&mut backoff) {
+                        tracing::warn!(
+                            ?wait,
+                            error = %pe.error_message,
+                            "Extraction validation failed, retrying with self-correction..."
+                        );
+                        prev_attempt = Some(PreviousAttempt {
+                            raw_response: pe.raw_response.clone(),
+                            error: pe.error_message.clone(),
+                        });
+                        tokio::time::sleep(wait).await;
+                        continue;
+                    }
+                }
+                return Err(e);
+            }
+        }
+    }
+}
+
+/// Internal function to perform a single extraction attempt.
+async fn perform_single_shot_extraction<L, M>(
+    language: &L,
+    model: &M,
+    request: &ExtractionRequest,
+    components: &[&dyn AnalysisComponent<L>],
+    options: &ExtractionOptions<'_>,
+    previous_attempt: Option<&PreviousAttempt>,
 ) -> Result<ExtractionResult, ExtractionError>
 where
     L: LinguisticDefinition + Send + Sync,
@@ -117,7 +203,7 @@ where
         .max_tokens(options.max_tokens as u64)
         .output_schema(rig_schema);
 
-    if let Some(prev) = options.previous_attempt {
+    if let Some(prev) = previous_attempt {
         builder = builder
             .message(Message::assistant(&prev.raw_response))
             .message(Message::user(format!(
