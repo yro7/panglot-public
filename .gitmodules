@@ -1,0 +1,3 @@
+[submodule "panini"]
+	path = panini
+	url = https://github.com/yro7/panini
