@@ -1,0 +1,92 @@
+language_name: Danish
+root:
+  id: root
+  name: Dansk
+  children:
+    - id: grammar
+      name: Grammatik (Grammaire de base)
+      children:
+        - id: pronouns_and_basics
+          name: Stedord og Basisverber (Pronoms et Verbes)
+          node_instructions: >
+            Generate exercises introducing personal pronouns (jeg, du, han, hun, vi, I, de) 
+            and the present tense of 'være' (to be) and 'have' (to have). 
+            Create simple matching or cloze exercises.
+          children: []
+        - id: noun_gender
+          name: Navneord og Køn (Noms et Genres : en/et)
+          node_instructions: >
+            Generate a cloze deletion exercise focused on basic Danish noun genders (common vs. neuter).
+            The student must provide the correct indefinite article (en or et). Keep vocabulary simple.
+          children: []
+        - id: definiteness_simple
+          name: Bestemthed (Le Défini)
+          node_instructions: >
+            Generate an exercise focusing on the Danish definite suffix attached to the noun 
+            (e.g., en mand -> manden, et hus -> huset). Contrast it directly with the indefinite form.
+          children: []
+    - id: syntax_and_sentences
+      name: Syntaks og Sætninger (Syntaxe et Mini-phrases)
+      children:
+        - id: basic_questions
+          name: Spørgsmål (Poser des questions)
+          node_instructions: >
+            Generate exercises on forming basic questions using inversion (Spiser du? = Do you eat?) 
+            and the primary question words (Hvem, Hvad, Hvor, Hvordan).
+          children: []
+        - id: negation
+          name: Nægtelse (La négation 'ikke')
+          node_instructions: >
+            Generate exercises where the student must place the word 'ikke' correctly in simple sentences 
+            (usually directly after the first verb). Ex: "Jeg forstår ikke" (I do not understand).
+          children: []
+        - id: v2_word_order_basic
+          name: Ledstilling (La règle V2)
+          node_instructions: >
+            Generate a word ordering exercise focusing on the V2 rule using ONLY simple time adverbs 
+            at the beginning of the sentence. Ex: "I dag + spiser + jeg" (Today eat I). 
+            Do not use complex subordinate clauses.
+          children: []
+    - id: pronunciation_listening
+      name: Udtale og Lytteforståelse (Prononciation et Écoute)
+      children:
+        - id: vowel_sounds
+          name: Vokaler (Les lettres æ, ø, å)
+          node_instructions: >
+            Generate audio-based multiple choice exercises to distinguish between the unique Danish vowels æ, ø, å. 
+            Use simple, everyday words.
+          children: []
+        - id: soft_d
+          name: Det bløde D (Le D doux)
+          node_instructions: >
+            Generate a listening and identification exercise focusing on the famous Danish "soft d".
+            Contrast words with a hard 'd' at the start (dansk, drikke) and a soft 'd' in the middle/end (mad, gade).
+          children: []
+        - id: minimal_pairs_listening
+          name: Lytteøvelser (Paires minimales)
+          node_instructions: >
+            Generate audio-based exercises using minimal pairs to train the ear on tricky Danish sounds 
+            and vowel length (e.g., 'læse' vs 'læsse', or distinguishing 'y' from 'u'). 
+            The student hears an audio clip and must select the correct word they heard.
+          children: []
+    - id: vocabulary_and_daily_life
+      name: Ordforråd og Hverdag (Vocabulaire et Survie)
+      children:
+        - id: greetings_politeness
+          name: Hilsner og Høflighed (Salutations)
+          node_instructions: >
+            Generate exercises with mini everyday phrases: "Hej", "Goddag", "Tak", "Selv tak", 
+            "Værsgo", "Hvordan går det?". Focus on full, usable chunks rather than individual words.
+          children: []
+        - id: numbers
+          name: Tal (Les Nombres)
+          node_instructions: >
+            Generate a listening and translation exercise for numbers 1-100. 
+            Pay special attention to the unique logic of Danish numbers 50, 60, 70, 80, 90 (halvtreds, tres, etc.).
+          children: []
+        - id: survival_phrases
+          name: Overlevelsesfraser (Phrases de survie)
+          node_instructions: >
+            Generate translation and matching exercises with ready-to-use complete sentences for a tourist or beginner 
+            (e.g., "En kop kaffe, tak", "Hvor er toilettet?", "Jeg taler kun lidt dansk", "Hvad koster det?").
+          children: []
