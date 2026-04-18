@@ -642,7 +642,7 @@ mod tests {
         // get_known_by_pos
         let nouns = tracker.get_known_by_pos("Noun");
         assert_eq!(nouns.len(), 1);
-        assert_eq!(nouns[0].morphology.lemma(), "książka");
+        assert_eq!(nouns[0].morphology.lemma().unwrap(), "książka");
 
         // convenience wrappers
         assert_eq!(tracker.get_known_nouns().len(), 1);
