@@ -1,0 +1,88 @@
+{
+  "app": {
+    "name": "Panglot",
+    "tagline": "Atlas de grammaire"
+  },
+  "nav": {
+    "tree": "Arbre",
+    "lexicon": "Lexique",
+    "profile": "Profil",
+    "settings": "Réglages"
+  },
+  "tree": {
+    "title": "Arbre de compétences",
+    "subtitle": "Votre progression, tracée",
+    "legend": {
+      "locked": "Verrouillé",
+      "available": "Disponible",
+      "in_progress": "En cours",
+      "mastered": "Maîtrisé",
+      "fresh": "Nouveau"
+    },
+    "categories": {
+      "phonetics": "Phonétique",
+      "grammar": "Grammaire",
+      "vocabulary": "Lexique",
+      "conjugation": "Conjugaison",
+      "syntax": "Syntaxe"
+    },
+    "levels": {
+      "a1": "Débutant",
+      "a2": "Élémentaire",
+      "b1": "Intermédiaire",
+      "b2": "Avancé",
+      "c1": "Autonome"
+    }
+  },
+  "zone": {
+    "review":  { "label": "Révision",         "hint": "Tu maîtrises — garde-le vivant par la révision." },
+    "in_zone": { "label": "À ta portée",      "hint": "C'est ta zone de progression actuelle." },
+    "ahead":   { "label": "Un peu en avance", "hint": "Ça va piquer un peu, mais tu peux tenter." },
+    "beyond":  { "label": "Bien au-delà",     "hint": "Très ambitieux pour l'instant." }
+  },
+  "frontier": { "label": "Ton niveau actuel" },
+  "status": {
+    "mastered":    "Maîtrisé",
+    "in_progress": "En cours",
+    "fresh":       "Nouveau"
+  },
+  "time": {
+    "today":      "aujourd'hui",
+    "yesterday":  "hier",
+    "days_ago":   "il y a {{count}}j",
+    "weeks_ago":  "il y a {{count}}sem",
+    "over_month": "> 1 mois"
+  },
+  "reco":    "Recommandé",
+  "revisit": "à revoir",
+  "sidebar": {
+    "nodes_mastered": "{{mastered}} / {{total}} nœuds maîtrisés"
+  },
+  "node": {
+    "mastery": "Maîtrise",
+    "exercises_done": "exercices",
+    "decks_around": "Decks associés",
+    "prerequisites": "Prérequis",
+    "unlocks": "Débloque",
+    "start": "Commencer un exercice",
+    "continue": "Continuer",
+    "review": "Réviser",
+    "generate_deck": "Générer un deck",
+    "locked_hint": "Compléter les prérequis pour déverrouiller",
+    "recommended": "Recommandé",
+    "delete_confirm": "Supprimer ce nœud ?"
+  },
+  "profile": {
+    "streak": "Série",
+    "days": "jours",
+    "xp_today": "aujourd'hui",
+    "target_language": "Langue cible",
+    "ui_language": "Interface"
+  },
+  "panel": {
+    "close": "Fermer",
+    "difficulty": "Difficulté",
+    "category": "Catégorie",
+    "level": "Niveau"
+  }
+}

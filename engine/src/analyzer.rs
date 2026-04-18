@@ -298,6 +298,7 @@ pub trait DynLexiconTracker: Send + Sync {
     fn is_empty(&self) -> bool;
     fn is_skill_mastered(&self, skill_id: &str) -> bool;
     fn mastered_skills(&self) -> HashSet<String>;
+    fn mature_card_counts(&self) -> HashMap<String, usize>;
     /// Downcast to concrete type for generation (which needs `ExtractedFeature<M>`).
     fn as_any(&self) -> &dyn Any;
 }
@@ -338,6 +339,13 @@ where
 
     fn mastered_skills(&self) -> HashSet<String> {
         self.mastered_skills()
+    }
+
+    fn mature_card_counts(&self) -> HashMap<String, usize> {
+        self.mature_cards_per_skill
+            .iter()
+            .map(|(id, cards)| (id.clone(), cards.len()))
+            .collect()
     }
 
     fn as_any(&self) -> &dyn Any {

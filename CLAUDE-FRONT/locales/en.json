@@ -1,0 +1,88 @@
+{
+  "app": {
+    "name": "Panglot",
+    "tagline": "Atlas of grammar"
+  },
+  "nav": {
+    "tree": "Tree",
+    "lexicon": "Lexicon",
+    "profile": "Profile",
+    "settings": "Settings"
+  },
+  "tree": {
+    "title": "Skill tree",
+    "subtitle": "Your progression, charted",
+    "legend": {
+      "locked": "Locked",
+      "available": "Available",
+      "in_progress": "In progress",
+      "mastered": "Mastered",
+      "fresh": "New"
+    },
+    "categories": {
+      "phonetics": "Phonetics",
+      "grammar": "Grammar",
+      "vocabulary": "Vocabulary",
+      "conjugation": "Conjugation",
+      "syntax": "Syntax"
+    },
+    "levels": {
+      "a1": "Beginner",
+      "a2": "Elementary",
+      "b1": "Intermediate",
+      "b2": "Upper-int.",
+      "c1": "Advanced"
+    }
+  },
+  "zone": {
+    "review":  { "label": "Review",          "hint": "You've mastered this — keep it warm with review." },
+    "in_zone": { "label": "In reach",        "hint": "This is your current progress zone." },
+    "ahead":   { "label": "Slightly ahead",  "hint": "It'll stretch you, but you can try." },
+    "beyond":  { "label": "Well beyond",     "hint": "Very ambitious right now. Focus on your zone first." }
+  },
+  "frontier": { "label": "Your current level" },
+  "status": {
+    "mastered":    "Mastered",
+    "in_progress": "In progress",
+    "fresh":       "New"
+  },
+  "time": {
+    "today":      "today",
+    "yesterday":  "yesterday",
+    "days_ago":   "{{count}}d ago",
+    "weeks_ago":  "{{count}}w ago",
+    "over_month": "> 1 month"
+  },
+  "reco":    "Recommended",
+  "revisit": "revisit",
+  "sidebar": {
+    "nodes_mastered": "{{mastered}} / {{total}} nodes mastered"
+  },
+  "node": {
+    "mastery": "Mastery",
+    "exercises_done": "exercises",
+    "decks_around": "Related decks",
+    "prerequisites": "Requires",
+    "unlocks": "Unlocks",
+    "start": "Start exercise",
+    "continue": "Continue",
+    "review": "Review",
+    "generate_deck": "Generate deck",
+    "locked_hint": "Complete prerequisites to unlock",
+    "recommended": "Recommended",
+    "delete_confirm": "Delete this node?"
+  },
+  "profile": {
+    "streak": "Streak",
+    "days": "days",
+    "xp_today": "today",
+    "target_language": "Target language",
+    "ui_language": "Interface"
+  },
+  "panel": {
+    "close": "Close",
+    "difficulty": "Difficulty",
+    "category": "Category",
+    "level": "Level"
+  }
+}
