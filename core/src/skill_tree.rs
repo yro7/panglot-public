@@ -43,4 +43,8 @@ pub struct SkillNodeConfig {
     pub prerequisites: Vec<String>,
     #[serde(default)]
     pub children: Vec<Self>,
+    #[serde(default)]
+    pub concept_key: Option<String>,
+    #[serde(default)]
+    pub desc: Option<String>,
 }

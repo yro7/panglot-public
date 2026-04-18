@@ -9,6 +9,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: writing
       name: Pismo i dźwięki (Writing & Sounds)
+      concept_key: writing_and_sounds
       node_instructions: >
         Generate an exercise about the Polish alphabet, digraphs (cz, sz, rz, dz, dź, dż, ch),
         and the diacritic letters (ą, ę, ć, ł, ń, ó, ś, ź, ż). Focus on recognition and sound mapping.
@@ -52,6 +53,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: essentials
       name: Podstawy (Essentials)
+      concept_key: essentials
       children:
 
         - id: greetings
@@ -85,6 +87,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: nouns
       name: Rzeczowniki (Nouns)
+      concept_key: nouns
       node_instructions: >
         Generate a general exercise on Polish noun morphology. Test the student's ability to
         identify a noun's gender and number from its nominative form endings.
@@ -132,6 +135,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: cases
       name: Przypadki (Cases)
+      concept_key: grammatical_cases
       prerequisites: [gender, plural]
       node_instructions: >
         Generate a MIXED-case cloze exercise that targets the student's ability to pick the right
@@ -214,6 +218,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: pronouns
       name: Zaimki (Pronouns)
+      concept_key: pronouns
       children:
 
         - id: personal_pronouns
@@ -255,6 +260,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: adjectives
       name: Przymiotniki (Adjectives)
+      concept_key: adjectives
       prerequisites: [gender]
       node_instructions: >
         Generate a mixed exercise on Polish adjectives: agreement with the head noun in gender,
@@ -292,6 +298,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: verbs
       name: Czasowniki (Verbs)
+      concept_key: verbs
       node_instructions: >
         Generate a mixed exercise on Polish verb morphology: person/number/tense/aspect. Vary the
         category across items; the student must read context to decide which form fits.
@@ -404,6 +411,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: numerals
       name: Liczebniki (Numerals)
+      concept_key: numerals
       prerequisites: [numbers_cardinal, cases]
       node_instructions: >
         Generate an exercise on how Polish numerals govern case. Key rules: 1 → nominative sg;
@@ -435,6 +443,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: syntax
       name: Składnia (Syntax)
+      concept_key: syntax
       children:
 
         - id: negation
@@ -481,6 +490,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: vocabulary
       name: Słownictwo (Vocabulary)
+      concept_key: vocabulary
       node_instructions: >
         Generate a vocabulary cloze across a random everyday theme (food, transport, work,
         weather, body, clothing, emotions, house). Pick the theme at random per item.
@@ -529,6 +539,7 @@ root:
     # ═══════════════════════════════════════════════════════════════
     - id: register_culture
       name: Rejestr i kultura (Register & culture)
+      concept_key: register_and_culture
       prerequisites: [vocabulary, verbs]
       node_instructions: >
         Generate an exercise that contrasts formal and informal Polish in the same situation.

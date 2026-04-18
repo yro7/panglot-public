@@ -17,6 +17,8 @@ pub struct SkillNode {
     pub prerequisites: Vec<String>,
     pub tier: u32,
     pub children: Vec<SkillNode>,
+    pub concept_key: Option<String>,
+    pub desc: Option<String>,
 }
 
 /// The runtime skill tree, parameterized by a Language.
@@ -80,6 +82,8 @@ pub fn build_node(config: SkillNodeConfig) -> SkillNode {
         prerequisites: config.prerequisites,
         tier: 0,
         children,
+        concept_key: config.concept_key,
+        desc: config.desc,
     }
 }
 
@@ -274,6 +278,8 @@ pub fn apply_customizations(base_root: &SkillNode, customizations: &[TreeCustomi
                     prerequisites: c.prerequisites.clone().unwrap_or_default(),
                     tier: 0,
                     children: vec![],
+                    concept_key: None,
+                    desc: None,
                 });
             }
             _ => {} // unknown action, skip
@@ -703,6 +709,8 @@ root:
             node_instructions: None,
             tier: 0,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![
                 SkillNode {
                     id: "child1".to_string(),
@@ -710,6 +718,8 @@ root:
                     node_instructions: None,
                     tier: 0,
                     prerequisites: vec![],
+                    concept_key: None,
+                    desc: None,
                     children: vec![
                         SkillNode {
                             id: "grandchild1".to_string(),
@@ -717,6 +727,8 @@ root:
                             node_instructions: None,
                             tier: 0,
                             prerequisites: vec!["child2".to_string()],
+                            concept_key: None,
+                            desc: None,
                             children: vec![],
                         }
                     ],
@@ -727,6 +739,8 @@ root:
                     node_instructions: None,
                     tier: 0,
                     prerequisites: vec![],
+                    concept_key: None,
+                    desc: None,
                     children: vec![],
                 }
             ],
