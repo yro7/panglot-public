@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use lc_core::user::UserSettings;
 use lc_core::validated::{CardCount, Difficulty, UserPrompt, NodeName, NodeInstructions};
 use utoipa::ToSchema;
@@ -9,7 +9,14 @@ use engine::skill_tree::SkillNode;
 pub struct TreeNodeJson {
     pub id: String,
     pub name: String,
-    pub is_leaf: bool,
+    /// True iff this node can spawn a deck (has `node_instructions`).
+    pub is_generatable: bool,
+    /// Auto-computed depth in the prereq DAG (0 = no prereqs).
+    pub tier: u32,
+    /// IDs of other nodes that should be learned before this one.
+    pub prerequisites: Vec<String>,
+    /// True iff the user has ≥MASTERY_THRESHOLD mature cards for this skill_id.
+    pub is_mastered: bool,
     pub node_instructions: Option<String>,
     #[schema(value_type = Vec<Object>)]
     pub children: Vec<TreeNodeJson>,
@@ -93,6 +100,8 @@ pub struct AddNodeRequest {
     pub node_id: String,
     pub node_name: NodeName,
     pub node_instructions: Option<NodeInstructions>,
+    #[serde(default)]
+    pub prerequisites: Option<Vec<String>>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -113,6 +122,9 @@ pub struct EditNodeRequest {
     pub node_id: String,
     pub node_name: Option<NodeName>,
     pub node_instructions: Option<NodeInstructions>,
+    /// `Some(vec)` replaces prereqs (including empty to clear). `None` leaves prereqs untouched.
+    #[serde(default)]
+    pub prerequisites: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -149,16 +161,19 @@ pub struct UpdateLlmConfigRequest {
     pub model: Option<String>,
 }
 
-pub fn tree_node_to_json(node: &SkillNode) -> TreeNodeJson {
+pub fn tree_node_to_json(node: &SkillNode, mastered: &HashSet<String>) -> TreeNodeJson {
     TreeNodeJson {
         id: node.id.clone(),
         name: node.name.clone(),
-        is_leaf: node.children.is_empty(),
+        is_generatable: node.node_instructions.is_some(),
+        tier: node.tier,
+        prerequisites: node.prerequisites.clone(),
+        is_mastered: mastered.contains(&node.id),
         node_instructions: node.node_instructions.clone(),
         children: node
             .children
             .iter()
-            .map(tree_node_to_json)
+            .map(|c| tree_node_to_json(c, mastered))
             .collect(),
     }
 }

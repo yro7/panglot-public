@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use actix_web::{web, HttpResponse, Responder};
 use lc_core::db::UserTreeCustomization;
 use engine::pipeline::DynPipeline;
@@ -11,8 +14,20 @@ use super::models::{
     tree_node_to_json,
 };
 
-/// Builds the user's personalized tree: base tree + DB overlay.
-/// Returns the owned SkillNode root. If no customizations exist, returns the base tree as-is.
+/// Serializes `Option<Vec<String>>` into `Option<String>` (JSON array) for DB persistence.
+/// `None` stays `None` (field untouched in edits); `Some(vec)` is JSON-encoded.
+fn encode_prereqs(prereqs: Option<&Vec<String>>) -> Option<String> {
+    prereqs.and_then(|v| serde_json::to_string(v).ok())
+}
+
+/// Decodes `prerequisites_json` into `Option<Vec<String>>`.
+/// Invalid JSON → `None` (fail-soft, treats as not set).
+fn decode_prereqs(encoded: Option<&str>) -> Option<Vec<String>> {
+    encoded.and_then(|s| serde_json::from_str(s).ok())
+}
+
+/// Builds the user's personalized tree: base tree + DB overlay + fresh tier computation.
+/// If no customizations exist, returns the base tree as-is (tiers already computed at pipeline init).
 pub async fn build_user_tree(
     data: &AppState,
     auth: &AuthUser,
@@ -31,8 +46,11 @@ pub async fn build_user_tree(
         parent_id: c.parent_id,
         node_name: c.node_name,
         node_instructions: c.node_instructions,
+        prerequisites: decode_prereqs(c.prerequisites_json.as_deref()),
     }).collect();
-    skill_tree::apply_customizations(&base_tree, &tree_customizations)
+    let mut merged = skill_tree::apply_customizations(&base_tree, &tree_customizations);
+    skill_tree::compute_tiers(&mut merged);
+    merged
 }
 
 pub async fn get_tree(
@@ -40,17 +58,34 @@ pub async fn get_tree(
     data: web::Data<AppState>,
     query: web::Query<GetTreeQuery>,
 ) -> impl Responder {
-    let pipelines = data.pipelines.read().await;
-    let lang = query.lang.as_deref().unwrap_or(&data.defaults.language);
+    let lang = query.lang.as_deref().unwrap_or(&data.defaults.language).to_string();
 
-    let Some(pipeline) = pipelines.get(lang) else {
+    // Lazy refresh on every GET /tree — see techn_debt.md for optimization strategy.
+    // Fire a rescan for this user before reading mastery, so mastery fields reflect latest reviews.
+    let state_arc: Arc<AppState> = data.clone().into_inner();
+    let anki_url = data.anki_connect_url.clone();
+    crate::worker::scan_lexicon_background(state_arc, anki_url, auth.user_id.clone()).await;
+
+    let pipelines = data.pipelines.read().await;
+    let Some(pipeline) = pipelines.get(&lang) else {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": format!("Language '{}' not found", lang)
         }));
     };
 
-    let user_tree = build_user_tree(&data, &auth, lang, pipeline.as_ref()).await;
-    HttpResponse::Ok().json(tree_node_to_json(&user_tree))
+    let user_tree = build_user_tree(&data, &auth, &lang, pipeline.as_ref()).await;
+
+    // Read mastery set from cached tracker (just refreshed above).
+    let mastered: HashSet<String> = {
+        let user_lexicons = data.user_lexicons.read().await;
+        user_lexicons
+            .get(&auth.user_id)
+            .and_then(|ul| ul.trackers.get(&lang))
+            .map(|t| t.mastered_skills())
+            .unwrap_or_default()
+    };
+
+    HttpResponse::Ok().json(tree_node_to_json(&user_tree, &mastered))
 }
 
 pub async fn add_node(
@@ -96,6 +131,7 @@ pub async fn add_node(
         parent_id: Some(body.parent_id.clone()),
         node_name: Some(body.node_name.to_string()),
         node_instructions: body.node_instructions.as_deref().map(String::from),
+        prerequisites_json: encode_prereqs(body.prerequisites.as_ref()),
         sort_order: 0,
         created_at: crate::state::now_ms(),
     };
@@ -145,6 +181,7 @@ pub async fn hide_node(
         parent_id: None,
         node_name: None,
         node_instructions: None,
+        prerequisites_json: None,
         sort_order: 0,
         created_at: crate::state::now_ms(),
     };
@@ -176,10 +213,10 @@ pub async fn edit_node(
         });
     };
 
-    if body.node_name.is_none() && body.node_instructions.is_none() {
+    if body.node_name.is_none() && body.node_instructions.is_none() && body.prerequisites.is_none() {
         return HttpResponse::BadRequest().json(AddNodeResponse {
             success: false,
-            message: "At least one of node_name or node_instructions must be provided".to_string(),
+            message: "At least one of node_name, node_instructions, or prerequisites must be provided".to_string(),
         });
     }
 
@@ -200,6 +237,7 @@ pub async fn edit_node(
         parent_id: None,
         node_name: body.node_name.as_deref().map(String::from),
         node_instructions: body.node_instructions.as_deref().map(String::from),
+        prerequisites_json: encode_prereqs(body.prerequisites.as_ref()),
         sort_order: 0,
         created_at: crate::state::now_ms(),
     };

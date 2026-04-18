@@ -342,6 +342,17 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
          - `node_instructions` should describe what kind of exercise to generate (cloze, translation, etc.)\n\
          - Focus on features that are distinctive or challenging for this language\n\
          - All leaf nodes must have `children: []`\n\n\
+         Prerequisites (optional but encouraged):\n\
+         - Any node may declare a `prerequisites: [id1, id2]` field listing IDs of other nodes\n\
+           that should be learned first. Use this to encode pedagogical ordering (e.g. past\n\
+           tense requires present tense, accusative requires nominative).\n\
+         - Unknown or cyclic prereq IDs are tolerated silently, but keep the graph clean.\n\
+         - Example of a node with prereqs:\n\
+           `  - id: past_tense`\n\
+           `    name: Past Tense`\n\
+           `    node_instructions: Generate a past-tense conjugation cloze.`\n\
+           `    prerequisites: [present_tense]`\n\
+           `    children: []`\n\n\
          Output ONLY the YAML, nothing else.",
     );
 
