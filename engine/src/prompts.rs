@@ -343,10 +343,12 @@ mod tests {
             id: "root".to_string(),
             name: "Polski".to_string(),
             node_instructions: None,
+            prerequisites: vec![],
             children: vec![SkillNodeConfig {
                 id: "accusative".to_string(),
                 name: "Biernik".to_string(),
                 node_instructions: Some("Focus on the accusative case.".to_string()),
+                prerequisites: vec![],
                 children: vec![],
             }],
         };
