@@ -3,51 +3,553 @@ root:
   id: root
   name: Polski
   children:
+
+    # ═══════════════════════════════════════════════════════════════
+    # WRITING & SOUNDS — foundation, no prereqs
+    # ═══════════════════════════════════════════════════════════════
+    - id: writing
+      name: Pismo i dźwięki (Writing & Sounds)
+      node_instructions: >
+        Generate an exercise about the Polish alphabet, digraphs (cz, sz, rz, dz, dź, dż, ch),
+        and the diacritic letters (ą, ę, ć, ł, ń, ó, ś, ź, ż). Focus on recognition and sound mapping.
+      children:
+
+        - id: alphabet
+          name: Alfabet (Alphabet)
+          node_instructions: >
+            Generate a recognition exercise where the student matches Polish letters (including
+            diacritics ą, ę, ć, ł, ń, ó, ś, ź, ż) to their IPA pronunciation or nearest English sound.
+          children: []
+
+        - id: digraphs
+          name: Dwuznaki (Digraphs)
+          prerequisites: [alphabet]
+          node_instructions: >
+            Generate a cloze deletion exercise highlighting the Polish digraphs: sz, cz, rz, dz, dź, dż, ch.
+            Student fills in the missing digraph in a word (e.g. "___koła" → szkoła).
+            Include the meaning of the word as a hint.
+          children: []
+
+        - id: nasal_vowels
+          name: Nosówki (Nasal vowels ą, ę)
+          prerequisites: [alphabet]
+          node_instructions: >
+            Generate a cloze exercise focused on the nasal vowels ą and ę. The student must choose
+            between ą and ę in context. Include notes on the "denasalization before stops" rule
+            (e.g. ząb, zęby). Provide the word's meaning as a hint.
+          children: []
+
+        - id: palatalization
+          name: Palatalizacja (Palatalization)
+          prerequisites: [digraphs, nasal_vowels]
+          node_instructions: >
+            Generate an exercise on palatalized consonants (ć/ci, ś/si, ź/zi, ń/ni, dź/dzi) and the
+            spelling rule: `i` before a vowel → soft consonant without dot; before a consonant or
+            word-finally → explicit diacritic form.
+
+    # ═══════════════════════════════════════════════════════════════
+    # ESSENTIALS — survival basics, depend only on writing/sounds
+    # ═══════════════════════════════════════════════════════════════
+    - id: essentials
+      name: Podstawy (Essentials)
+      children:
+
+        - id: greetings
+          name: Powitania (Greetings)
+          prerequisites: [alphabet]
+          node_instructions: >
+            Generate a dialogue cloze focused on Polish greetings and polite formulas
+            (cześć, dzień dobry, dobry wieczór, do widzenia, dziękuję, proszę, przepraszam).
+            Distinguish formal (Pan/Pani) vs informal (ty) register.
+          children: []
+
+        - id: numbers_cardinal
+          name: Liczebniki główne (Cardinal numbers)
+          prerequisites: [alphabet]
+          node_instructions: >
+            Generate an exercise on Polish cardinal numbers 0–100. Student writes or matches the
+            number word to the digit. Flag the irregular forms (dwanaście, trzynaście...) and the
+            teens/tens distinction.
+          children: []
+
+        - id: yes_no_questions
+          name: Tak / Nie / Czy (Yes, No, Questions)
+          prerequisites: [greetings]
+          node_instructions: >
+            Generate a yes/no question exercise using the particle "czy" at the start of the question
+            and tak/nie answers. Include the common reply formula "Nie, nie jestem...".
+          children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # NOUNS — gender + number, backbone of Polish morphology
+    # ═══════════════════════════════════════════════════════════════
+    - id: nouns
+      name: Rzeczowniki (Nouns)
+      node_instructions: >
+        Generate a general exercise on Polish noun morphology. Test the student's ability to
+        identify a noun's gender and number from its nominative form endings.
+      children:
+
+        - id: gender
+          name: Rodzaj (Grammatical gender)
+          prerequisites: [alphabet]
+          node_instructions: >
+            Generate a gender-classification exercise. Student sorts Polish nouns into masculine
+            (męski), feminine (żeński), or neuter (nijaki). Teach the ending heuristics:
+            -a → feminine, -o/-e/-ę → neuter, consonant → typically masculine. Flag exceptions
+            (mężczyzna, dziadek, kolega — masculine despite -a ending).
+          children:
+
+            - id: gender_animacy
+              name: Żywotność (Animacy subgender)
+              prerequisites: [gender]
+              node_instructions: >
+                Generate an exercise on the Polish animacy distinction within masculine nouns:
+                masculine-personal (męskoosobowy), masculine-animate non-personal (zwierzęcy),
+                and masculine-inanimate (nieżywotny). This matters for the accusative singular
+                and the nominative plural. Ask the student to classify the noun and predict
+                accusative/nominative-plural behavior.
+
+        - id: plural
+          name: Liczba mnoga (Plural)
+          prerequisites: [gender]
+          node_instructions: >
+            Generate a cloze exercise where the student converts a singular noun to its plural
+            form. Include regular patterns by gender and the tricky masculine-personal plural
+            (-owie, -i, -y with palatalization: Polak → Polacy, student → studenci).
+
+        - id: pluralia_tantum
+          name: Pluralia tantum
+          prerequisites: [plural]
+          node_instructions: >
+            Generate an exercise on Polish nouns that exist only in the plural form
+            (drzwi, spodnie, nożyczki, urodziny, wakacje, skrzypce). Student picks the correct
+            verb-agreement form and recognises that these nouns cannot be made singular.
+
+    # ═══════════════════════════════════════════════════════════════
+    # CASES — 7-case system, heavy prereq DAG
+    # Branch node has instructions → generatable "mixed case" drill
+    # ═══════════════════════════════════════════════════════════════
     - id: cases
       name: Przypadki (Cases)
+      prerequisites: [gender, plural]
+      node_instructions: >
+        Generate a MIXED-case cloze exercise that targets the student's ability to pick the right
+        case from context. Vary the case across items; do not tell the student which case is
+        required — the triggering preposition, verb, or syntactic role must be their only cue.
+        Include the noun's root as a hint.
       children:
+
+        - id: nominative
+          name: Mianownik (Nominative)
+          prerequisites: [gender]
+          node_instructions: >
+            Generate a cloze where the student produces the nominative form. Context must make it
+            clear that the noun is the subject of the sentence. Include the noun's lemma (dictionary
+            form) as a hint — this tier reinforces that the nominative IS the dictionary form.
+          children: []
 
         - id: accusative
           name: Biernik (Accusative)
+          prerequisites: [nominative, gender_animacy]
           node_instructions: >
-            Generate a cloze deletion exercise focused on the accusative case (Biernik).
-            Create a sentence where the student must fill in a noun in the accusative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
-          children: []
-        - id: genitive
-          name: Dopełniacz (Genitive)
-          node_instructions: >
-            Generate a cloze deletion exercise focused on the genitive case (Dopełniacz).
-            Create a sentence where the student must fill in a noun in the genitive form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
-          children: []
-        - id: locative
-          name: Miejscownik (Locative)
-          node_instructions: >
-            Generate a cloze deletion exercise focused on the locative case (Miejscownik).
-            Create a sentence where the student must fill in a noun in the locative form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
-          children: []
-        - id: dative
-          name: Celownik (Dative)
-          node_instructions: >
-            Generate a cloze deletion exercise focused on the dative case (Celownik).
-            Create a sentence where the student must fill in a noun in the Celownik form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
-          children: []
-        - id: instrumental
-          name: Narzędnik (Instrumental)
-          node_instructions: >
-            Generate a cloze deletion exercise focused on the instrumental case (Narzędnik).
-            Create a sentence where the student must fill in a noun in the instrumental form. You'll also include sometimes an exercise with two words to fill : an adjective and the noun. Also, always include the noun's root (and the adjective's root if there is one) as hint(s).
+            Generate a cloze deletion exercise focused on the accusative case (Biernik). Context
+            must trigger accusative (direct object of transitive verb, or prepositions na, w, przez,
+            o with motion/target sense). For masculine nouns, the animate vs inanimate split
+            MUST be reflected: animate acc = gen form, inanimate acc = nom form. Sometimes include
+            an adjective-noun pair to fill. Give root hints.
           children: []
 
+        - id: genitive
+          name: Dopełniacz (Genitive)
+          prerequisites: [nominative]
+          node_instructions: >
+            Generate a cloze focused on the genitive case (Dopełniacz). Trigger contexts: negation
+            of a direct object (nie mam + gen), possession ("X's Y"), after quantifiers
+            (dużo, mało, kilka), after prepositions (od, do, z, bez, dla, u), partitive. Provide the
+            lemma as hint. Occasionally include adjective+noun pairs.
+          children: []
+
+        - id: locative
+          name: Miejscownik (Locative)
+          prerequisites: [nominative, palatalization]
+          node_instructions: >
+            Generate a cloze for the locative case (Miejscownik). This case ONLY appears after
+            prepositions: w, na, o, po, przy. Emphasize the heavy palatalization that locative
+            triggers (stół → stole, książka → książce, miasto → mieście). Give the lemma as hint.
+          children: []
+
+        - id: dative
+          name: Celownik (Dative)
+          prerequisites: [nominative]
+          node_instructions: >
+            Generate a cloze for the dative case (Celownik). Trigger contexts: indirect object
+            (dawać komuś coś), dative-subject idioms (jest mi zimno, podoba mi się), certain verbs
+            (pomagać, dziękować, ufać). Flag the very irregular male-personal dative singular -owi
+            with exceptions (panu, bratu, ojcu, chłopcu). Give lemma hints.
+          children: []
+
+        - id: instrumental
+          name: Narzędnik (Instrumental)
+          prerequisites: [nominative]
+          node_instructions: >
+            Generate a cloze for the instrumental case (Narzędnik). Trigger contexts: means/tool
+            ("with a X"), predicate noun after "być" ("jestem studentem"), after prepositions z (with),
+            przed, nad, pod, za, między. Give lemma + adjective hints. Emphasise the
+            "być + instrumental" copula pattern, which is distinctive vs other Slavic languages.
+          children: []
+
+        - id: vocative
+          name: Wołacz (Vocative)
+          prerequisites: [nominative, palatalization]
+          node_instructions: >
+            Generate a direct-address exercise using the vocative case (Wołacz). The vocative is
+            used for calling or addressing someone/something (Panie Marku! Mamo! Boże!). In modern
+            spoken Polish the vocative is receding — teach it, but mention when nom. is used
+            colloquially. Provide lemma hints.
+          children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRONOUNS — cross-link with cases
+    # ═══════════════════════════════════════════════════════════════
+    - id: pronouns
+      name: Zaimki (Pronouns)
+      children:
+
+        - id: personal_pronouns
+          name: Zaimki osobowe (Personal pronouns)
+          prerequisites: [nominative]
+          node_instructions: >
+            Generate a cloze on the personal pronouns ja, ty, on, ona, ono, my, wy, oni, one —
+            in the nominative. Emphasise that subject pronouns are usually DROPPED in Polish
+            (pro-drop), and only appear for emphasis or contrast.
+          children: []
+
+        - id: personal_oblique
+          name: Formy zależne zaimków (Oblique personal pronouns)
+          prerequisites: [personal_pronouns, accusative, genitive, dative, instrumental, locative]
+          node_instructions: >
+            Generate an exercise on the inflected forms of personal pronouns across all cases,
+            including the long/short doublets (mnie/mię, tobie/ci, jemu/mu, niego/go) and the
+            n-initial forms used after prepositions (niego, niej, nich). Ask the student to pick
+            the right form by context (with or without preposition, stressed or unstressed).
+
+        - id: possessive_pronouns
+          name: Zaimki dzierżawcze (Possessive pronouns)
+          prerequisites: [personal_pronouns, gender, plural]
+          node_instructions: >
+            Generate a cloze on mój/moja/moje/moi, twój..., nasz..., wasz..., and the invariant
+            3rd-person jego/jej/ich. Emphasise that possessives agree in gender, number, AND case
+            with the thing possessed — NOT with the possessor — except jego/jej/ich which never
+            inflect.
+
+        - id: demonstratives
+          name: Zaimki wskazujące (Demonstratives)
+          prerequisites: [gender, plural]
+          node_instructions: >
+            Generate an exercise on ten/ta/to, tamten/tamta/tamto, and the full declension of "ten"
+            across cases and genders. Student fills in the right form in context.
+
+    # ═══════════════════════════════════════════════════════════════
+    # ADJECTIVES — full agreement web
+    # ═══════════════════════════════════════════════════════════════
+    - id: adjectives
+      name: Przymiotniki (Adjectives)
+      prerequisites: [gender]
+      node_instructions: >
+        Generate a mixed exercise on Polish adjectives: agreement with the head noun in gender,
+        number, and case; the masculine-personal plural split; comparative/superlative.
+      children:
+
+        - id: adjective_agreement_nom
+          name: Zgoda w mianowniku (Agreement in nominative)
+          prerequisites: [gender, nominative]
+          node_instructions: >
+            Generate a cloze where the student chooses the correct adjective form in the nominative
+            agreeing with the noun in gender and number. Provide the adjective lemma (masculine
+            singular) as hint.
+          children: []
+
+        - id: adjective_full_declension
+          name: Pełna deklinacja przymiotnika (Full declension)
+          prerequisites: [adjective_agreement_nom, accusative, genitive, dative, locative, instrumental]
+          node_instructions: >
+            Generate a cloze where the student inflects an adjective-noun pair together, across all
+            cases and genders. Give both lemmas as hints. Flag the masculine-personal plural
+            alternations (dobry → dobrzy, miły → mili).
+          children: []
+
+        - id: comparatives
+          name: Stopniowanie (Comparatives & Superlatives)
+          prerequisites: [adjective_agreement_nom]
+          node_instructions: >
+            Generate an exercise on the three degrees: positive, comparative (-szy / bardziej),
+            superlative (naj- prefix). Include the irregular set: dobry → lepszy → najlepszy,
+            zły → gorszy → najgorszy, duży → większy → największy, mały → mniejszy → najmniejszy.
+
+    # ═══════════════════════════════════════════════════════════════
+    # VERBS — aspect is the defining feature
+    # ═══════════════════════════════════════════════════════════════
+    - id: verbs
+      name: Czasowniki (Verbs)
+      node_instructions: >
+        Generate a mixed exercise on Polish verb morphology: person/number/tense/aspect. Vary the
+        category across items; the student must read context to decide which form fits.
+      children:
+
+        - id: verb_być
+          name: Czasownik „być" (The verb "to be")
+          prerequisites: [personal_pronouns]
+          node_instructions: >
+            Generate a cloze on the present-tense conjugation of "być" (jestem, jesteś, jest,
+            jesteśmy, jesteście, są). Include the predicate-instrumental pattern (jestem
+            studentem) if the student has seen instrumental, otherwise stick to adjective
+            predicates (jestem głodny).
+          children: []
+
+        - id: present_tense
+          name: Czas teraźniejszy (Present tense)
+          prerequisites: [verb_być]
+          node_instructions: >
+            Generate a cloze on the present tense of imperfective verbs. Cover the four
+            conjugation patterns (-ę/-esz, -ę/-isz, -am/-asz, -em/-esz). Give the infinitive
+            as hint and ask for the inflected form matching the subject.
+          children:
+
+            - id: conjugation_e_esz
+              name: Koniugacja -ę, -esz (e-conjugation)
+              prerequisites: [present_tense]
+              node_instructions: >
+                Generate a cloze drill on the -ę/-esz/-e conjugation pattern (pisać: piszę, piszesz,
+                pisze, piszemy, piszecie, piszą). Include stem alternations (pisać → pisz-).
+              children: []
+
+            - id: conjugation_am_asz
+              name: Koniugacja -am, -asz (a-conjugation)
+              prerequisites: [present_tense]
+              node_instructions: >
+                Generate a cloze on the -am/-asz/-a conjugation (czytać, mieszkać, kochać). Regular
+                and productive pattern. Include 3pl -ają ending.
+              children: []
+
+        - id: aspect
+          name: Aspekt (Verbal aspect)
+          prerequisites: [present_tense]
+          node_instructions: >
+            Generate an aspect-choice exercise. The student picks between an imperfective and a
+            perfective partner verb based on context (completed vs. ongoing, habitual vs. single
+            event, result-focused vs. process-focused). Use classic pairs: pisać/napisać,
+            robić/zrobić, kupować/kupić, dawać/dać. This is the single most important feature of
+            the Polish verb system — teach it explicitly.
+          children:
+
+            - id: past_tense
+              name: Czas przeszły (Past tense)
+              prerequisites: [aspect]
+              node_instructions: >
+                Generate a cloze on the Polish past tense. Remember the movable person endings
+                (czytałem / czytałam / czytałeś / czytałaś...) and the gender-marking -ł/-ła/-ło
+                in 3rd person. Student picks imperfective or perfective past based on meaning
+                (ongoing/habitual vs completed single event).
+              children: []
+
+            - id: future_imperfective
+              name: Czas przyszły niedokonany (Future imperfective)
+              prerequisites: [aspect, verb_być]
+              node_instructions: >
+                Generate a cloze on the analytic imperfective future: "będę" + infinitive OR
+                "będę" + ł-participle (with gender!). Both variants are acceptable — show both.
+              children: []
+
+            - id: future_perfective
+              name: Czas przyszły dokonany (Future perfective)
+              prerequisites: [aspect, present_tense]
+              node_instructions: >
+                Generate a cloze on the perfective future. Key insight: perfective verbs have NO
+                present tense — their "present-shape" conjugation IS their future meaning
+                (napiszę = "I will write and finish", not "I am writing"). Contrast with the
+                imperfective future the student has just learned.
+              children: []
+
+        - id: motion_verbs
+          name: Czasowniki ruchu (Verbs of motion)
+          prerequisites: [aspect]
+          node_instructions: >
+            Generate a motion-verb exercise on the determinate/indeterminate split
+            (iść/chodzić, jechać/jeździć, nieść/nosić, lecieć/latać, płynąć/pływać). Student
+            chooses between the two based on whether the motion is unidirectional/in-progress
+            (determinate) or habitual/multidirectional (indeterminate). This is the Polish
+            equivalent of a famously tricky Russian category.
+          children: []
+
+        - id: imperative
+          name: Tryb rozkazujący (Imperative)
+          prerequisites: [present_tense, aspect]
+          node_instructions: >
+            Generate an imperative exercise. Form from 3sg present (czyta → czytaj). Student picks
+            the right aspect: imperfective for ongoing/habitual commands, perfective for
+            single/completed ones. Include negative imperatives (always imperfective: "nie otwieraj"
+            not "nie otwórz").
+          children: []
+
+        - id: conditional
+          name: Tryb przypuszczający (Conditional)
+          prerequisites: [past_tense]
+          node_instructions: >
+            Generate a cloze on the Polish conditional: past-tense ł-form + movable "by" + movable
+            person ending (czytał-by-m, zrobił-a-by-ś). Cover polite requests and hypotheticals.
+
+    # ═══════════════════════════════════════════════════════════════
+    # NUMERALS — notoriously hard in Polish
+    # ═══════════════════════════════════════════════════════════════
+    - id: numerals
+      name: Liczebniki (Numerals)
+      prerequisites: [numbers_cardinal, cases]
+      node_instructions: >
+        Generate an exercise on how Polish numerals govern case. Key rules: 1 → nominative sg;
+        2/3/4 → nominative pl (with masculine-personal twist: dwaj panowie or dwóch panów);
+        5+ → genitive pl (pięć studentów). Test the student on picking the right noun form for
+        the given number.
+      children:
+
+        - id: ordinals
+          name: Liczebniki porządkowe (Ordinal numbers)
+          prerequisites: [numbers_cardinal, adjective_agreement_nom]
+          node_instructions: >
+            Generate a cloze on Polish ordinals (pierwszy, drugi, trzeci..., dziesiąty, dwudziesty,
+            setny). Ordinals decline like adjectives and agree with the head noun in gender, number,
+            case. Test dates (pierwszy maja, dwudziestego trzeciego) and positions (piąte piętro).
+          children: []
+
+        - id: collective_numerals
+          name: Liczebniki zbiorowe (Collective numerals)
+          prerequisites: [numerals]
+          node_instructions: >
+            Generate an exercise on collective numerals dwoje, troje, czworo, pięcioro...
+            They are REQUIRED in specific contexts: mixed-gender groups (dwoje dzieci),
+            young animals (troje kociąt), and pluralia tantum (dwoje drzwi). Student must choose
+            between a cardinal and a collective form.
+
+    # ═══════════════════════════════════════════════════════════════
+    # SYNTAX — builds on nouns, verbs, cases
+    # ═══════════════════════════════════════════════════════════════
+    - id: syntax
+      name: Składnia (Syntax)
+      children:
+
+        - id: negation
+          name: Negacja (Negation)
+          prerequisites: [genitive, present_tense]
+          node_instructions: >
+            Generate an exercise on Polish negation. Core rule: "nie" precedes the verb, AND a
+            negated transitive verb takes GENITIVE of object (not accusative). Mam książkę →
+            Nie mam książki. Double/triple negative concord is grammatical
+            (Nikt nigdy nic nie powiedział).
+          children: []
+
+        - id: prepositions_case_government
+          name: Rekcja przyimków (Preposition case government)
+          prerequisites: [accusative, genitive, locative, instrumental, dative]
+          node_instructions: >
+            Generate an exercise on Polish preposition case government. The SAME preposition can
+            govern different cases with different meanings: "w" + locative (location: w domu) vs
+            "w" + accusative (into, or time expressions: w piątek); "na" + locative (on, at) vs
+            "na" + accusative (onto, for purpose); "przed" + instrumental (location) vs + accusative
+            (motion). Student must pick the case the preposition triggers in the given context.
+          children: []
+
+        - id: word_order
+          name: Szyk wyrazów (Word order)
+          prerequisites: [nominative, accusative]
+          node_instructions: >
+            Generate a word-order exercise. Polish word order is relatively free because case
+            marks the roles; SVO is the pragmatic default but topic-fronting and focus-positioning
+            are common. Show the student a set of permutations of the same sentence and ask about
+            subtle differences in emphasis.
+
+        - id: reflexive_się
+          name: Zaimek zwrotny „się" (Reflexive się)
+          prerequisites: [present_tense]
+          node_instructions: >
+            Generate an exercise on "się": pure reflexive (myję się), reciprocal (kochają się),
+            lexical/intransitive-marker (nazywać się, bać się, śmiać się), and impersonal passive
+            (tu się mówi po polsku). Student picks whether a verb needs się and where it
+            positions (się is clitic, usually before the verb but can float).
+
+    # ═══════════════════════════════════════════════════════════════
+    # THEMATIC VOCABULARY — light prereqs, can branch off early
+    # ═══════════════════════════════════════════════════════════════
     - id: vocabulary
       name: Słownictwo (Vocabulary)
+      node_instructions: >
+        Generate a vocabulary cloze across a random everyday theme (food, transport, work,
+        weather, body, clothing, emotions, house). Pick the theme at random per item.
       children:
-        - id: greetings
-          name: Powitania (Greetings)
+
+        - id: family_vocab
+          name: Rodzina (Family)
+          prerequisites: [gender, plural]
           node_instructions: >
-            Generate an exercise about common Polish greetings and polite expressions.
+            Generate a cloze on Polish family-relationship nouns (matka, ojciec, brat, siostra,
+            syn, córka, dziadek, babcia, ciocia, wujek, teściowa, szwagier). Test gender and
+            plural forms; mention the affectionate/diminutive pairs (mama/matka, tata/ojciec).
           children: []
-        - id: daily_life
-          name: Życie codzienne (Daily Life)
+
+        - id: food_vocab
+          name: Jedzenie (Food)
+          prerequisites: [gender]
           node_instructions: >
-            Generate an exercise about daily life vocabulary (food, transport, shopping, etc.).
+            Generate a cloze on Polish food vocabulary (chleb, masło, ser, mleko, mięso, warzywa,
+            owoce, zupa, pierogi, bigos, kotlet, barszcz). Include classic Polish dishes. Test
+            gender assignment.
           children: []
+
+        - id: time_expressions
+          name: Wyrażenia czasu (Time expressions)
+          prerequisites: [numbers_cardinal, cases]
+          node_instructions: >
+            Generate an exercise on telling the time and dates. Days of the week (w poniedziałek
+            — accusative), months (w styczniu — locative), years (w dwa tysiące dwudziestym trzecim
+            roku — complex numeral+locative agreement). This is a GOLD MINE of case/numeral
+            interaction — exploit it pedagogically.
+          children: []
+
+        - id: idioms
+          name: Idiomy (Idioms)
+          prerequisites: [vocabulary, aspect]
+          node_instructions: >
+            Generate a Polish idiom exercise. Present the idiom in a gap-fill context and ask the
+            student to infer its meaning from surrounding sentences. Good starters: "bułka z
+            masłem", "nie mój cyrk, nie moje małpy", "gdzie kucharek sześć, tam nie ma co jeść",
+            "raz na ruski rok". Give literal translation as hint.
+          children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # CULTURE & REGISTER — high-tier, depends on broad fluency
+    # ═══════════════════════════════════════════════════════════════
+    - id: register_culture
+      name: Rejestr i kultura (Register & culture)
+      prerequisites: [vocabulary, verbs]
+      node_instructions: >
+        Generate an exercise that contrasts formal and informal Polish in the same situation.
+        Include the Pan/Pani + 3rd-person-verb construction (Czy pan jest głodny?) vs the
+        informal ty-form. Touch on written vs spoken style, slang vs literary.
+      children:
+
+        - id: formal_pan_pani
+          name: Forma Pan / Pani (Formal address)
+          prerequisites: [verb_być, personal_pronouns]
+          node_instructions: >
+            Generate a formal-register exercise. Student converts informal ty-sentences to formal
+            Pan/Pani + 3rd-person-verb sentences. Stress the declension of "pan" (pana, panu,
+            panem, panie) and the polite imperative "Proszę + infinitive".
+          children: []
+
+        - id: diminutives
+          name: Zdrobnienia (Diminutives)
+          prerequisites: [gender]
+          node_instructions: >
+            Generate a diminutive-formation exercise. Productive suffixes: -ek, -ik (masc),
+            -ka (fem), -ko (neut), with further intensified -eczek, -eczka, -uszek. Diminutives
+            in Polish are HUGELY productive and carry affective meaning (kawusia, herbatka,
+            piesek). Student forms diminutives and picks the right one for the emotional register.
