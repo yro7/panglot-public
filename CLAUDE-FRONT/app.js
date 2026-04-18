@@ -1,8 +1,7 @@
-/* Panglot — skill tree app v2
-   - Sub-echelons (micro-columns per palier)
-   - No "locked": adequacy zones instead (in-zone, ahead, far-ahead)
-   - Custom user-added nodes (localStorage)
-   - Last-practiced markers
+/* Panglot — skill tree app v3
+   - i18next for UI strings
+   - PanglotAPI for live mastery data
+   - node.name (target language) replaces title:{fr,en,de}
 */
 (() => {
   const T = window.PANGLOT_TREE;
@@ -17,8 +16,7 @@
   }
   function allNodes() { return [...T.nodes, ...loadCustom()]; }
 
-  // ===== locale =====
-  const locales = {};
+  // ===== i18n =====
   let currentUiLang = localStorage.getItem('panglot.uiLang') || 'fr';
   const uiLangs = [
     { code: 'fr', label: 'Français' },
@@ -37,41 +35,32 @@
   function ruFlag() { return `<svg viewBox="0 0 18 13" width="18" height="13"><rect width="18" height="4.33" y="0" fill="#fff"/><rect width="18" height="4.33" y="4.33" fill="#0039A6"/><rect width="18" height="4.34" y="8.66" fill="#D52B1E"/></svg>`; }
   function jpFlag() { return `<svg viewBox="0 0 18 13" width="18" height="13"><rect width="18" height="13" fill="#fff"/><circle cx="9" cy="6.5" r="3.5" fill="#BC002D"/></svg>`; }
 
-  async function loadLocale(lang) {
-    if (locales[lang]) return locales[lang];
-    try {
-      const r = await fetch(`locales/${lang}.json`);
-      locales[lang] = await r.json();
-      return locales[lang];
-    } catch (e) { return {}; }
+  async function initI18n(lang) {
+    await i18next.use(i18nextHttpBackend).init({
+      lng: lang,
+      fallbackLng: 'en',
+      backend: { loadPath: 'locales/{{lng}}.json' },
+    });
   }
-  function t(key, lang = currentUiLang) {
-    const parts = key.split('.');
-    let cur = locales[lang] || {};
-    for (const p of parts) { if (!cur) return key; cur = cur[p]; }
-    return cur || key;
-  }
-  async function applyLocale(lang) {
+
+  function t(key, opts) { return i18next.t(key, opts); }
+
+  async function changeLocale(lang) {
+    await i18next.changeLanguage(lang);
     currentUiLang = lang;
     localStorage.setItem('panglot.uiLang', lang);
     document.documentElement.lang = lang;
-    await loadLocale(lang);
     document.querySelectorAll('[data-i18n]').forEach(el => {
       el.textContent = t(el.getAttribute('data-i18n'));
     });
     document.getElementById('ui-lang-code').textContent = lang.toUpperCase();
-    renderSidebar();
-    renderLevels();
-    renderNodes();
-    renderEdges();
+    renderSidebar(); renderLevels(); renderNodes(); renderEdges();
     if (activeNodeId) openPanel(activeNodeId, false);
   }
 
   // ===== layout =====
-  // Each palier has 3 sub-echelons → 3 mini-columns each.
-  // Total columns = paliers.length * 3
   const LAYOUT = {
-    miniColW: 248,          // width per sub-echelon column (wider than node)
+    miniColW: 248,
     rowH: 132,
     padLeft: 180,
     padTop: 150,
@@ -81,7 +70,6 @@
   function palierX(palier) { return LAYOUT.padLeft + palier * SUBS_PER_PALIER * LAYOUT.miniColW; }
   function nodeX(n) { return palierX(n.palier) + n.sub * LAYOUT.miniColW; }
 
-  // Lay out by (palier, sub): group nodes sharing the same (palier, sub), stack vertically
   function computeLayout() {
     const groups = {};
     allNodes().forEach(n => {
@@ -104,11 +92,6 @@
   let positions = computeLayout();
 
   // ===== adequacy zone =====
-  // fit = how well a node's level matches the learner's frontier
-  //  - "review"   (behind, mastered) — muted, "révision possible"
-  //  - "in_zone"  (within ±0.5 of frontier) — normal
-  //  - "ahead"    (0.5 to 1.5 ahead)        — watermark, dashed
-  //  - "beyond"   (> 1.5 ahead)              — very faded, italic
   function fitZone(n) {
     const lvl = T.nodeLevel(n);
     const d = lvl - T.userFrontier;
@@ -118,35 +101,6 @@
     if (d <= 1.5) return 'ahead';
     return 'beyond';
   }
-  function fitLabel(zone) {
-    return {
-      fr: { review: 'Révision', in_zone: 'À ta portée', ahead: 'Un peu en avance', beyond: 'Bien au-delà' },
-      en: { review: 'Review',   in_zone: 'In reach',    ahead: 'Slightly ahead',  beyond: 'Well beyond' },
-      de: { review: 'Wdh.',     in_zone: 'Erreichbar',  ahead: 'Leicht voraus',   beyond: 'Weit voraus' }
-    }[currentUiLang][zone];
-  }
-  function fitHint(zone) {
-    return {
-      fr: {
-        review:  "Tu maîtrises — garde-le vivant par la révision.",
-        in_zone: "C'est ta zone de progression actuelle.",
-        ahead:   "Ça va piquer un peu, mais tu peux tenter. Prévois plus d'exercices.",
-        beyond:  "Très ambitieux pour l'instant. Tu peux y aller, mais concentre-toi sur ta zone."
-      },
-      en: {
-        review:  "You've mastered this — keep it warm with review.",
-        in_zone: "This is your current progress zone.",
-        ahead:   "It'll stretch you, but you can try. Expect more exercises.",
-        beyond:  "Very ambitious right now. Allowed, but focus on your zone first."
-      },
-      de: {
-        review:  "Beherrscht — mit Wiederholung frisch halten.",
-        in_zone: "Dein aktueller Fortschrittsbereich.",
-        ahead:   "Fordernd, aber machbar. Rechne mit mehr Übungen.",
-        beyond:  "Sehr ambitioniert. Erlaubt, aber fokussiere zuerst deinen Bereich."
-      }
-    }[currentUiLang][zone];
-  }
 
   // ===== render =====
   const nodesLayer = document.getElementById('nodes-layer');
@@ -155,8 +109,7 @@
   const levelsLayer = document.getElementById('levels-layer');
 
   function statusLabel(s) {
-    if (s === 'fresh') return { fr: 'Nouveau', en: 'New', de: 'Neu' }[currentUiLang];
-    return t(`tree.legend.${s}`) || s;
+    return t('tree.legend.' + s) || s;
   }
 
   function renderLevels() {
@@ -170,7 +123,6 @@
     canvas.style.width = maxW + 'px';
     canvas.style.height = maxH + 'px';
 
-    // palier bands
     const palierW = SUBS_PER_PALIER * LAYOUT.miniColW;
     T.paliers.forEach((lv, i) => {
       const div = document.createElement('div');
@@ -184,7 +136,6 @@
       lbl.innerHTML = `<b>${parts[0]}</b>${parts[1] || ''}`;
       div.appendChild(lbl);
 
-      // sub-tier dividers
       for (let s = 0; s < SUBS_PER_PALIER; s++) {
         const tick = document.createElement('div');
         tick.className = 'sub-tick';
@@ -196,7 +147,6 @@
       levelsLayer.appendChild(div);
     });
 
-    // frontier line
     const frontier = document.createElement('div');
     frontier.className = 'frontier-line';
     const fx = LAYOUT.padLeft + T.userFrontier * SUBS_PER_PALIER * LAYOUT.miniColW + LAYOUT.nodeW/2;
@@ -204,7 +154,7 @@
     frontier.innerHTML = `
       <div class="frontier-label">
         <span class="frontier-dot"></span>
-        <span>${{fr:'Ton niveau actuel',en:'Your current level',de:'Dein aktuelles Niveau'}[currentUiLang]}</span>
+        <span>${t('frontier.label')}</span>
       </div>`;
     levelsLayer.appendChild(frontier);
   }
@@ -235,34 +185,32 @@
         ? `background: oklch(96% 0.04 ${hue}); color: oklch(32% 0.12 ${hue}); border-color: transparent;`
         : `background: oklch(94% 0.035 ${hue}); color: oklch(35% 0.12 ${hue}); border-color: oklch(78% 0.06 ${hue});`;
 
-      // last practiced marker
       let practicedHtml = '';
       if (n.lastPracticed != null && n.status !== 'fresh') {
         const d = n.lastPracticed;
-        const label = d === 0 ? ({fr:'aujourd\'hui',en:'today',de:'heute'}[currentUiLang])
-                   : d === 1 ? ({fr:'hier',en:'yesterday',de:'gestern'}[currentUiLang])
-                   : d < 7   ? ({fr:`il y a ${d}j`,en:`${d}d ago`,de:`vor ${d}T`}[currentUiLang])
-                   : d < 30  ? ({fr:`il y a ${Math.round(d/7)}sem`,en:`${Math.round(d/7)}w ago`,de:`vor ${Math.round(d/7)}W`}[currentUiLang])
-                              : ({fr:`> 1 mois`,en:`> 1 month`,de:`> 1 Monat`}[currentUiLang]);
+        const label = d === 0 ? t('time.today')
+                   : d === 1 ? t('time.yesterday')
+                   : d < 7   ? t('time.days_ago', { count: d })
+                   : d < 30  ? t('time.weeks_ago', { count: Math.round(d/7) })
+                              : t('time.over_month');
         practicedHtml = `<div class="n-practiced" title="${n.lastPracticed}j">◷ ${label}</div>`;
       }
 
-      // zone badge in corner for ahead/beyond
       let zoneBadge = '';
       if (zone === 'ahead' || zone === 'beyond') {
-        zoneBadge = `<div class="n-zone-badge zone-${zone}" title="${fitHint(zone)}">${zone === 'beyond' ? '↯' : '↗'} ${fitLabel(zone)}</div>`;
+        zoneBadge = `<div class="n-zone-badge zone-${zone}" title="${t('zone.' + zone + '.hint')}">${zone === 'beyond' ? '↯' : '↗'} ${t('zone.' + zone + '.label')}</div>`;
       }
       if (zone === 'review' && n.status === 'mastered' && n.lastPracticed > 14) {
-        zoneBadge = `<div class="n-zone-badge zone-staleish" title="${{fr:'Révision recommandée',en:'Due for review',de:'Zur Wiederholung fällig'}[currentUiLang]}">◷ ${{fr:'à revoir',en:'revisit',de:'wiederholen'}[currentUiLang]}</div>`;
+        zoneBadge = `<div class="n-zone-badge zone-staleish" title="${t('zone.review.hint')}">◷ ${t('revisit')}</div>`;
       }
 
       el.innerHTML = `
-        ${n.id === recoId ? `<div class="reco">${{fr:'Recommandé',en:'Recommended',de:'Empfohlen'}[currentUiLang]}</div>` : ''}
+        ${n.id === recoId ? `<div class="reco">${t('reco')}</div>` : ''}
         ${zoneBadge}
         ${n.custom ? `<div class="n-custom-mark" title="Nœud personnalisé">∿</div>` : ''}
         <div class="n-head">
           <div class="seal" style="${sealStyle}">${sealLetter}</div>
-          <div class="n-title">${n.title[currentUiLang] || n.title.en || n.title}</div>
+          <div class="n-title">${n.name}</div>
         </div>
         <div class="n-native">${n.native || ''}</div>
         <div class="n-meta">
@@ -427,7 +375,6 @@
     const fx = LAYOUT.padLeft + T.userFrontier * SUBS_PER_PALIER * LAYOUT.miniColW + LAYOUT.nodeW/2;
     vscale = 1;
     vx = W/2 - fx * vscale;
-    // center vertically around middle of used rows
     const maxY = Math.max(...Object.values(positions).map(p => p.y));
     vy = H/2 - (maxY/2 + LAYOUT.padTop) * vscale;
     applyTransform();
@@ -466,23 +413,21 @@
     document.getElementById('p-cat').textContent = catLabel;
     document.getElementById('p-lvl').textContent = subLabel;
     document.getElementById('p-status').textContent = statusLabel(node.status);
-    document.getElementById('p-title').textContent = node.title[currentUiLang] || node.title.en || node.title;
+    document.getElementById('p-title').textContent = node.name;
     document.getElementById('p-native').textContent = node.native || '';
     document.getElementById('p-mastery').textContent = Math.round((node.mastery || 0) * 100);
     document.getElementById('p-xdone').textContent = node.exercisesDone || 0;
 
-    // fit banner
     const fitBanner = document.getElementById('p-fit');
     fitBanner.className = `fit-banner zone-${zone}`;
     fitBanner.innerHTML = `
       <div class="fit-icon">${zone === 'beyond' ? '↯' : zone === 'ahead' ? '↗' : zone === 'review' ? '◷' : '●'}</div>
       <div class="fit-text">
-        <div class="fit-title">${fitLabel(zone)}</div>
-        <div class="fit-hint">${fitHint(zone)}</div>
+        <div class="fit-title">${t('zone.' + zone + '.label')}</div>
+        <div class="fit-hint">${t('zone.' + zone + '.hint')}</div>
       </div>
     `;
 
-    // decks
     const dEl = document.getElementById('p-decks');
     dEl.innerHTML = '';
     (node.decks || []).forEach((d, i) => {
@@ -498,7 +443,6 @@
     });
     if (!node.decks?.length) dEl.innerHTML = '<span style="color:var(--ink-faded); font-size:12px;">—</span>';
 
-    // prereq
     const prEl = document.getElementById('p-prereq');
     prEl.innerHTML = '';
     (node.prereq || []).forEach(pid => {
@@ -506,37 +450,53 @@
       if (!pn) return;
       const chip = document.createElement('button');
       chip.className = 'req-chip' + (pn.status === 'mastered' ? ' done' : '');
-      chip.textContent = pn.title[currentUiLang] || pn.title.en || pn.title;
+      chip.textContent = pn.name;
       chip.onclick = () => openPanel(pid);
       prEl.appendChild(chip);
     });
     if (!node.prereq?.length) prEl.innerHTML = '<span style="color:var(--ink-faded); font-size:12px;">—</span>';
 
-    // unlocks
     const unEl = document.getElementById('p-unlocks');
     unEl.innerHTML = '';
     allNodes().filter(n => (n.prereq || []).includes(id)).forEach(un => {
       const chip = document.createElement('button');
       chip.className = 'req-chip';
-      chip.textContent = un.title[currentUiLang] || un.title.en || un.title;
+      chip.textContent = un.name;
       chip.onclick = () => openPanel(un.id);
       unEl.appendChild(chip);
     });
     if (!unEl.children.length) unEl.innerHTML = '<span style="color:var(--ink-faded); font-size:12px;">—</span>';
 
-    // start button label
     const btn = document.getElementById('btn-start');
     btn.disabled = false;
     if (node.status === 'mastered') btn.textContent = t('node.review');
     else if (node.status === 'in_progress') btn.textContent = t('node.continue');
     else btn.textContent = t('node.start');
 
-    // delete button for custom nodes
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const origLabel = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const result = await PanglotAPI.generateForNode(node.id, T.language.code);
+        if (result.success && result.cards?.length) {
+          alert(`${result.cards.length} carte(s) générée(s) pour «${node.name}»`);
+        } else {
+          alert(result.message || 'Erreur lors de la génération');
+        }
+      } catch (e) {
+        alert('Impossible de joindre le serveur');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+      }
+    };
+
     const delBtn = document.getElementById('btn-delete');
     delBtn.style.display = node.custom ? '' : 'none';
     if (node.custom) {
       delBtn.onclick = () => {
-        if (!confirm({fr:'Supprimer ce nœud ?',en:'Delete this node?',de:'Diesen Knoten löschen?'}[currentUiLang])) return;
+        if (!confirm(t('node.delete_confirm'))) return;
         const list = loadCustom().filter(x => x.id !== node.id);
         saveCustom(list);
         positions = computeLayout();
@@ -569,7 +529,7 @@
     const total = all.length;
     const overall = Math.round((mastered / total) * 100);
     document.getElementById('overall-pct').textContent = overall;
-    document.getElementById('overall-caption').textContent = `${mastered} / ${total} ${currentUiLang === 'fr' ? 'nœuds maîtrisés' : currentUiLang === 'en' ? 'nodes mastered' : 'Knoten gemeistert'}`;
+    document.getElementById('overall-caption').textContent = t('sidebar.nodes_mastered', { mastered, total });
 
     const lvEl = document.getElementById('level-rows');
     lvEl.innerHTML = '';
@@ -614,7 +574,6 @@
     if (first) setTimeout(() => first.focus(), 100);
   };
   document.getElementById('add-close').onclick = () => addForm.classList.remove('show');
-  // populate selects
   function populateAddSelects() {
     const catSel = addForm.querySelector('select[name=category]');
     catSel.innerHTML = T.categories.map(c => `<option value="${c.id}">${c.label[currentUiLang]}</option>`).join('');
@@ -622,10 +581,9 @@
     palSel.innerHTML = T.paliers.map((p, i) =>
       [0,1,2].map(s => `<option value="${i}_${s}">${p.label.en.split(' · ')[0]}.${s+1}</option>`).join('')
     ).join('');
-    // prereq multi — use checkboxes
     const prBox = addForm.querySelector('.prereq-check');
     prBox.innerHTML = allNodes().map(n => `
-      <label><input type="checkbox" value="${n.id}"> ${n.title[currentUiLang] || n.title.en || n.title}</label>
+      <label><input type="checkbox" value="${n.id}"> ${n.name}</label>
     `).join('');
   }
   document.getElementById('add-submit').onclick = () => {
@@ -639,7 +597,7 @@
     const id = 'custom-' + Date.now().toString(36);
     const newNode = {
       id, category: cat, palier, sub,
-      title: { fr: title, en: title, de: title },
+      name: title,
       native,
       status: 'fresh',
       mastery: 0,
@@ -655,7 +613,6 @@
     positions = computeLayout();
     renderLevels(); renderNodes(); renderEdges();
     addForm.classList.remove('show');
-    // reset
     addForm.querySelector('[name=title]').value = '';
     addForm.querySelector('[name=native]').value = '';
     addForm.querySelector('[name=decks]').value = '';
@@ -682,8 +639,11 @@
       const item = document.createElement('div');
       item.className = 'menu-item' + (l.code === T.language.code ? ' on' : '');
       item.innerHTML = `<span class="flag">${l.flag}</span><span>${l.native}</span><span style="color:var(--ink-faded); font-size:10.5px; margin-left:6px;">${l.label[currentUiLang]}</span>`;
-      item.onclick = () => {
+      item.onclick = async () => {
         T.language.code = l.code; T.language.native = l.native;
+        await PanglotAPI.fetchAndMerge(l.code);
+        positions = computeLayout();
+        renderLevels(); renderNodes(); renderEdges();
         buildLangMenu(); renderSidebar();
         m.classList.remove('show');
       };
@@ -698,7 +658,7 @@
       item.className = 'menu-item' + (l.code === currentUiLang ? ' on' : '');
       item.innerHTML = `<span style="font-family:var(--font-mono); font-size:10px; color:var(--ink-faded); width:22px;">${l.code.toUpperCase()}</span><span>${l.label}</span>`;
       item.onclick = async () => {
-        await applyLocale(l.code);
+        await changeLocale(l.code);
         buildUiLangMenu(); buildLangMenu();
         populateAddSelects();
         m.classList.remove('show');
@@ -762,16 +722,10 @@
 
   // ===== init =====
   (async () => {
-    await Promise.all(uiLangs.map(l => loadLocale(l.code)));
-    await applyLocale(currentUiLang);
-    positions = computeLayout();
-    renderLevels();
-    renderNodes();
-    renderEdges();
-    renderSidebar();
-    buildLangMenu();
-    buildUiLangMenu();
-    populateAddSelects();
+    await initI18n(currentUiLang);
+    await PanglotAPI.fetchAndMerge(T.language.code);
+    await changeLocale(currentUiLang);
+    buildLangMenu(); buildUiLangMenu(); populateAddSelects();
     requestAnimationFrame(() => { fitView(); focusFrontier(); });
   })();
 })();
