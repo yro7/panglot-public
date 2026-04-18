@@ -91,7 +91,9 @@ where
     fn base_tree(&self) -> SkillNode {
         self.cached_base_tree.get_or_init(|| {
             let config = self.language.default_tree_config();
-            crate::skill_tree::build_node(config.root)
+            let mut root = crate::skill_tree::build_node(config.root);
+            crate::skill_tree::compute_tiers(&mut root);
+            root
         }).clone()
     }
 

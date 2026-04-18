@@ -164,8 +164,8 @@ pub fn compute_tiers(root: &mut SkillNode) {
         let _ = resolve_tier(id, &prereqs_by_id, &mut memo, &mut in_progress);
     }
 
-    // Step 3: write tiers back into the tree.
-    apply_tiers(root, &memo);
+    // Step 3: write tiers back into the tree, incorporating structural depth.
+    apply_tiers(root, &memo, 0);
 }
 
 fn collect_prereqs(node: &SkillNode, out: &mut HashMap<String, Vec<String>>) {
@@ -214,10 +214,11 @@ fn resolve_tier(
     tier
 }
 
-fn apply_tiers(node: &mut SkillNode, memo: &HashMap<String, u32>) {
-    node.tier = *memo.get(&node.id).unwrap_or(&0);
+fn apply_tiers(node: &mut SkillNode, memo: &HashMap<String, u32>, depth: u32) {
+    let prereq_tier = *memo.get(&node.id).unwrap_or(&0);
+    node.tier = u32::max(depth, prereq_tier);
     for child in &mut node.children {
-        apply_tiers(child, memo);
+        apply_tiers(child, memo, depth + 1);
     }
 }
 
@@ -692,5 +693,57 @@ root:
         // Tree should be unchanged
         assert_eq!(result.children.len(), 2);
         assert!(find_node(&result, "orphan").is_none());
+    }
+
+    #[test]
+    fn test_compute_tiers_incorporates_depth() {
+        let mut root = SkillNode {
+            id: "root".to_string(),
+            name: "Root".to_string(),
+            node_instructions: None,
+            tier: 0,
+            prerequisites: vec![],
+            children: vec![
+                SkillNode {
+                    id: "child1".to_string(),
+                    name: "Child 1".to_string(),
+                    node_instructions: None,
+                    tier: 0,
+                    prerequisites: vec![],
+                    children: vec![
+                        SkillNode {
+                            id: "grandchild1".to_string(),
+                            name: "Grandchild 1".to_string(),
+                            node_instructions: None,
+                            tier: 0,
+                            prerequisites: vec!["child2".to_string()],
+                            children: vec![],
+                        }
+                    ],
+                },
+                SkillNode {
+                    id: "child2".to_string(),
+                    name: "Child 2".to_string(),
+                    node_instructions: None,
+                    tier: 0,
+                    prerequisites: vec![],
+                    children: vec![],
+                }
+            ],
+        };
+
+        compute_tiers(&mut root);
+
+        let child1 = find_node(&root, "child1").unwrap();
+        let child2 = find_node(&root, "child2").unwrap();
+        let grandchild1 = find_node(&root, "grandchild1").unwrap();
+
+        // Structural depth: root=0, child1=1, child2=1, grandchild1=2
+        // Prereqs: grandchild1 -> child2 (tier 1) => grandchild1.prereq_tier = 2
+        
+        assert_eq!(root.tier, 0);
+        assert_eq!(child1.tier, 1);
+        assert_eq!(child2.tier, 1);
+        assert_eq!(grandchild1.tier, 2);
     }
 }
