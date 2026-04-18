@@ -3,69 +3,130 @@ root:
   id: root
   name: 한국어 (Korean)
   children:
+
+    # ═══════════════════════════════════════════════════════════════
+    # WRITING SYSTEM — alphabet and reading
+    # ═══════════════════════════════════════════════════════════════
     - id: writing_system
       name: 쓰기 시스템 (Writing System)
+      node_instructions: >
+        Generate an exercise focusing on the Korean writing system, Hangul.
+        Cover character recognition and the structural logic of syllable blocks.
       children:
+
         - id: hangul_basics
           name: 한글 기초 (Hangul Basics)
           node_instructions: >
-            Generate an exercise focusing on recognizing and writing basic Hangul characters (consonants and vowels).
+            Generate an exercise focusing on recognizing and writing basic Hangul characters
+            (consonants and vowels). Test the student's ability to map sounds to their
+            symbolic representations.
           children: []
+
         - id: batchim_reading
           name: 받침 읽기 (Reading Batchim)
+          prerequisites: [hangul_basics]
           node_instructions: >
             Generate an exercise focusing on reading syllables with final consonants (Batchim).
+            Test the student's ability to identify how the final consonant affects the
+            sound of the syllable block.
           children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRONUNCIATION — phonological rules
+    # ═══════════════════════════════════════════════════════════════
+    - id: pronunciation
+      name: 발음 (Pronunciation)
+      prerequisites: [writing_system]
+      node_instructions: >
+        Generate an exercise focusing on Korean phonology and sound change rules.
+        Highlight how spoken Korean differs from the written syllables.
+      children:
+
+        - id: batchim_pronunciation_rules
+          name: 받침 발음 규칙 (Batchim Pronunciation Rules)
+          prerequisites: [batchim_reading]
+          node_instructions: >
+            Generate an exercise focusing on the pronunciation rules of final consonants (Batchim),
+            including how they change when followed by certain initial consonants.
+          children: []
+
+        - id: sound_changes
+          name: 음운 변동 (Sound Changes)
+          prerequisites: [batchim_pronunciation_rules]
+          node_instructions: >
+            Generate an exercise focusing on common Korean sound change rules such as
+            assimilation, palatalization, and liaison. Test the student's ability
+            to predict the correct spoken form of a written phrase.
+          children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # GRAMMAR — building sentences
+    # ═══════════════════════════════════════════════════════════════
     - id: grammar
       name: 문법 (Grammar)
+      prerequisites: [writing_system]
+      node_instructions: >
+        Generate a mixed grammar exercise for Korean. Cover particles, conjugation,
+        and sentence structure.
       children:
+
         - id: particles
-          name: 조사 (Particles/Postpositions)
+          name: 조사 (Particles)
           node_instructions: >
-            Generate a cloze deletion exercise focused on basic Korean particles (e.g., 은/는, 이/가, 을/를, 에/에서).
-            Create a sentence where the student must fill in the correct particle.
+            Generate a cloze deletion exercise focused on basic Korean particles
+            (e.g., 은/는, 이/가, 을/를, 에/에서). Student must fill in the correct particle
+            matching the grammatical role of the noun.
           children: []
+
         - id: verb_conjugation
           name: 동사 활용 (Verb Conjugation)
           node_instructions: >
-            Generate an exercise focused on basic verb conjugation (e.g., dictionary form to polite -아요/어요 form).
-            Create a sentence where the student must conjugate a given verb correctly.
+            Generate an exercise focused on basic verb conjugation (e.g., dictionary form
+            to polite -아요/어요 form). Provide the verb root and the desired polite level.
           children: []
+
         - id: sentence_structure
           name: 문장 구조 (Sentence Structure)
+          prerequisites: [particles, verb_conjugation]
           node_instructions: >
-            Generate an exercise focusing on basic Korean sentence structure (SOV order, topic vs. subject).
-            Provide jumbled words and ask the student to form a grammatically correct sentence.
+            Generate an exercise focusing on basic Korean sentence structure (SOV order,
+            topic vs. subject). Provide jumbled words and ask the student to form a
+            grammatically correct Korean sentence.
           children: []
+
         - id: honorifics
           name: 존댓말 (Honorifics)
+          prerequisites: [verb_conjugation]
           node_instructions: >
-            Generate an exercise focusing on basic honorifics, including polite endings (-습니다/-습니다) and the honorific suffix -시-.
+            Generate an exercise focusing on basic honorifics, including polite endings
+            (-습니다) and the honorific suffix -시-. Contrast the hierarchy levels
+            between different subjects and listeners.
           children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # VOCABULARY — survivor themes
+    # ═══════════════════════════════════════════════════════════════
     - id: vocabulary
       name: 어휘 (Vocabulary)
+      prerequisites: [writing_system]
+      node_instructions: >
+        Generate a thematic vocabulary exercise for Korean. Pick a theme like food,
+        time, or family relationships.
       children:
+
         - id: greetings
           name: 인사말 (Greetings)
           node_instructions: >
-            Generate an exercise about common Korean greetings, farewells, and polite expressions.
+            Generate a dialogue exercise about common Korean greetings (annyeong-haseyo),
+            farewells, and polite expressions. Emphasize the cultural context and
+            appropriate bowing/politeness levels.
           children: []
+
         - id: daily_life
           name: 일상생활 (Daily Life)
+          prerequisites: [greetings]
           node_instructions: >
-            Generate an exercise about daily life vocabulary (e.g., food, family, numbers, time, common objects).
-          children: []
-    - id: pronunciation
-      name: 발음 (Pronunciation)
-      children:
-        - id: batchim_pronunciation_rules
-          name: 받침 발음 규칙 (Batchim Pronunciation Rules)
-          node_instructions: >
-            Generate an exercise focusing on the pronunciation rules of final consonants (Batchim), including how they change when followed by certain initial consonants.
-          children: []
-        - id: sound_changes
-          name: 음운 변동 (Sound Changes)
-          node_instructions: >
-            Generate an exercise focusing on common Korean sound change rules such as assimilation, palatalization, and liaison.
-            Provide words or phrases and ask the student to identify or produce the correct pronunciation.
+            Generate an exercise about daily life vocabulary: food, family members,
+            transport, and shopping. Test the student's ability to recognize these
+            high-frequency nouns in simple sentence contexts.
           children: []

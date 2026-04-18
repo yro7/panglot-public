@@ -3,57 +3,113 @@ root:
   id: root
   name: العربية (Arabic)
   children:
+
+    # ═══════════════════════════════════════════════════════════════
+    # WRITING SYSTEM — alphabet and reading foundations
+    # ═══════════════════════════════════════════════════════════════
     - id: writing_system
       name: الكتابة (Writing System)
+      node_instructions: >
+        Generate an exercise focusing on the Arabic script and reading mechanics.
+        Combine letter recognition with vowel marking (tashkeel) where appropriate.
       children:
+
         - id: alphabet
           name: الحروف (Alphabet)
           node_instructions: >
-            Generate an exercise focusing on recognizing and connecting Arabic letters in their isolated, initial, medial, and final forms.
+            Generate an exercise focusing on recognizing and connecting Arabic letters in their isolated,
+            initial, medial, and final forms. Test the student's ability to identify a letter's
+            shape transformation based on its position in a word.
           children: []
+
         - id: tashkeel
           name: التشكيل (Diacritics)
+          prerequisites: [alphabet]
           node_instructions: >
-            Generate an exercise focused on identifying and pronouncing short vowels (Fatha, Kasra, Damma), Sukun, and Shadda.
+            Generate an exercise focused on identifying and pronouncing short vowels (Fatha, Kasra, Damma),
+            Sukun (absence of vowel), and Shadda (consonant doubling). Test how these marks
+            change the meaning or pronunciation of basic roots.
           children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # GRAMMAR — core structural rules
+    # ═══════════════════════════════════════════════════════════════
     - id: grammar
       name: القواعد (Grammar)
+      prerequisites: [writing_system]
+      node_instructions: >
+        Generate a mixed grammar exercise for Arabic. This can include definiteness, Idafa constructs,
+        or case endings. Use simple vocabulary to focus on the structural patterns.
       children:
+
         - id: definiteness
           name: المعرفة والنكرة (Definiteness)
+          prerequisites: [alphabet]
           node_instructions: >
-            Generate a cloze deletion exercise focused on the use of the definite article (Al- / ال) and sun/moon letters.
+            Generate a cloze deletion exercise focused on the use of the definite article (Al- / ال).
+            Specifically test the "Sun and Moon letters" rule: does the 'L' assimilate (e.g., ash-shams)
+            or stay vocalized (e.g., al-qamar)? Provide the indefinite noun as a hint.
           children: []
+
         - id: idafa
           name: الإضافة (Genitive Construct)
+          prerequisites: [definiteness]
           node_instructions: >
-            Generate an exercise focused on forming the Idafa structure. Create a sentence requiring two nouns connected in a possessive relationship.
+            Generate an exercise focused on forming the Idafa structure (possessive construct).
+            Test the relationship between the Mudaf (possessed) and Mudaf ilayhi (possessor),
+            ensuring the first term lacks 'Al-' and the second term is definite/genitive.
           children: []
+
         - id: cases
           name: الإعراب (Noun Cases)
+          prerequisites: [idafa]
           node_instructions: >
-            Generate an exercise focusing on the three grammatical cases: Nominative (Marfu'), Accusative (Mansub), and Genitive (Majrur).
+            Generate an exercise focusing on the three grammatical cases: Nominative (Marfu'),
+            Accusative (Mansub), and Genitive (Majrur). Distinguish between sound plural
+            endings and broken plural patterns if applicable.
           children: []
+
         - id: past_verbs
           name: الفعل الماضي (Past Tense Verbs)
+          prerequisites: [alphabet]
           node_instructions: >
-            Generate a verb conjugation exercise for the past tense (Al-Madi) based on different pronouns.
+            Generate a verb conjugation exercise for the past tense (Al-Madi). Provide a 3rd person
+            masculine singular root and a target pronoun. Student must provide the correctly
+            suffixed form (e.g., kataba -> katabtu).
           children: []
+
         - id: present_verbs
           name: الفعل المضارع (Present Tense Verbs)
+          prerequisites: [past_verbs]
           node_instructions: >
-            Generate a verb conjugation exercise for the present tense (Al-Mudari') based on different pronouns.
+            Generate a verb conjugation exercise for the present tense (Al-Mudari').
+            Test the use of both prefixes and suffixes to mark person, gender, and number.
+            Contrast it with the past tense forms the student already knows.
           children: []
+
+    # ═══════════════════════════════════════════════════════════════
+    # VOCABULARY — thematic word sets
+    # ═══════════════════════════════════════════════════════════════
     - id: vocabulary
       name: المفردات (Vocabulary)
+      prerequisites: [alphabet]
+      node_instructions: >
+        Generate a vocabulary cloze exercise across random everyday Arabic themes.
+        Pick the theme at random per item (e.g., home, colors, travel).
       children:
+
         - id: greetings
           name: التحيات (Greetings)
           node_instructions: >
-            Generate an exercise about common Arabic greetings, farewells, and polite expressions.
+            Generate a dialogue-based exercise about common Arabic greetings, farewells,
+            and polite expressions (Ahlan, Marhaban, As-salamu alaykum). Include the
+            correct responses to each greeting.
           children: []
+
         - id: daily_life
           name: الحياة اليومية (Daily Life)
+          prerequisites: [greetings]
           node_instructions: >
-            Generate an exercise about daily life vocabulary (food, transport, shopping, family members, etc.).
+            Generate an exercise about daily life vocabulary (food, transport, shopping,
+            family members, etc.). Test common nouns and adjectives used in basic survivor Arabic.
           children: []
