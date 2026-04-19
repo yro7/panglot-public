@@ -33,3 +33,5 @@ lc_audio/
 test_parse.rs
 ""
 
+# Front
+node_modules/
