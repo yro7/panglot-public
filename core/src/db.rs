@@ -707,6 +707,7 @@ impl StorageProvider for LocalStorageProvider {
             SELECT
                 d.id,
                 d.full_path,
+                COALESCE(d.target_language, '') as target_language,
                 COUNT(c.id) as card_count,
                 SUM(CASE WHEN r.interval_days = 0
                      AND COALESCE(rc.review_count, 0) = 0
@@ -738,6 +739,7 @@ impl StorageProvider for LocalStorageProvider {
             DeckInfo {
                 deck_id: r.get("id"),
                 name: r.get("full_path"), // We use full path internally for names representing hierarchy
+                target_language: r.get("target_language"),
                 card_count: r.get::<i64, _>("card_count") as usize,
                 new_count: r.get::<Option<i64>, _>("new_count").unwrap_or(0) as usize,
                 learning_count: r.get::<Option<i64>, _>("learning_count").unwrap_or(0) as usize,

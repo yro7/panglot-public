@@ -41,6 +41,8 @@ pub struct DeckInfo {
     pub deck_id: String,
     /// The name of the deck.
     pub name: String,
+    /// The ISO 639-3 code of the target language this deck was generated for.
+    pub target_language: String,
     /// Total number of cards in the deck.
     pub card_count: usize,
     /// Number of new cards (Nouvelles).
