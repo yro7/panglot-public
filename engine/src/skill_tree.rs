@@ -31,8 +31,7 @@ pub struct SkillTree<L: Language> {
 impl<L: Language> SkillTree<L> {
     /// Creates a new SkillTree from a language instance and top-level config.
     pub fn from_config(language: L, config: SkillTreeConfig) -> Self {
-        let mut root = build_node(config.root);
-        compute_tiers(&mut root);
+        let root = build_tree_root(&config);
         Self { language, root }
     }
 
@@ -83,6 +82,12 @@ pub fn build_node(config: SkillNodeConfig) -> SkillNode {
         concept_key: config.concept_key,
         desc: config.desc,
     }
+}
+
+pub fn build_tree_root(config: &SkillTreeConfig) -> SkillNode {
+    let mut root = build_node(config.root.clone());
+    compute_tiers(&mut root);
+    root
 }
 
 // ----- Public Tree Traversal Helpers -----
@@ -155,8 +160,7 @@ fn collect_generatable(node: &SkillNode, out: &mut Vec<String>) {
 /// - Never panics, never fails.
 pub fn compute_tiers(root: &mut SkillNode) {
     // Step 1: collect snapshot of (id -> prerequisites) — avoids borrow conflicts.
-    let mut prereqs_by_id: HashMap<String, Vec<String>> = HashMap::new();
-    collect_prereqs(root, &mut prereqs_by_id);
+    let prereqs_by_id = prerequisite_index(root);
 
     // Step 2: compute tier per id via DFS with memoization and cycle detection.
     let mut memo: HashMap<String, u32> = HashMap::new();
@@ -170,11 +174,100 @@ pub fn compute_tiers(root: &mut SkillNode) {
     apply_tiers(root, &memo, 0);
 }
 
+pub fn prerequisite_index(root: &SkillNode) -> HashMap<String, Vec<String>> {
+    let mut out = HashMap::new();
+    collect_prereqs(root, &mut out);
+    out
+}
+
 fn collect_prereqs(node: &SkillNode, out: &mut HashMap<String, Vec<String>>) {
     out.insert(node.id.clone(), node.prerequisites.clone());
     for child in &node.children {
         collect_prereqs(child, out);
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrerequisiteGraphError {
+    SelfDependency {
+        node_id: String,
+    },
+    DuplicatePrerequisite {
+        node_id: String,
+        prerequisite_id: String,
+    },
+    UnknownPrerequisite {
+        node_id: String,
+        prerequisite_id: String,
+    },
+    CycleDetected,
+}
+
+pub fn validate_prerequisite_graph(root: &SkillNode) -> Result<(), PrerequisiteGraphError> {
+    let prereqs_by_id = prerequisite_index(root);
+    validate_prerequisite_index(&prereqs_by_id)
+}
+
+fn validate_prerequisite_index(
+    prereqs_by_id: &HashMap<String, Vec<String>>,
+) -> Result<(), PrerequisiteGraphError> {
+    for (node_id, prereqs) in prereqs_by_id {
+        let mut seen = HashSet::new();
+        for prereq in prereqs {
+            if prereq == node_id {
+                return Err(PrerequisiteGraphError::SelfDependency {
+                    node_id: node_id.clone(),
+                });
+            }
+            if !seen.insert(prereq) {
+                return Err(PrerequisiteGraphError::DuplicatePrerequisite {
+                    node_id: node_id.clone(),
+                    prerequisite_id: prereq.clone(),
+                });
+            }
+            if !prereqs_by_id.contains_key(prereq) {
+                return Err(PrerequisiteGraphError::UnknownPrerequisite {
+                    node_id: node_id.clone(),
+                    prerequisite_id: prereq.clone(),
+                });
+            }
+        }
+    }
+
+    let mut visited = HashSet::new();
+    let mut stack = HashSet::new();
+    for node_id in prereqs_by_id.keys() {
+        if detect_prerequisite_cycle(node_id, prereqs_by_id, &mut visited, &mut stack) {
+            return Err(PrerequisiteGraphError::CycleDetected);
+        }
+    }
+    Ok(())
+}
+
+fn detect_prerequisite_cycle(
+    node_id: &str,
+    prereqs_by_id: &HashMap<String, Vec<String>>,
+    visited: &mut HashSet<String>,
+    stack: &mut HashSet<String>,
+) -> bool {
+    if stack.contains(node_id) {
+        return true;
+    }
+    if visited.contains(node_id) {
+        return false;
+    }
+
+    visited.insert(node_id.to_string());
+    stack.insert(node_id.to_string());
+
+    let has_cycle = prereqs_by_id.get(node_id).is_some_and(|prereqs| {
+        prereqs
+            .iter()
+            .any(|prereq| detect_prerequisite_cycle(prereq, prereqs_by_id, visited, stack))
+    });
+
+    stack.remove(node_id);
+    has_cycle
 }
 
 fn resolve_tier(
@@ -631,6 +724,53 @@ root:
         // computation branch, finds ghost unresolvable, max stays 0, result = 1.
         // This matches "present prereqs even if unresolvable still bump tier" — predictable.
         assert_eq!(tree.find_node("orphan").unwrap().tier, 1);
+    }
+
+    #[test]
+    fn validate_prerequisite_graph_rejects_unknown_prerequisite() {
+        let tree = SkillTree::new(
+            Polish,
+            SkillNodeConfig {
+                id: "root".to_string(),
+                skill_id: None,
+                name: "root".to_string(),
+                node_instructions: None,
+                prerequisites: vec![],
+                concept_key: None,
+                desc: None,
+                children: vec![chain_node("orphan", vec!["ghost"])],
+            },
+        );
+
+        assert_eq!(
+            validate_prerequisite_graph(&tree.root),
+            Err(PrerequisiteGraphError::UnknownPrerequisite {
+                node_id: "orphan".to_string(),
+                prerequisite_id: "ghost".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn validate_prerequisite_graph_rejects_cycles() {
+        let tree = SkillTree::new(
+            Polish,
+            SkillNodeConfig {
+                id: "root".to_string(),
+                skill_id: None,
+                name: "root".to_string(),
+                node_instructions: None,
+                prerequisites: vec![],
+                concept_key: None,
+                desc: None,
+                children: vec![chain_node("a", vec!["b"]), chain_node("b", vec!["a"])],
+            },
+        );
+
+        assert_eq!(
+            validate_prerequisite_graph(&tree.root),
+            Err(PrerequisiteGraphError::CycleDetected)
+        );
     }
 
     #[test]
