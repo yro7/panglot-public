@@ -1,21 +1,21 @@
-use serde::{Deserialize, Serialize};
 use lc_core::traits::Language;
 use lc_core::user::UserSettings;
+use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+use crate::analyzer::LexiconTracker;
 use crate::card_models::CardModelId;
 use crate::generator::GenerationRequest;
 use crate::llm_backend::LlmBackend;
+use crate::llm_utils::clean_llm_json;
 use crate::post_process::{EarlyPostProcessor, LatePostProcessor};
 use crate::prompts::{GeneratorContext, PromptConfig};
 use crate::skill_tree::SkillNode;
 use crate::usage::UsageRecorder;
 use crate::validation::CardValidator;
-use crate::llm_utils::clean_llm_json;
-use crate::analyzer::LexiconTracker;
 
 /// Orchestrates the full card generation pipeline:
 ///
@@ -118,12 +118,15 @@ where
         req: &GenerationRequest<L>,
         card_json: &str,
     ) -> std::result::Result<(crate::card_models::AnyCard, L::ExtraFields, String), String> {
-        let (any_card, extra_fields) = crate::card_models::AnyCard::parse::<L>(req.card_model_id, card_json)
-            .map_err(|e| format!("Parse error: {}", e))?;
+        let (any_card, extra_fields) =
+            crate::card_models::AnyCard::parse::<L>(req.card_model_id, card_json)
+                .map_err(|e| format!("Parse error: {}", e))?;
 
         let extra_value = serde_json::to_value(&extra_fields).unwrap_or(serde_json::Value::Null);
         for validator in &self.validators {
-            validator.validate(&self.language, &any_card, &extra_value).await?;
+            validator
+                .validate(&self.language, &any_card, &extra_value)
+                .await?;
         }
 
         Ok((any_card, extra_fields, card_json.to_string()))
@@ -138,7 +141,8 @@ where
         feedback: &str,
         llm_semaphore: &Arc<Semaphore>,
     ) -> std::result::Result<(crate::card_models::AnyCard, L::ExtraFields, String), String> {
-        let system_content = self.build_generator_system_prompt(tree_root, req, skill_node_id)
+        let system_content = self
+            .build_generator_system_prompt(tree_root, req, skill_node_id)
             .map_err(|e| format!("Prompt generation error: {}", e))?;
 
         let user_content = format!(
@@ -146,27 +150,44 @@ where
              IMPORTANT: A previous attempt failed with the following error:\n{}\n\
              Please generate exactly 1 valid card. Respond with valid JSON only, no markdown.",
             req.difficulty,
-            req.user_prompt.as_deref().map(|p| format!(" {}", p)).unwrap_or_default(),
+            req.user_prompt
+                .as_deref()
+                .map(|p| format!(" {}", p))
+                .unwrap_or_default(),
             feedback,
         );
 
         let item_schema = crate::card_models::AnyCard::schema_json_value::<L>(req.card_model_id);
 
         let raw_json = {
-            let _permit = llm_semaphore.acquire().await
+            let _permit = llm_semaphore
+                .acquire()
+                .await
                 .map_err(|_| "LLM semaphore closed".to_string())?;
-            let backend = self.llm_backend.read()
-                .map_err(|e| format!("LLM backend lock poisoned: {}", e))?.clone();
-            let rig_schema: schemars::Schema = serde_json::from_value(item_schema).map_err(|e| e.to_string())?;
+            let backend = self
+                .llm_backend
+                .read()
+                .map_err(|e| format!("LLM backend lock poisoned: {}", e))?
+                .clone();
+            let rig_schema: schemars::Schema =
+                serde_json::from_value(item_schema).map_err(|e| e.to_string())?;
 
-            tokio::time::timeout(self.llm_call_timeout, backend.execute_generation(
-                &system_content, &user_content, rig_schema,
-                self.generator_temperature, self.generator_max_tokens,
-                "GenerationRetry",
-                self.usage_recorder.as_ref(), req.request_context.as_ref(),
-            )).await
-                .map_err(|_| format!("LLM retry call timed out after {:?}", self.llm_call_timeout))?
-                .map_err(|e| e.to_string())?
+            tokio::time::timeout(
+                self.llm_call_timeout,
+                backend.execute_generation(
+                    &system_content,
+                    &user_content,
+                    rig_schema,
+                    self.generator_temperature,
+                    self.generator_max_tokens,
+                    "GenerationRetry",
+                    self.usage_recorder.as_ref(),
+                    req.request_context.as_ref(),
+                ),
+            )
+            .await
+            .map_err(|_| format!("LLM retry call timed out after {:?}", self.llm_call_timeout))?
+            .map_err(|e| e.to_string())?
         };
 
         let cleaned = clean_llm_json(&raw_json);
@@ -175,21 +196,25 @@ where
         let card_json = if cleaned.starts_with('[') {
             let arr: Vec<serde_json::Value> = serde_json::from_str(cleaned)
                 .map_err(|e| format!("Retry parse error (array): {}", e))?;
-            let first = arr.into_iter().next()
+            let first = arr
+                .into_iter()
+                .next()
                 .ok_or_else(|| "Retry returned empty array".to_string())?;
-            serde_json::to_string(&first)
-                .map_err(|e| format!("Retry serialize error: {}", e))?
+            serde_json::to_string(&first).map_err(|e| format!("Retry serialize error: {}", e))?
         } else {
             cleaned.to_string()
         };
 
-        let (any_card, extra_fields) = crate::card_models::AnyCard::parse::<L>(req.card_model_id, &card_json)
-            .map_err(|e| format!("Retry parse error: {}", e))?;
+        let (any_card, extra_fields) =
+            crate::card_models::AnyCard::parse::<L>(req.card_model_id, &card_json)
+                .map_err(|e| format!("Retry parse error: {}", e))?;
 
         // Run validators on the retried card (no further retry)
         let extra_value = serde_json::to_value(&extra_fields).unwrap_or(serde_json::Value::Null);
         for validator in &self.validators {
-            validator.validate(&self.language, &any_card, &extra_value).await
+            validator
+                .validate(&self.language, &any_card, &extra_value)
+                .await
                 .map_err(|e| format!("Retry validation error: {}", e))?;
         }
 
@@ -232,18 +257,14 @@ where
 
         if let (Some(opt), Some(tracker)) = (lexicon_options, lexicon) {
             let words = match opt.level {
-                crate::generator::LexiconLevel::Known => {
-                    match opt.pos_filter {
-                        Some(ref pos) if pos != "All" => tracker.get_known_by_pos(pos),
-                        _ => tracker.mastered_words(),
-                    }
-                }
-                crate::generator::LexiconLevel::All => {
-                    match opt.pos_filter {
-                        Some(ref pos) if pos != "All" => tracker.get_all_by_pos(pos),
-                        _ => tracker.get_all_words(),
-                    }
-                }
+                crate::generator::LexiconLevel::Known => match opt.pos_filter {
+                    Some(ref pos) if pos != "All" => tracker.get_known_by_pos(pos),
+                    _ => tracker.mastered_words(),
+                },
+                crate::generator::LexiconLevel::All => match opt.pos_filter {
+                    Some(ref pos) if pos != "All" => tracker.get_all_by_pos(pos),
+                    _ => tracker.get_all_words(),
+                },
             };
 
             match opt.mode {

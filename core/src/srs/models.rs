@@ -4,9 +4,9 @@
 #[repr(u8)]
 pub enum Rating {
     Again = 1,
-    Hard  = 2,
-    Good  = 3,
-    Easy  = 4,
+    Hard = 2,
+    Good = 3,
+    Easy = 4,
 }
 
 impl Rating {
@@ -23,9 +23,9 @@ impl Rating {
     /// Parse from string (case-insensitive). Returns `Again` for unrecognized values.
     pub fn from_str_lossy(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
-            "hard"  | "2" => Self::Hard,
-            "good"  | "3" => Self::Good,
-            "easy"  | "4" => Self::Easy,
+            "hard" | "2" => Self::Hard,
+            "good" | "3" => Self::Good,
+            "easy" | "4" => Self::Easy,
             _ => Self::Again,
         }
     }
@@ -48,7 +48,7 @@ pub struct SchedulingOutput {
 
 pub struct SchedulingChoices {
     pub again: SchedulingOutput,
-    pub hard:  SchedulingOutput,
-    pub good:  SchedulingOutput,
-    pub easy:  SchedulingOutput,
+    pub hard: SchedulingOutput,
+    pub good: SchedulingOutput,
+    pub easy: SchedulingOutput,
 }

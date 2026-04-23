@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout};
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Handle to a long-lived Python sidecar process.
@@ -47,13 +47,20 @@ impl PythonSidecar {
         let mut line = serde_json::to_string(req)?;
         line.push('\n');
 
-        self.stdin.write_all(line.as_bytes()).await
+        self.stdin
+            .write_all(line.as_bytes())
+            .await
             .context("Failed to write to sidecar stdin")?;
-        self.stdin.flush().await
+        self.stdin
+            .flush()
+            .await
             .context("Failed to flush sidecar stdin")?;
 
         let mut response_line = String::new();
-        let bytes_read = self.stdout.read_line(&mut response_line).await
+        let bytes_read = self
+            .stdout
+            .read_line(&mut response_line)
+            .await
             .context("Failed to read from sidecar stdout")?;
 
         if bytes_read == 0 {
@@ -64,7 +71,10 @@ impl PythonSidecar {
             .context("Failed to parse sidecar response as JSON")?;
 
         if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
-            let err = resp.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+            let err = resp
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown error");
             bail!("Sidecar error: {}", err);
         }
 
@@ -88,7 +98,12 @@ impl PythonSidecar {
     }
 
     /// Request TTS audio generation from the sidecar.
-    pub async fn request_tts(&mut self, voice: &str, text: &str, output_path: &str) -> Result<String> {
+    pub async fn request_tts(
+        &mut self,
+        voice: &str,
+        text: &str,
+        output_path: &str,
+    ) -> Result<String> {
         let req = serde_json::json!({
             "cmd": "tts",
             "voice": voice,
@@ -121,10 +136,7 @@ impl PythonSidecar {
 
     /// Find the sidecar script, checking common locations.
     fn find_script() -> Result<String> {
-        let candidates = [
-            "scripts/sidecar.py",
-            "../scripts/sidecar.py",
-        ];
+        let candidates = ["scripts/sidecar.py", "../scripts/sidecar.py"];
         for path in &candidates {
             if std::path::Path::new(path).exists() {
                 return Ok(path.to_string());

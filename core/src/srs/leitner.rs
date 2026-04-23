@@ -33,17 +33,29 @@ const fn next_box(current: usize, rating: Rating) -> usize {
     match rating {
         Rating::Again => 0,
         Rating::Hard => {
-            if current == 0 { 0 } else { current - 1 }
+            if current == 0 {
+                0
+            } else {
+                current - 1
+            }
         }
         Rating::Good | Rating::Easy => {
-            if current >= MAX_BOX { MAX_BOX } else { current + 1 }
+            if current >= MAX_BOX {
+                MAX_BOX
+            } else {
+                current + 1
+            }
         }
     }
 }
 
 impl SrsAlgorithm for Leitner {
-    fn id(&self) -> &'static str { "leitner" }
-    fn name(&self) -> &'static str { "Leitner Box System" }
+    fn id(&self) -> &'static str {
+        "leitner"
+    }
+    fn name(&self) -> &'static str {
+        "Leitner Box System"
+    }
 
     fn compute(&self, history: &[ReviewEvent], rating: Rating, now: i64) -> SchedulingOutput {
         Self::compute(history, rating, now)
@@ -58,10 +70,14 @@ mod tests {
     const DAY: i64 = 86_400_000;
 
     fn make_history(ratings: &[Rating]) -> Vec<ReviewEvent> {
-        ratings.iter().enumerate().map(|(i, &r)| ReviewEvent {
-            rating: r,
-            reviewed_at: NOW + (i as i64) * DAY,
-        }).collect()
+        ratings
+            .iter()
+            .enumerate()
+            .map(|(i, &r)| ReviewEvent {
+                rating: r,
+                reviewed_at: NOW + (i as i64) * DAY,
+            })
+            .collect()
     }
 
     // ── Happy paths ──
@@ -129,7 +145,13 @@ mod tests {
         assert_eq!(out.interval_days, 30.0); // box 4 max
 
         // And one more Good should still be box 4
-        let h2 = make_history(&[Rating::Good, Rating::Good, Rating::Good, Rating::Good, Rating::Good]);
+        let h2 = make_history(&[
+            Rating::Good,
+            Rating::Good,
+            Rating::Good,
+            Rating::Good,
+            Rating::Good,
+        ]);
         let out2 = algo.compute(&h2, Rating::Good, NOW + 20 * DAY);
         assert_eq!(out2.interval_days, 30.0);
     }
@@ -140,15 +162,22 @@ mod tests {
         // 30+ reviews with various ratings
         let mut ratings = Vec::new();
         for i in 0..30 {
-            if i % 5 == 0 { ratings.push(Rating::Again); }
-            else if i % 7 == 0 { ratings.push(Rating::Hard); }
-            else { ratings.push(Rating::Good); }
+            if i % 5 == 0 {
+                ratings.push(Rating::Again);
+            } else if i % 7 == 0 {
+                ratings.push(Rating::Hard);
+            } else {
+                ratings.push(Rating::Good);
+            }
         }
         let h = make_history(&ratings);
         let out = algo.compute(&h, Rating::Good, NOW + 50 * DAY);
         // Should produce a valid box (interval in known set)
-        assert!(BOX_INTERVALS.contains(&out.interval_days),
-            "interval {} should be one of the box intervals", out.interval_days);
+        assert!(
+            BOX_INTERVALS.contains(&out.interval_days),
+            "interval {} should be one of the box intervals",
+            out.interval_days
+        );
     }
 
     #[test]

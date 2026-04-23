@@ -2546,6 +2546,7 @@ dependencies = [
 name = "panini-macro"
 version = "0.2.0"
 dependencies = [
+ "heck",
  "proc-macro2",
  "quote",
  "syn",

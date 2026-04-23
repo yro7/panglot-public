@@ -85,16 +85,24 @@ pub struct NewDeckData {
 #[async_trait::async_trait]
 pub trait StorageProvider: Send + Sync {
     /// Fetches cards from the storage to be analyzed (e.g. for Lexicon extraction).
-    async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>>;
-    
+    async fn fetch_cards(
+        &self,
+    ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>>;
+
     /// Fetches summary info for all available decks.
     async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>>;
-    
+
     /// Pushes a newly generated deck to the storage.
-    async fn save_deck(&self, deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
+    async fn save_deck(
+        &self,
+        deck: &NewDeckData,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Deletes a deck and all its associated cards and data.
-    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_deck(
+        &self,
+        deck_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// A read-only provider that serves pre-fetched cards. Used to feed merged
@@ -111,7 +119,9 @@ impl SnapshotProvider {
 
 #[async_trait::async_trait]
 impl StorageProvider for SnapshotProvider {
-    async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_cards(
+        &self,
+    ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
         Ok(self.cards.clone())
     }
 
@@ -119,11 +129,17 @@ impl StorageProvider for SnapshotProvider {
         Ok(vec![])
     }
 
-    async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    async fn save_deck(
+        &self,
+        _deck: &NewDeckData,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         Err("SnapshotProvider is read-only".into())
     }
 
-    async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_deck(
+        &self,
+        _deck_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Err("SnapshotProvider is read-only".into())
     }
 }

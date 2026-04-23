@@ -63,11 +63,7 @@ pub struct UsageBreakdownRow {
 #[async_trait]
 pub trait UsageAnalyticsProvider: Send + Sync {
     /// Get aggregated usage (LLM + post-processing) for a user over a time period.
-    async fn get_usage_report(
-        &self,
-        user_id: &str,
-        period: TimePeriod,
-    ) -> Result<UsageReport>;
+    async fn get_usage_report(&self, user_id: &str, period: TimePeriod) -> Result<UsageReport>;
 
     /// Get LLM usage broken down by language.
     async fn get_llm_breakdown_by_language(

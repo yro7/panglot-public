@@ -45,7 +45,10 @@ fn type_to_ident(ty: &Type) -> Option<String> {
 }
 
 fn str_lit(expr: &Expr) -> Option<String> {
-    if let Expr::Lit(ExprLit { lit: Lit::Str(s), .. }) = expr {
+    if let Expr::Lit(ExprLit {
+        lit: Lit::Str(s), ..
+    }) = expr
+    {
         Some(s.value())
     } else {
         None
@@ -84,7 +87,9 @@ fn parse_local(file: &File, filename: &str) -> Option<LocalImpl> {
                 continue;
             }
             let struct_name = self_ident(imp).unwrap_or_else(|| {
-                fail(format!("{filename}: cannot resolve Self type of `impl Language`"))
+                fail(format!(
+                    "{filename}: cannot resolve Self type of `impl Language`"
+                ))
             });
 
             let mut extra_fields = None;
@@ -161,7 +166,10 @@ fn parse_panini(file: &File, path: &Path) -> PaniniImpl {
             };
         }
     }
-    fail(format!("{}: no `impl LinguisticDefinition for _` found", path.display()));
+    fail(format!(
+        "{}: no `impl LinguisticDefinition for _` found",
+        path.display()
+    ));
 }
 
 fn main() {
@@ -196,34 +204,31 @@ fn main() {
             .unwrap_or_else(|e| fail(format!("cannot parse {}: {e}", path.display())));
 
         let Some(local) = parse_local(&file, &filename) else {
-            println!(
-                "cargo:warning=langs: skipping {filename} (no `impl Language for _` found)"
-            );
+            println!("cargo:warning=langs: skipping {filename} (no `impl Language for _` found)");
             continue;
         };
 
-        let (morphology_name, grammatical_function_name, iso_variant) =
-            if let Some(panini_mod) = &local.panini_mod {
-                let panini_file = panini_langs_dir.join(format!("{panini_mod}.rs"));
-                let panini_content = fs::read_to_string(&panini_file).unwrap_or_else(|e| {
-                    fail(format!("cannot read {}: {e}", panini_file.display()))
-                });
-                let panini_ast = syn::parse_file(&panini_content).unwrap_or_else(|e| {
-                    fail(format!("cannot parse {}: {e}", panini_file.display()))
-                });
-                let info = parse_panini(&panini_ast, &panini_file);
-                let gf = info.grammatical_function.filter(|n| n != "()");
-                (info.morphology, gf, info.iso_code)
-            } else {
-                let morph = local.morphology.unwrap_or_else(|| {
-                    fail(format!("{filename}: missing `type Morphology`"))
-                });
-                let iso = local.iso_variant.unwrap_or_else(|| {
-                    fail(format!("{filename}: missing `const ISO_CODE`"))
-                });
-                let gf = local.grammatical_function.filter(|n| n != "()");
-                (morph, gf, iso)
-            };
+        let (morphology_name, grammatical_function_name, iso_variant) = if let Some(panini_mod) =
+            &local.panini_mod
+        {
+            let panini_file = panini_langs_dir.join(format!("{panini_mod}.rs"));
+            let panini_content = fs::read_to_string(&panini_file)
+                .unwrap_or_else(|e| fail(format!("cannot read {}: {e}", panini_file.display())));
+            let panini_ast = syn::parse_file(&panini_content)
+                .unwrap_or_else(|e| fail(format!("cannot parse {}: {e}", panini_file.display())));
+            let info = parse_panini(&panini_ast, &panini_file);
+            let gf = info.grammatical_function.filter(|n| n != "()");
+            (info.morphology, gf, info.iso_code)
+        } else {
+            let morph = local
+                .morphology
+                .unwrap_or_else(|| fail(format!("{filename}: missing `type Morphology`")));
+            let iso = local
+                .iso_variant
+                .unwrap_or_else(|| fail(format!("{filename}: missing `const ISO_CODE`")));
+            let gf = local.grammatical_function.filter(|n| n != "()");
+            (morph, gf, iso)
+        };
 
         let extra_fields = local.extra_fields.filter(|n| n != "NoExtraFields");
         let iso_lower = iso_variant.to_lowercase();

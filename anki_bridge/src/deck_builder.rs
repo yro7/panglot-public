@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use lc_core::storage::{NewDeckData};
+use lc_core::storage::NewDeckData;
 
 // ----- Shared model definition (used by export_apkg) -----
 
@@ -98,7 +98,13 @@ impl DeckBuilder {
                         .to_string();
 
                     let audio_bytes = fs::read(file_path)?;
-                    tracing::debug!(card_idx, filename, bytes = audio_bytes.len(), media_index, "Packing audio into apkg");
+                    tracing::debug!(
+                        card_idx,
+                        filename,
+                        bytes = audio_bytes.len(),
+                        media_index,
+                        "Packing audio into apkg"
+                    );
 
                     let index_str = media_index.to_string();
                     zip.start_file(&index_str, options)?;
@@ -189,7 +195,7 @@ impl DeckBuilder {
                 usn INTEGER NOT NULL,
                 oid INTEGER NOT NULL,
                 type INTEGER NOT NULL
-            );"
+            );",
         )?;
         Ok(())
     }
@@ -326,10 +332,7 @@ impl DeckBuilder {
         Ok(())
     }
 
-    fn insert_cards(
-        &self,
-        conn: &rusqlite::Connection,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn insert_cards(&self, conn: &rusqlite::Connection) -> Result<(), Box<dyn std::error::Error>> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as i64;
@@ -347,7 +350,9 @@ impl DeckBuilder {
             let card_id = note_id + 1;
 
             // Format audio as Anki sound tag: [sound:filename.mp3]
-            let audio_val = entry.audio_path.as_deref()
+            let audio_val = entry
+                .audio_path
+                .as_deref()
                 .map(|p| {
                     let filename = Path::new(p)
                         .file_name()
@@ -359,21 +364,36 @@ impl DeckBuilder {
 
             // Fields separated by \x1f — order must match flds array in models:
             // Front, Back, SkillName, IPA, Audio, Explanation, Metadata
-            let flds = format!("{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
-                entry.front_html, entry.back_html, entry.skill_name,
-                entry.ipa, audio_val, entry.explanation, entry.metadata_json
+            let flds = format!(
+                "{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
+                entry.front_html,
+                entry.back_html,
+                entry.skill_name,
+                entry.ipa,
+                audio_val,
+                entry.explanation,
+                entry.metadata_json
             );
 
             let csum = Self::field_checksum(&entry.front_html);
             let guid = format!("lc_{}", note_id);
-            
+
             // Adding a space-padded tag string which Anki SQLite requires for exact matching
             let tags = format!(" LC_Version:{} ", env!("CARGO_PKG_VERSION"));
 
             conn.execute(
                 "INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) \
                  VALUES (?1, ?2, ?3, ?4, -1, ?5, ?6, ?7, ?8, 0, '')",
-                rusqlite::params![note_id, guid, model_id, now, tags, flds, entry.front_html, csum],
+                rusqlite::params![
+                    note_id,
+                    guid,
+                    model_id,
+                    now,
+                    tags,
+                    flds,
+                    entry.front_html,
+                    csum
+                ],
             )?;
 
             conn.execute(
@@ -492,7 +512,7 @@ impl MultiDeckBuilder {
             );
             CREATE TABLE IF NOT EXISTS graves (
                 usn INTEGER NOT NULL, oid INTEGER NOT NULL, type INTEGER NOT NULL
-            );"
+            );",
         )?;
 
         let now = std::time::SystemTime::now()
@@ -501,19 +521,23 @@ impl MultiDeckBuilder {
 
         // Build deck name -> id mapping (including all intermediate parents)
         let all_paths = self.all_deck_paths();
-        let deck_ids: HashMap<String, i64> = all_paths.iter()
+        let deck_ids: HashMap<String, i64> = all_paths
+            .iter()
             .map(|p| (p.clone(), Self::deck_id_for_name(p)))
             .collect();
 
         // Build the decks JSON for Anki's col table
         let mut decks_json = serde_json::Map::new();
         for (name, &id) in &deck_ids {
-            decks_json.insert(id.to_string(), serde_json::json!({
-                "id": id, "name": name, "mod": now, "usn": -1,
-                "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
-                "timeToday": [0, 0], "collapsed": false, "desc": "",
-                "dyn": 0, "conf": 1, "extendRev": 0, "extendNew": 0
-            }));
+            decks_json.insert(
+                id.to_string(),
+                serde_json::json!({
+                    "id": id, "name": name, "mod": now, "usn": -1,
+                    "lrnToday": [0, 0], "revToday": [0, 0], "newToday": [0, 0],
+                    "timeToday": [0, 0], "collapsed": false, "desc": "",
+                    "dyn": 0, "conf": 1, "extendRev": 0, "extendNew": 0
+                }),
+            );
         }
 
         let first_deck_id = deck_ids.values().next().copied().unwrap_or(2);
@@ -581,16 +605,27 @@ impl MultiDeckBuilder {
                 let note_id = now * 1000 + global_idx as i64;
                 let card_id = note_id + 1;
 
-                let audio_val = entry.audio_path.as_deref()
+                let audio_val = entry
+                    .audio_path
+                    .as_deref()
                     .map(|p| {
-                        let filename = Path::new(p).file_name().and_then(|n| n.to_str()).unwrap_or("audio.mp3");
+                        let filename = Path::new(p)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("audio.mp3");
                         format!("[sound:{}]", filename)
                     })
                     .unwrap_or_default();
 
-                let flds = format!("{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
-                    entry.front_html, entry.back_html, entry.skill_name,
-                    entry.ipa, audio_val, entry.explanation, entry.metadata_json
+                let flds = format!(
+                    "{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
+                    entry.front_html,
+                    entry.back_html,
+                    entry.skill_name,
+                    entry.ipa,
+                    audio_val,
+                    entry.explanation,
+                    entry.metadata_json
                 );
 
                 let csum = DeckBuilder::field_checksum(&entry.front_html);
@@ -631,8 +666,11 @@ impl MultiDeckBuilder {
                 if let Some(audio_path) = &entry.audio_path {
                     let file_path = Path::new(audio_path);
                     if file_path.exists() {
-                        let filename = file_path.file_name().and_then(|n| n.to_str())
-                            .unwrap_or("audio.mp3").to_string();
+                        let filename = file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("audio.mp3")
+                            .to_string();
                         let audio_bytes = fs::read(file_path)?;
                         let index_str = media_index.to_string();
                         zip.start_file(&index_str, options)?;
@@ -664,19 +702,17 @@ mod tests {
         let deck_data = NewDeckData {
             name: "Export Test".to_string(),
             language_code: "pol".to_string(),
-            cards: vec![
-                NewCardEntry {
-                    front_html: "Test front".to_string(),
-                    back_html: "Test back".to_string(),
-                    skill_name: "Grammar".to_string(),
-                    template_name: "default".to_string(),
-                    fields_json: "{}".to_string(),
-                    explanation: "Test exp".to_string(),
-                    ipa: "".to_string(),
-                    metadata_json: "{}".to_string(),
-                    audio_path: None,
-                }
-            ],
+            cards: vec![NewCardEntry {
+                front_html: "Test front".to_string(),
+                back_html: "Test back".to_string(),
+                skill_name: "Grammar".to_string(),
+                template_name: "default".to_string(),
+                fields_json: "{}".to_string(),
+                explanation: "Test exp".to_string(),
+                ipa: "".to_string(),
+                metadata_json: "{}".to_string(),
+                audio_path: None,
+            }],
         };
 
         let builder = DeckBuilder::new(deck_data);
@@ -699,19 +735,17 @@ mod tests {
         let deck_data = NewDeckData {
             name: "SQLite Test".to_string(),
             language_code: "pol".to_string(),
-            cards: vec![
-                NewCardEntry {
-                    front_html: "hello".to_string(),
-                    back_html: "hola".to_string(),
-                    skill_name: "s1".to_string(),
-                    template_name: "default".to_string(),
-                    fields_json: "{}".to_string(),
-                    explanation: "exp".to_string(),
-                    ipa: "he'lo".to_string(),
-                    metadata_json: "{}".to_string(),
-                    audio_path: None,
-                }
-            ],
+            cards: vec![NewCardEntry {
+                front_html: "hello".to_string(),
+                back_html: "hola".to_string(),
+                skill_name: "s1".to_string(),
+                template_name: "default".to_string(),
+                fields_json: "{}".to_string(),
+                explanation: "exp".to_string(),
+                ipa: "he'lo".to_string(),
+                metadata_json: "{}".to_string(),
+                audio_path: None,
+            }],
         };
 
         let builder = DeckBuilder::new(deck_data);
@@ -729,14 +763,20 @@ mod tests {
         let conn = rusqlite::Connection::open(&db_path).unwrap();
 
         // Check decks
-        let deck_json: String = conn.query_row("SELECT decks FROM col LIMIT 1", [], |row| row.get(0)).unwrap();
+        let deck_json: String = conn
+            .query_row("SELECT decks FROM col LIMIT 1", [], |row| row.get(0))
+            .unwrap();
         assert!(deck_json.contains("SQLite Test"));
 
         // Check cards & notes
-        let note_count: i64 = conn.query_row("SELECT count(*) FROM notes", [], |row| row.get(0)).unwrap();
+        let note_count: i64 = conn
+            .query_row("SELECT count(*) FROM notes", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(note_count, 1);
 
-        let front: String = conn.query_row("SELECT sfld FROM notes LIMIT 1", [], |row| row.get(0)).unwrap();
+        let front: String = conn
+            .query_row("SELECT sfld FROM notes LIMIT 1", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(front, "hello");
 
         // Cleanup
