@@ -1,0 +1,67 @@
+tree_id: 60ad3fe6-e3a4-4335-9a1a-4aaf537b79a6
+tree_key: fast_track
+tree_slug: polish-fast-track
+tree_version: 1
+tree_name: Fast Track
+description: Compact pedagogical path emphasizing early communicative wins.
+is_default: false
+language_name: Polish
+root:
+  id: root
+  name: Polski
+  children:
+    - id: fast_start
+      skill_id: essentials
+      name: Szybki start (Fast Start)
+      concept_key: essentials
+      children:
+        - id: fast_alphabet
+          skill_id: alphabet
+          name: Alfabet (Alphabet)
+          node_instructions: >
+            Generate a recognition exercise where the student matches Polish letters and diacritics
+            to their pronunciation or nearest English sound.
+          children: []
+        - id: fast_greetings
+          skill_id: greetings
+          name: Powitania (Greetings)
+          node_instructions: >
+            Generate a short communicative exercise for greetings, introductions, and polite
+            leave-taking in Polish.
+          prerequisites: [fast_alphabet]
+          children: []
+
+    - id: fast_cases
+      skill_id: grammatical_cases
+      name: Najważniejsze przypadki (Essential Cases)
+      concept_key: grammatical_cases
+      children:
+        - id: fast_gender
+          skill_id: gender
+          name: Rodzaj (Gender)
+          node_instructions: >
+            Generate an exercise where the learner identifies Polish noun gender from endings and
+            frequent lexical patterns.
+          children: []
+        - id: fast_accusative
+          skill_id: accusative
+          name: Biernik (Accusative)
+          node_instructions: >
+            Generate a practical accusative exercise focused on common direct-object patterns in
+            everyday Polish sentences.
+          prerequisites: [fast_gender]
+          children: []
+
+    - id: fast_verbs
+      skill_id: verbs
+      name: Czasowniki na start (Starter Verbs)
+      concept_key: verbs
+      children:
+        - id: fast_present_tense
+          skill_id: present_tense
+          name: Czas teraźniejszy (Present Tense)
+          node_instructions: >
+            Generate a beginner-friendly exercise on the Polish present tense using common,
+            high-frequency verbs.
+          prerequisites: [fast_greetings]
+          children: []

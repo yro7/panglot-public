@@ -1,3 +1,9 @@
+tree_id: d0211017-72f4-4615-8e0c-0ec1c69e038c
+tree_key: core
+tree_slug: korean-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Korean
 root:
   id: root

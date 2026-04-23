@@ -1,3 +1,9 @@
+tree_id: 8707d223-e323-4a19-903e-0d13c65cf382
+tree_key: core
+tree_slug: turkish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Turkish
 root:
   id: root

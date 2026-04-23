@@ -1,7 +1,7 @@
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use chrono::Utc;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use std::path::Path;
 use uuid::Uuid;
-use chrono::Utc;
 
 use crate::storage::{DeckInfo, NewCardEntry, NewDeckData, StorageProvider, StoredCard};
 
@@ -20,7 +20,7 @@ pub struct LocalStudyCard {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct UserTreeCustomization {
     pub user_id: String,
-    pub language: String,
+    pub tree_definition_id: String,
     pub node_id: String,
     pub action: String, // "add" | "hide" | "edit"
     pub parent_id: Option<String>,
@@ -69,7 +69,8 @@ impl LocalStorageProvider {
     /// # Errors
     /// Returns a database error if the user cannot be provisioned.
     pub async fn ensure_user(&self, claims: &serde_json::Value) -> Result<(), sqlx::Error> {
-        let display_name = claims["user_metadata"]["full_name"].as_str()
+        let display_name = claims["user_metadata"]["full_name"]
+            .as_str()
             .or_else(|| claims["user_metadata"]["preferred_username"].as_str())
             .or_else(|| claims["email"].as_str().and_then(|e| e.split('@').next()))
             .unwrap_or("user");
@@ -105,12 +106,14 @@ impl LocalStorageProvider {
         let database_url = format!("sqlite:{}?mode=rwc", db_path.display());
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
-            .after_connect(|conn, _meta| Box::pin(async move {
-                use sqlx::Executor;
-                conn.execute("PRAGMA foreign_keys = ON").await?;
-                conn.execute("PRAGMA journal_mode = WAL").await?;
-                Ok(())
-            }))
+            .after_connect(|conn, _meta| {
+                Box::pin(async move {
+                    use sqlx::Executor;
+                    conn.execute("PRAGMA foreign_keys = ON").await?;
+                    conn.execute("PRAGMA journal_mode = WAL").await?;
+                    Ok(())
+                })
+            })
             .connect(&database_url)
             .await?;
 
@@ -128,7 +131,6 @@ impl LocalStorageProvider {
 
         Ok(provider)
     }
-
 
     async fn ensure_default_user(&self) -> Result<(), sqlx::Error> {
         let now = Utc::now().timestamp_millis();
@@ -203,7 +205,6 @@ impl LocalStorageProvider {
             .fetch_one(&self.pool)
             .await?;
 
-
         let settings_json: String = row.get("settings");
         let settings = serde_json::from_str(&settings_json).unwrap_or_default();
         Ok(settings)
@@ -213,7 +214,10 @@ impl LocalStorageProvider {
     ///
     /// # Errors
     /// Returns a database error if the settings cannot be updated.
-    pub async fn update_user_settings(&self, settings: &crate::user::UserSettings) -> Result<(), sqlx::Error> {
+    pub async fn update_user_settings(
+        &self,
+        settings: &crate::user::UserSettings,
+    ) -> Result<(), sqlx::Error> {
         let settings_json = serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string());
         sqlx::query("UPDATE users SET settings = ? WHERE id = ?")
             .bind(settings_json)
@@ -228,13 +232,12 @@ impl LocalStorageProvider {
     /// # Errors
     /// Returns a database error if the verification fails.
     pub async fn verify_deck_ownership(&self, deck_id: &str) -> Result<bool, sqlx::Error> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM decks WHERE id = ? AND user_id = ?"
-        )
-        .bind(deck_id)
-        .bind(&self.user_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM decks WHERE id = ? AND user_id = ?")
+                .bind(deck_id)
+                .bind(&self.user_id)
+                .fetch_one(&self.pool)
+                .await?;
         Ok(count > 0)
     }
 
@@ -242,11 +245,15 @@ impl LocalStorageProvider {
     ///
     /// # Errors
     /// Returns a database error if the query fails.
-    pub async fn get_due_cards_for_deck(&self, deck_id: &str, limit: i64) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
+    pub async fn get_due_cards_for_deck(
+        &self,
+        deck_id: &str,
+        limit: i64,
+    ) -> Result<Vec<LocalStudyCard>, sqlx::Error> {
         let settings = self.get_user_settings().await.unwrap_or_default();
         let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
         let now = Utc::now().timestamp_millis() + learn_ahead_ms;
-        
+
         let records = sqlx::query(
             r#"
             WITH RECURSIVE deck_tree(id) AS (
@@ -260,7 +267,7 @@ impl LocalStorageProvider {
             WHERE c.deck_id IN deck_tree AND r.user_id = ? AND r.due_date <= ?
             ORDER BY r.due_date ASC
             LIMIT ?
-            "#
+            "#,
         )
         .bind(deck_id)
         .bind(&self.user_id)
@@ -270,20 +277,25 @@ impl LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        let cards = records.into_iter().map(|r| {
-            use sqlx::Row;
-            let fields_json_str: String = r.get("fields_json");
-            let fields: serde_json::Value = serde_json::from_str(&fields_json_str)
-                .unwrap_or_else(|_| serde_json::json!({}));
-            LocalStudyCard {
-                id: r.get("id"),
-                front_html: r.get("front_html"),
-                back_html: r.get("back_html"),
-                template_name: r.get::<Option<String>, _>("template_name").unwrap_or_default(),
-                fields,
-                metadata_json: r.get::<String, _>("metadata_json"),
-            }
-        }).collect();
+        let cards = records
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                let fields_json_str: String = r.get("fields_json");
+                let fields: serde_json::Value = serde_json::from_str(&fields_json_str)
+                    .unwrap_or_else(|_| serde_json::json!({}));
+                LocalStudyCard {
+                    id: r.get("id"),
+                    front_html: r.get("front_html"),
+                    back_html: r.get("back_html"),
+                    template_name: r
+                        .get::<Option<String>, _>("template_name")
+                        .unwrap_or_default(),
+                    fields,
+                    metadata_json: r.get::<String, _>("metadata_json"),
+                }
+            })
+            .collect();
 
         Ok(cards)
     }
@@ -304,7 +316,7 @@ impl LocalStorageProvider {
             JOIN decks d ON c.deck_id = d.id
             WHERE d.user_id = ?
             ORDER BY d.full_path, c.created_at
-            "#
+            "#,
         )
         .bind(&self.user_id)
         .fetch_all(&self.pool)
@@ -314,15 +326,24 @@ impl LocalStorageProvider {
 
         for rec in records {
             let full_path: String = rec.get("full_path");
-            let language_code: String = rec.get::<Option<String>, _>("target_language").unwrap_or_default();
+            let language_code: String = rec
+                .get::<Option<String>, _>("target_language")
+                .unwrap_or_default();
             let metadata_json: String = rec.get("metadata_json");
 
             // Try to extract explanation and IPA from metadata_json
             let (explanation, ipa) = {
-                let meta: serde_json::Value = serde_json::from_str(&metadata_json).unwrap_or_default();
+                let meta: serde_json::Value =
+                    serde_json::from_str(&metadata_json).unwrap_or_default();
                 (
-                    meta.get("pedagogical_explanation").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    meta.get("ipa").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    meta.get("pedagogical_explanation")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    meta.get("ipa")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 )
             };
 
@@ -330,21 +351,27 @@ impl LocalStorageProvider {
                 front_html: rec.get("front_html"),
                 back_html: rec.get("back_html"),
                 skill_name: rec.get::<Option<String>, _>("skill_id").unwrap_or_default(),
-                template_name: rec.get::<Option<String>, _>("template_name").unwrap_or_default(),
-                fields_json: rec.get::<Option<String>, _>("fields_json").unwrap_or_else(|| "{}".to_string()),
+                template_name: rec
+                    .get::<Option<String>, _>("template_name")
+                    .unwrap_or_default(),
+                fields_json: rec
+                    .get::<Option<String>, _>("fields_json")
+                    .unwrap_or_else(|| "{}".to_string()),
                 explanation,
                 ipa,
                 metadata_json,
                 audio_path: rec.get("audio_path"),
             };
 
-            decks_map.entry(full_path.clone())
+            decks_map
+                .entry(full_path.clone())
                 .or_insert_with(|| NewDeckData {
                     name: full_path,
                     language_code: language_code.clone(),
                     cards: Vec::new(),
                 })
-                .cards.push(entry);
+                .cards
+                .push(entry);
         }
 
         Ok(decks_map.into_values().collect())
@@ -364,7 +391,7 @@ impl LocalStorageProvider {
     ) -> Result<crate::srs::SchedulingOutput, sqlx::Error> {
         // 1. Append raw fact to review_log
         sqlx::query(
-            "INSERT INTO review_log (card_id, user_id, rating, reviewed_at) VALUES (?, ?, ?, ?)"
+            "INSERT INTO review_log (card_id, user_id, rating, reviewed_at) VALUES (?, ?, ?, ?)",
         )
         .bind(card_id)
         .bind(&self.user_id)
@@ -408,7 +435,10 @@ impl LocalStorageProvider {
     ///
     /// # Errors
     /// Returns a database error if the query fails.
-    pub async fn get_review_history(&self, card_id: &str) -> Result<Vec<crate::srs::ReviewEvent>, sqlx::Error> {
+    pub async fn get_review_history(
+        &self,
+        card_id: &str,
+    ) -> Result<Vec<crate::srs::ReviewEvent>, sqlx::Error> {
         let records = sqlx::query(
             "SELECT rating, reviewed_at FROM review_log WHERE card_id = ? AND user_id = ? ORDER BY reviewed_at"
         )
@@ -417,14 +447,18 @@ impl LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        let events = records.into_iter().map(|r| {
-            use sqlx::Row;
-            let rating_u8 = r.get::<i64, _>("rating") as u8;
-            crate::srs::ReviewEvent {
-                rating: crate::srs::Rating::from_u8(rating_u8).unwrap_or(crate::srs::Rating::Again),
-                reviewed_at: r.get("reviewed_at"),
-            }
-        }).collect();
+        let events = records
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                let rating_u8 = r.get::<i64, _>("rating") as u8;
+                crate::srs::ReviewEvent {
+                    rating: crate::srs::Rating::from_u8(rating_u8)
+                        .unwrap_or(crate::srs::Rating::Again),
+                    reviewed_at: r.get("reviewed_at"),
+                }
+            })
+            .collect();
 
         Ok(events)
     }
@@ -436,12 +470,10 @@ impl LocalStorageProvider {
         algorithm: &dyn crate::srs::SrsAlgorithm,
     ) -> Result<usize, sqlx::Error> {
         // Get all distinct card_ids with reviews for this user
-        let card_rows = sqlx::query(
-            "SELECT DISTINCT card_id FROM review_log WHERE user_id = ?"
-        )
-        .bind(&self.user_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let card_rows = sqlx::query("SELECT DISTINCT card_id FROM review_log WHERE user_id = ?")
+            .bind(&self.user_id)
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut count = 0;
         let mut tx = self.pool.begin().await?;
@@ -469,13 +501,17 @@ impl LocalStorageProvider {
 
             for rec in &records {
                 let rating_u8 = rec.get::<i64, _>("rating") as u8;
-                let rating = crate::srs::Rating::from_u8(rating_u8).unwrap_or(crate::srs::Rating::Again);
+                let rating =
+                    crate::srs::Rating::from_u8(rating_u8).unwrap_or(crate::srs::Rating::Again);
                 let reviewed_at: i64 = rec.get("reviewed_at");
 
                 let output = algorithm.schedule(&history, rating, reviewed_at);
                 last_output = Some(output);
 
-                history.push(crate::srs::ReviewEvent { rating, reviewed_at });
+                history.push(crate::srs::ReviewEvent {
+                    rating,
+                    reviewed_at,
+                });
             }
 
             if let Some(output) = last_output {
@@ -533,19 +569,22 @@ impl LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        let drafts = records.into_iter().map(|r| {
-            use sqlx::Row;
-            DraftCard {
-                id: r.get("id"),
-                skill_id: r.get("skill_id"),
-                skill_name: r.get("skill_name"),
-                template_name: r.get("template_name"),
-                fields_json: r.get("fields_json"),
-                explanation: r.get("explanation"),
-                metadata_json: r.get("metadata_json"),
-                created_at: r.get("created_at"),
-            }
-        }).collect();
+        let drafts = records
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                DraftCard {
+                    id: r.get("id"),
+                    skill_id: r.get("skill_id"),
+                    skill_name: r.get("skill_name"),
+                    template_name: r.get("template_name"),
+                    fields_json: r.get("fields_json"),
+                    explanation: r.get("explanation"),
+                    metadata_json: r.get("metadata_json"),
+                    created_at: r.get("created_at"),
+                }
+            })
+            .collect();
 
         Ok(drafts)
     }
@@ -564,7 +603,8 @@ impl LocalStorageProvider {
         for chunk in ids.chunks(500) {
             let placeholders = vec!["?"; chunk.len()].join(",");
             let sql = format!(
-                "DELETE FROM draft_cards WHERE user_id = ? AND id IN ({})", placeholders
+                "DELETE FROM draft_cards WHERE user_id = ? AND id IN ({})",
+                placeholders
             );
             let mut q = sqlx::query(&sql).bind(&self.user_id);
             for id in chunk {
@@ -577,45 +617,54 @@ impl LocalStorageProvider {
 
     // ── Tree customizations ──────────────────────────────────────────
 
-    /// Fetch all tree customizations for the current user and language.
-    pub async fn get_tree_customizations(&self, language: &str) -> Result<Vec<UserTreeCustomization>, sqlx::Error> {
+    /// Fetch all tree customizations for the current user and tree definition.
+    pub async fn get_tree_customizations(
+        &self,
+        tree_definition_id: &str,
+    ) -> Result<Vec<UserTreeCustomization>, sqlx::Error> {
         let records = sqlx::query(
-            "SELECT user_id, language, node_id, action, parent_id, node_name, node_instructions, prerequisites_json, sort_order, created_at \
-             FROM user_tree_customizations WHERE user_id = ? AND language = ? ORDER BY sort_order, created_at"
+            "SELECT user_id, tree_definition_id, node_id, action, parent_id, node_name, node_instructions, prerequisites_json, sort_order, created_at \
+             FROM user_tree_customizations WHERE user_id = ? AND tree_definition_id = ? ORDER BY sort_order, created_at"
         )
         .bind(&self.user_id)
-        .bind(language)
+        .bind(tree_definition_id)
         .fetch_all(&self.pool)
         .await?;
 
-        let customizations = records.into_iter().map(|r| {
-            use sqlx::Row;
-            UserTreeCustomization {
-                user_id: r.get("user_id"),
-                language: r.get("language"),
-                node_id: r.get("node_id"),
-                action: r.get("action"),
-                parent_id: r.get("parent_id"),
-                node_name: r.get("node_name"),
-                node_instructions: r.get("node_instructions"),
-                prerequisites_json: r.get("prerequisites_json"),
-                sort_order: r.get("sort_order"),
-                created_at: r.get("created_at"),
-            }
-        }).collect();
+        let customizations = records
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                UserTreeCustomization {
+                    user_id: r.get("user_id"),
+                    tree_definition_id: r.get("tree_definition_id"),
+                    node_id: r.get("node_id"),
+                    action: r.get("action"),
+                    parent_id: r.get("parent_id"),
+                    node_name: r.get("node_name"),
+                    node_instructions: r.get("node_instructions"),
+                    prerequisites_json: r.get("prerequisites_json"),
+                    sort_order: r.get("sort_order"),
+                    created_at: r.get("created_at"),
+                }
+            })
+            .collect();
 
         Ok(customizations)
     }
 
     /// Insert or replace a tree customization for the current user.
-    pub async fn upsert_tree_customization(&self, c: &UserTreeCustomization) -> Result<(), sqlx::Error> {
+    pub async fn upsert_tree_customization(
+        &self,
+        c: &UserTreeCustomization,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT OR REPLACE INTO user_tree_customizations \
-             (user_id, language, node_id, action, parent_id, node_name, node_instructions, prerequisites_json, sort_order, created_at) \
+             (user_id, tree_definition_id, node_id, action, parent_id, node_name, node_instructions, prerequisites_json, sort_order, created_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&self.user_id)
-        .bind(&c.language)
+        .bind(&c.tree_definition_id)
         .bind(&c.node_id)
         .bind(&c.action)
         .bind(&c.parent_id)
@@ -630,12 +679,16 @@ impl LocalStorageProvider {
     }
 
     /// Delete a single tree customization by node_id.
-    pub async fn delete_tree_customization(&self, language: &str, node_id: &str) -> Result<bool, sqlx::Error> {
+    pub async fn delete_tree_customization(
+        &self,
+        tree_definition_id: &str,
+        node_id: &str,
+    ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            "DELETE FROM user_tree_customizations WHERE user_id = ? AND language = ? AND node_id = ?"
+            "DELETE FROM user_tree_customizations WHERE user_id = ? AND tree_definition_id = ? AND node_id = ?"
         )
         .bind(&self.user_id)
-        .bind(language)
+        .bind(tree_definition_id)
         .bind(node_id)
         .execute(&self.pool)
         .await?;
@@ -645,7 +698,9 @@ impl LocalStorageProvider {
 
 #[async_trait::async_trait]
 impl StorageProvider for LocalStorageProvider {
-    async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_cards(
+        &self,
+    ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
         let records = sqlx::query(
             r#"
             SELECT
@@ -662,7 +717,7 @@ impl StorageProvider for LocalStorageProvider {
                 WHERE rating = 1 AND user_id = ?
                 GROUP BY card_id
             ) lapse_counts ON c.id = lapse_counts.card_id
-            "#
+            "#,
         )
         .bind(&self.user_id)
         .bind(&self.user_id)
@@ -695,7 +750,7 @@ impl StorageProvider for LocalStorageProvider {
         let settings = self.get_user_settings().await.unwrap_or_default();
         let learn_ahead_ms = (settings.learn_ahead_minutes.get() as i64) * 60 * 1000;
         let now = Utc::now().timestamp_millis() + learn_ahead_ms;
-        
+
         let records = sqlx::query(
             r#"
             WITH review_counts AS (
@@ -724,7 +779,7 @@ impl StorageProvider for LocalStorageProvider {
             LEFT JOIN review_counts rc ON c.id = rc.card_id
             WHERE d.user_id = ?
             GROUP BY d.id
-            "#
+            "#,
         )
         .bind(&self.user_id) // CTE
         .bind(now)
@@ -734,34 +789,42 @@ impl StorageProvider for LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        let decks = records.into_iter().map(|r| {
-            use sqlx::Row;
-            DeckInfo {
-                deck_id: r.get("id"),
-                name: r.get("full_path"), // We use full path internally for names representing hierarchy
-                target_language: r.get("target_language"),
-                card_count: r.get::<i64, _>("card_count") as usize,
-                new_count: r.get::<Option<i64>, _>("new_count").unwrap_or(0) as usize,
-                learning_count: r.get::<Option<i64>, _>("learning_count").unwrap_or(0) as usize,
-                review_count: r.get::<Option<i64>, _>("review_count").unwrap_or(0) as usize,
-                is_lc: true, // Native DB decks are always LC decks
-            }
-        }).collect();
+        let decks = records
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                DeckInfo {
+                    deck_id: r.get("id"),
+                    name: r.get("full_path"), // We use full path internally for names representing hierarchy
+                    target_language: r.get("target_language"),
+                    card_count: r.get::<i64, _>("card_count") as usize,
+                    new_count: r.get::<Option<i64>, _>("new_count").unwrap_or(0) as usize,
+                    learning_count: r.get::<Option<i64>, _>("learning_count").unwrap_or(0) as usize,
+                    review_count: r.get::<Option<i64>, _>("review_count").unwrap_or(0) as usize,
+                    is_lc: true, // Native DB decks are always LC decks
+                }
+            })
+            .collect();
 
         Ok(decks)
     }
 
-    async fn save_deck(&self, deck_data: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    async fn save_deck(
+        &self,
+        deck_data: &NewDeckData,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let now = Utc::now().timestamp_millis();
         let mut added = 0;
         let mut tx = self.pool.begin().await?;
 
         // Create hierarchy inside the transaction so it rolls back with card inserts on failure
-        let deck_id = self.get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx).await?;
+        let deck_id = self
+            .get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx)
+            .await?;
 
         for entry in &deck_data.cards {
             let card_id = Uuid::new_v4().to_string();
-            
+
             // Insert Card
             sqlx::query(
                 "INSERT INTO cards (id, deck_id, skill_id, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at)
@@ -798,7 +861,10 @@ impl StorageProvider for LocalStorageProvider {
         Ok(added)
     }
 
-    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_deck(
+        &self,
+        deck_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query("DELETE FROM decks WHERE id = ? AND user_id = ?")

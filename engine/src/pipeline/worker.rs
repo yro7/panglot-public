@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use lc_core::domain::CardMetadata;
 use lc_core::traits::{Language, LinguisticDefinition};
+use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -109,18 +109,24 @@ where
         // --- Parallel: Feature Extraction + Early Post-Processing ---
         let (extracted, early_results) = tokio::join!(
             self.run_feature_extraction(
-                &any_card, &card_json_for_extraction,
-                extraction_node.as_ref(), &extraction_path,
-                &llm_sem, req,
+                &any_card,
+                &card_json_for_extraction,
+                extraction_node.as_ref(),
+                &extraction_path,
+                &llm_sem,
+                req,
             ),
-            self.run_early_post_processors(
-                &any_card, &card_id_str, &extra_value,
-                &pp_sem, req,
-            )
+            self.run_early_post_processors(&any_card, &card_id_str, &extra_value, &pp_sem, req,)
         );
 
         // Assemble metadata from feature extraction results
-        let (pedagogical_explanation, target_features, context_features, multiword_expressions, morpheme_segmentation) = match extracted {
+        let (
+            pedagogical_explanation,
+            target_features,
+            context_features,
+            multiword_expressions,
+            morpheme_segmentation,
+        ) = match extracted {
             Ok(resp) => (
                 resp.pedagogical_explanation,
                 resp.morphology.target_features,
@@ -131,13 +137,21 @@ where
             Err(e) => {
                 tracing::error!(%e, "Feature extraction FAILED (even after retry) — explanation will be empty");
                 (String::new(), Vec::new(), Vec::new(), Vec::new(), None)
-            },
+            }
         };
 
         let mut metadata = CardMetadata {
             card_id: card_id_str,
-            language: self.language.linguistic_def().iso_code().to_639_3().to_string(),
-            skill_id: skill_node_id.to_string(),
+            language: self
+                .language
+                .linguistic_def()
+                .iso_code()
+                .to_639_3()
+                .to_string(),
+            skill_id: extraction_node
+                .as_ref()
+                .map(|node| node.skill_id.clone())
+                .unwrap_or_else(|| skill_node_id.to_string()),
             skill_name,
             pedagogical_explanation,
             target_features,
@@ -150,18 +164,28 @@ where
 
         // Merge early post-processing results
         for r in early_results {
-            if r.ipa.is_some() { metadata.ipa = r.ipa; }
-            if r.audio_file.is_some() { metadata.audio_file = r.audio_file; }
+            if r.ipa.is_some() {
+                metadata.ipa = r.ipa;
+            }
+            if r.audio_file.is_some() {
+                metadata.audio_file = r.audio_file;
+            }
         }
 
         // --- Late Post-Processing (sequential, after feature extraction) ---
         for processor in &self.late_processors {
-            if let Err(e) = processor.process(&self.language, &any_card, &extra_value, &mut metadata).await {
+            if let Err(e) = processor
+                .process(&self.language, &any_card, &extra_value, &mut metadata)
+                .await
+            {
                 tracing::error!(%e, "Late post-processing error");
             }
         }
 
-        GeneratedCard { model: any_card, metadata }
+        GeneratedCard {
+            model: any_card,
+            metadata,
+        }
     }
 
     /// Runs feature extraction via Panini (LLM call 2) with exponential backoff retries.
@@ -185,7 +209,9 @@ where
             pedagogical_context: ext_node.node_instructions.clone(),
             skill_path: Some(extraction_path.to_string()),
             learner_ui_language: req.user_profile.ui_language.clone(),
-            linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
+            linguistic_background: to_panini_language_levels(
+                &req.user_profile.linguistic_background,
+            ),
             user_prompt: req.user_prompt.clone(),
         };
 
@@ -197,22 +223,45 @@ where
             timeout: self.llm_call_timeout,
         };
 
-        let _permit = llm_sem.acquire().await
+        let _permit = llm_sem
+            .acquire()
+            .await
             .map_err(|_| anyhow::anyhow!("LLM semaphore closed"))?;
-        let backend = self.llm_backend.read()
-            .map_err(|e| anyhow::anyhow!("LLM backend lock poisoned: {}", e))?.clone();
+        let backend = self
+            .llm_backend
+            .read()
+            .map_err(|e| anyhow::anyhow!("LLM backend lock poisoned: {}", e))?
+            .clone();
         let extraction_request = build_extraction_request();
 
         let result = match &backend {
-            LlmBackend::OpenAi(m) => CardExtractionResult::<L::LinguisticDef>::extract(
-                self.language.linguistic_def(), m, &extraction_request, options,
-            ).await,
-            LlmBackend::Anthropic(m) => CardExtractionResult::<L::LinguisticDef>::extract(
-                self.language.linguistic_def(), m, &extraction_request, options,
-            ).await,
-            LlmBackend::Google(m) => CardExtractionResult::<L::LinguisticDef>::extract(
-                self.language.linguistic_def(), m, &extraction_request, options,
-            ).await,
+            LlmBackend::OpenAi(m) => {
+                CardExtractionResult::<L::LinguisticDef>::extract(
+                    self.language.linguistic_def(),
+                    m,
+                    &extraction_request,
+                    options,
+                )
+                .await
+            }
+            LlmBackend::Anthropic(m) => {
+                CardExtractionResult::<L::LinguisticDef>::extract(
+                    self.language.linguistic_def(),
+                    m,
+                    &extraction_request,
+                    options,
+                )
+                .await
+            }
+            LlmBackend::Google(m) => {
+                CardExtractionResult::<L::LinguisticDef>::extract(
+                    self.language.linguistic_def(),
+                    m,
+                    &extraction_request,
+                    options,
+                )
+                .await
+            }
         };
 
         result.map_err(Into::into)
@@ -236,14 +285,24 @@ where
         };
         let speakable = any_card.speakable_text();
         let input_chars = speakable.as_ref().map(|t| t.len() as u32).unwrap_or(0);
-        let lang_code = self.language.linguistic_def().iso_code().to_639_3().to_string();
+        let lang_code = self
+            .language
+            .linguistic_def()
+            .iso_code()
+            .to_639_3()
+            .to_string();
 
         let mut results = Vec::new();
         for processor in &self.early_processors {
             let pp_start = std::time::Instant::now();
-            match processor.process(&self.language, card_id, any_card, extra_value).await {
+            match processor
+                .process(&self.language, card_id, any_card, extra_value)
+                .await
+            {
                 Ok(r) => {
-                    if let (Some(recorder), Some(ctx)) = (&self.usage_recorder, &req.request_context) {
+                    if let (Some(recorder), Some(ctx)) =
+                        (&self.usage_recorder, &req.request_context)
+                    {
                         let latency_ms = pp_start.elapsed().as_millis() as u64;
                         if r.ipa.is_some() {
                             recorder.record_post_process(PostProcessEvent {

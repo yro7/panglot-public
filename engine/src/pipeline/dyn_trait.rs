@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+use lc_core::storage::StorageProvider;
 use lc_core::traits::{CardModel, Language, LinguisticDefinition};
 use lc_core::user::UserSettings;
-use lc_core::storage::StorageProvider;
+use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -28,27 +28,45 @@ pub trait DynPipeline: Send + Sync {
     fn base_tree(&self) -> SkillNode;
 
     async fn generate_cards_dyn(
-        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserSettings,
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+        num_cards: u32,
+        difficulty: u8,
+        user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
-        llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        llm_sem: Arc<Semaphore>,
+        pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>>;
 
     /// Builds the deck name from the tree path: `Language::TreePath::CardModel`.
-    fn build_deck_name_dyn(&self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId) -> Result<String>;
+    fn build_deck_name_dyn(
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+    ) -> Result<String>;
 
     fn preview_prompt_dyn(
-        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
-        difficulty: u8, user_profile: UserSettings,
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+        difficulty: u8,
+        user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview>;
 
     /// Factory: builds a type-erased lexicon tracker from a storage provider.
-    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>>;
+    async fn load_lexicon(
+        &self,
+        provider: &(dyn StorageProvider + Sync),
+    ) -> Result<Arc<dyn DynLexiconTracker>>;
 
     /// Hot-swap the LLM backend (e.g. after changing provider/model at runtime).
     fn swap_llm_client(&self, new_backend: LlmBackend);
@@ -89,46 +107,77 @@ where
     }
 
     fn base_tree(&self) -> SkillNode {
-        self.cached_base_tree.get_or_init(|| {
-            let config = self.language.default_tree_config();
-            let mut root = crate::skill_tree::build_node(config.root);
-            crate::skill_tree::compute_tiers(&mut root);
-            root
-        }).clone()
+        self.cached_base_tree
+            .get_or_init(|| {
+                let config = self.language.default_tree_config();
+                let mut root = crate::skill_tree::build_node(config.root);
+                crate::skill_tree::compute_tiers(&mut root);
+                root
+            })
+            .clone()
     }
 
     async fn generate_cards_dyn(
-        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
-        num_cards: u32, difficulty: u8, user_profile: UserSettings,
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+        num_cards: u32,
+        difficulty: u8,
+        user_profile: UserSettings,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
-        llm_sem: Arc<Semaphore>, pp_sem: Arc<Semaphore>,
+        llm_sem: Arc<Semaphore>,
+        pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<Vec<DynGeneratedCard>> {
-        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
-        let req = self.build_generation_request(card_model_id, num_cards, difficulty, user_profile, user_prompt, lexicon_options, request_context, concrete);
-        let cards = self.generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem).await?;
-        Ok(cards.into_iter().map(|c| {
-            let metadata_json = serde_json::to_string(&c.metadata).unwrap_or_default();
-            let explanation = lc_core::sanitize::escape_html(&c.metadata.pedagogical_explanation)
-                .replace('\n', "<br>");
-            DynGeneratedCard {
-                card_id: c.metadata.card_id,
-                template_name: c.model.template_name().to_string(),
-                front_html: c.model.front_html(),
-                back_html: c.model.back_html(),
-                fields: c.model.to_fields(),
-                explanation,
-                skill_name: c.metadata.skill_name,
-                ipa: c.metadata.ipa.unwrap_or_default(),
-                audio_path: c.metadata.audio_file,
-                metadata_json,
-            }
-        }).collect())
+        let concrete = lexicon
+            .as_ref()
+            .and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(
+            card_model_id,
+            num_cards,
+            difficulty,
+            user_profile,
+            user_prompt,
+            lexicon_options,
+            request_context,
+            concrete,
+        );
+        let cards = self
+            .generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem)
+            .await?;
+        Ok(cards
+            .into_iter()
+            .map(|c| {
+                let metadata_json = serde_json::to_string(&c.metadata).unwrap_or_default();
+                let explanation =
+                    lc_core::sanitize::escape_html(&c.metadata.pedagogical_explanation)
+                        .replace('\n', "<br>");
+                DynGeneratedCard {
+                    card_id: c.metadata.card_id,
+                    skill_id: c.metadata.skill_id,
+                    template_name: c.model.template_name().to_string(),
+                    front_html: c.model.front_html(),
+                    back_html: c.model.back_html(),
+                    fields: c.model.to_fields(),
+                    explanation,
+                    skill_name: c.metadata.skill_name,
+                    ipa: c.metadata.ipa.unwrap_or_default(),
+                    audio_path: c.metadata.audio_file,
+                    metadata_json,
+                }
+            })
+            .collect())
     }
 
-    fn build_deck_name_dyn(&self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId) -> Result<String> {
+    fn build_deck_name_dyn(
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+    ) -> Result<String> {
         let tree_path = crate::skill_tree::get_node_path(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node path not found for '{}'", node_id))?;
         let deck_path = tree_path.replace(" > ", "::");
@@ -136,13 +185,28 @@ where
     }
 
     fn preview_prompt_dyn(
-        &self, tree_root: &SkillNode, node_id: &str, card_model_id: CardModelId,
-        difficulty: u8, user_profile: UserSettings,
+        &self,
+        tree_root: &SkillNode,
+        node_id: &str,
+        card_model_id: CardModelId,
+        difficulty: u8,
+        user_profile: UserSettings,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview> {
-        let concrete = lexicon.as_ref().and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
-        let req = self.build_generation_request(card_model_id, 1, difficulty, user_profile, None, lexicon_options, None, concrete);
+        let concrete = lexicon
+            .as_ref()
+            .and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
+        let req = self.build_generation_request(
+            card_model_id,
+            1,
+            difficulty,
+            user_profile,
+            None,
+            lexicon_options,
+            None,
+            concrete,
+        );
 
         let node = crate::skill_tree::find_node(tree_root, node_id)
             .ok_or_else(|| anyhow::anyhow!("Node '{}' not found", node_id))?;
@@ -169,12 +233,8 @@ where
         let multiword = MultiwordExpressions;
         let morpheme_seg = MorphemeSegmentation;
         let lang_def = self.language.linguistic_def();
-        let all_components: Vec<&dyn AnalysisComponent<L::LinguisticDef>> = vec![
-            &pedagogical,
-            &morphology,
-            &multiword,
-            &morpheme_seg,
-        ];
+        let all_components: Vec<&dyn AnalysisComponent<L::LinguisticDef>> =
+            vec![&pedagogical, &morphology, &multiword, &morpheme_seg];
         let selected: Vec<&dyn AnalysisComponent<L::LinguisticDef>> = all_components
             .into_iter()
             .filter(|c| c.is_compatible(lang_def))
@@ -187,7 +247,9 @@ where
                 pedagogical_context: node.node_instructions.clone(),
                 skill_path: Some(path.clone()),
                 learner_ui_language: req.user_profile.ui_language.clone(),
-                linguistic_background: to_panini_language_levels(&req.user_profile.linguistic_background),
+                linguistic_background: to_panini_language_levels(
+                    &req.user_profile.linguistic_background,
+                ),
                 user_prompt: req.user_prompt.clone(),
             };
             panini_engine::composer::compose_prompt(
@@ -209,10 +271,15 @@ where
         })
     }
 
-    async fn load_lexicon(&self, provider: &(dyn StorageProvider + Sync)) -> Result<Arc<dyn DynLexiconTracker>> {
+    async fn load_lexicon(
+        &self,
+        provider: &(dyn StorageProvider + Sync),
+    ) -> Result<Arc<dyn DynLexiconTracker>> {
         let analyzer = LibraryAnalyzer;
         let lang = self.language.linguistic_def().iso_code().to_639_3();
-        let tracker = analyzer.extract_tracker_async::<L::Morphology>(provider, Some(lang)).await
+        let tracker = analyzer
+            .extract_tracker_async::<L::Morphology>(provider, Some(lang))
+            .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(Arc::new(tracker))
     }

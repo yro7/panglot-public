@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use lc_core::traits::Language;
 
 // Re-export config types from lc_core (moved there so `langs` can reference them)
-pub use lc_core::skill_tree::{SkillTreeConfig, SkillNodeConfig};
+pub use lc_core::skill_tree::{SkillNodeConfig, SkillTreeConfig};
 
 // ----- Runtime Layer -----
 
@@ -12,6 +12,7 @@ pub use lc_core::skill_tree::{SkillTreeConfig, SkillNodeConfig};
 #[derive(Clone)]
 pub struct SkillNode {
     pub id: String,
+    pub skill_id: String,
     pub name: String,
     pub node_instructions: Option<String>,
     pub prerequisites: Vec<String>,
@@ -70,12 +71,9 @@ impl<L: Language> SkillTree<L> {
 // ----- Node Construction -----
 
 pub fn build_node(config: SkillNodeConfig) -> SkillNode {
-    let children = config
-        .children
-        .into_iter()
-        .map(build_node)
-        .collect();
+    let children = config.children.into_iter().map(build_node).collect();
     SkillNode {
+        skill_id: config.skill_id.clone().unwrap_or_else(|| config.id.clone()),
         id: config.id,
         name: config.name,
         node_instructions: config.node_instructions,
@@ -189,7 +187,10 @@ fn resolve_tier(
         return t;
     }
     if in_progress.contains(id) {
-        tracing::warn!("skill_tree: cycle detected involving node '{}', assigning tier 0", id);
+        tracing::warn!(
+            "skill_tree: cycle detected involving node '{}', assigning tier 0",
+            id
+        );
         memo.insert(id.to_string(), 0);
         return 0;
     }
@@ -204,7 +205,11 @@ fn resolve_tier(
     let mut max_prereq_tier: u32 = 0;
     for p in prereqs {
         if !prereqs_by_id.contains_key(p) {
-            tracing::warn!("skill_tree: node '{}' references unknown prerequisite '{}'", id, p);
+            tracing::warn!(
+                "skill_tree: node '{}' references unknown prerequisite '{}'",
+                id,
+                p
+            );
             continue;
         }
         let t = resolve_tier(p, prereqs_by_id, memo, in_progress);
@@ -234,6 +239,7 @@ pub struct TreeCustomization {
     pub node_id: String,
     pub action: String, // "add" | "hide" | "edit"
     pub parent_id: Option<String>,
+    pub skill_id: Option<String>,
     pub node_name: Option<String>,
     pub node_instructions: Option<String>,
     /// For `add`: initial prereqs for the new node (None → empty).
@@ -244,7 +250,10 @@ pub struct TreeCustomization {
 /// Applies user customizations on top of a base tree, producing a new tree.
 /// Graceful degradation: invalid customizations (orphaned refs, conflicts) are silently skipped.
 /// Tiers are NOT recomputed here — call `compute_tiers` on the result if you need fresh tiers.
-pub fn apply_customizations(base_root: &SkillNode, customizations: &[TreeCustomization]) -> SkillNode {
+pub fn apply_customizations(
+    base_root: &SkillNode,
+    customizations: &[TreeCustomization],
+) -> SkillNode {
     let mut root = base_root.clone();
 
     for c in customizations {
@@ -267,12 +276,19 @@ pub fn apply_customizations(base_root: &SkillNode, customizations: &[TreeCustomi
                 // else: node not found in base tree, skip (graceful degradation)
             }
             "add" => {
-                let Some(ref parent_id) = c.parent_id else { continue };
+                let Some(ref parent_id) = c.parent_id else {
+                    continue;
+                };
                 // Skip if node_id already exists
-                if find_node(&root, &c.node_id).is_some() { continue }
-                let Some(parent) = find_node_mut(&mut root, parent_id) else { continue };
+                if find_node(&root, &c.node_id).is_some() {
+                    continue;
+                }
+                let Some(parent) = find_node_mut(&mut root, parent_id) else {
+                    continue;
+                };
                 parent.children.push(SkillNode {
                     id: c.node_id.clone(),
+                    skill_id: c.skill_id.clone().unwrap_or_else(|| c.node_id.clone()),
                     name: c.node_name.clone().unwrap_or_else(|| c.node_id.clone()),
                     node_instructions: c.node_instructions.clone(),
                     prerequisites: c.prerequisites.clone().unwrap_or_default(),
@@ -312,35 +328,44 @@ mod tests {
     use langs::Polish;
 
     fn sample_config() -> SkillNodeConfig {
-
         SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "Polski".to_string(),
             node_instructions: None,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![
                 SkillNodeConfig {
                     id: "cases".to_string(),
+                    skill_id: None,
                     name: "Przypadki".to_string(),
                     node_instructions: None,
                     prerequisites: vec![],
+                    concept_key: None,
+                    desc: None,
                     children: vec![SkillNodeConfig {
                         id: "accusative".to_string(),
+                        skill_id: None,
                         name: "Biernik".to_string(),
                         node_instructions: Some(
                             "Generate a Polish accusative cloze test.".to_string(),
                         ),
                         prerequisites: vec![],
+                        concept_key: None,
+                        desc: None,
                         children: vec![],
                     }],
                 },
                 SkillNodeConfig {
                     id: "vocabulary".to_string(),
+                    skill_id: None,
                     name: "Słownictwo".to_string(),
-                    node_instructions: Some(
-                        "Generate vocabulary comprehension.".to_string(),
-                    ),
+                    node_instructions: Some("Generate vocabulary comprehension.".to_string()),
                     prerequisites: vec![],
+                    concept_key: None,
+                    desc: None,
                     children: vec![],
                 },
             ],
@@ -379,19 +404,28 @@ mod tests {
         // Branch with instructions should be listed alongside leaves with instructions.
         let config = SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "Root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![SkillNodeConfig {
                 id: "grammar".to_string(),
+                skill_id: None,
                 name: "Grammar".to_string(),
                 node_instructions: Some("Broad grammar drill".to_string()),
                 prerequisites: vec![],
+                concept_key: None,
+                desc: None,
                 children: vec![SkillNodeConfig {
                     id: "present".to_string(),
+                    skill_id: None,
                     name: "Present".to_string(),
                     node_instructions: Some("Present tense".to_string()),
                     prerequisites: vec![],
+                    concept_key: None,
+                    desc: None,
                     children: vec![],
                 }],
             }],
@@ -416,11 +450,18 @@ mod tests {
     fn from_yaml_config() {
         let yaml = r#"
 language_name: Polish
+tree_id: 00000000-0000-0000-0000-000000000001
+tree_key: core
+tree_slug: polish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 root:
   id: root
   name: Polski
   children:
     - id: greetings
+      skill_id: greetings
       name: Powitania
       node_instructions: Generate a greeting exercise.
       children: []
@@ -439,6 +480,12 @@ root:
         // Old-shape YAML without `prerequisites` field must parse cleanly.
         let yaml = r#"
 language_name: Polish
+tree_id: 00000000-0000-0000-0000-000000000001
+tree_key: core
+tree_slug: polish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 root:
   id: root
   name: Polski
@@ -457,6 +504,12 @@ root:
     fn prereqs_deserialize_list() {
         let yaml = r#"
 language_name: Polish
+tree_id: 00000000-0000-0000-0000-000000000001
+tree_key: core
+tree_slug: polish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 root:
   id: root
   name: Polski
@@ -469,27 +522,37 @@ root:
       children: []
 "#;
         let config: SkillTreeConfig = serde_yml::from_str(yaml).unwrap();
-        assert_eq!(config.root.children[0].prerequisites, vec!["present".to_string(), "etre".to_string()]);
+        assert_eq!(
+            config.root.children[0].prerequisites,
+            vec!["present".to_string(), "etre".to_string()]
+        );
     }
 
     fn chain_node(id: &str, prereqs: Vec<&str>) -> SkillNodeConfig {
         SkillNodeConfig {
             id: id.to_string(),
+            skill_id: None,
             name: id.to_string(),
             node_instructions: Some("x".to_string()),
             prerequisites: prereqs.into_iter().map(String::from).collect(),
+            concept_key: None,
+            desc: None,
             children: vec![],
         }
     }
 
     #[test]
     fn compute_tiers_linear_chain() {
-        // a -> b -> c  =>  tier(a)=0, tier(b)=1, tier(c)=2
+        // Structural depth is incorporated, so root children start at tier 1.
+        // a -> b -> c  =>  tier(a)=1, tier(b)=1, tier(c)=2
         let config = SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![
                 chain_node("a", vec![]),
                 chain_node("b", vec!["a"]),
@@ -497,19 +560,23 @@ root:
             ],
         };
         let tree = SkillTree::new(Polish, config);
-        assert_eq!(tree.find_node("a").unwrap().tier, 0);
+        assert_eq!(tree.find_node("a").unwrap().tier, 1);
         assert_eq!(tree.find_node("b").unwrap().tier, 1);
         assert_eq!(tree.find_node("c").unwrap().tier, 2);
     }
 
     #[test]
     fn compute_tiers_diamond() {
-        // a, b -> c  where a: tier 0, b: tier 1 (requires a). c requires a and b => tier = 1 + max(0, 1) = 2.
+        // Structural depth is incorporated, so root children start at tier 1.
+        // a, b -> c where a: tier 1, b: tier 1 (requires a), c: tier 2.
         let config = SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![
                 chain_node("a", vec![]),
                 chain_node("b", vec!["a"]),
@@ -517,7 +584,7 @@ root:
             ],
         };
         let tree = SkillTree::new(Polish, config);
-        assert_eq!(tree.find_node("a").unwrap().tier, 0);
+        assert_eq!(tree.find_node("a").unwrap().tier, 1);
         assert_eq!(tree.find_node("b").unwrap().tier, 1);
         assert_eq!(tree.find_node("c").unwrap().tier, 2);
     }
@@ -527,19 +594,19 @@ root:
         // a <-> b: cycle. Both get tier 0, no panic.
         let config = SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
-            children: vec![
-                chain_node("a", vec!["b"]),
-                chain_node("b", vec!["a"]),
-            ],
+            concept_key: None,
+            desc: None,
+            children: vec![chain_node("a", vec!["b"]), chain_node("b", vec!["a"])],
         };
         let tree = SkillTree::new(Polish, config);
-        // Cycle members must be finite (no panic). One will break the cycle at tier 0.
+        // Cycle members must be finite (no panic) even after structural depth is applied.
         let ta = tree.find_node("a").unwrap().tier;
         let tb = tree.find_node("b").unwrap().tier;
-        assert!(ta <= 1 && tb <= 1);
+        assert!(ta <= 2 && tb <= 2);
     }
 
     #[test]
@@ -551,12 +618,13 @@ root:
         // prereqs. Test what we actually produce.
         let config = SkillNodeConfig {
             id: "root".to_string(),
+            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
-            children: vec![
-                chain_node("orphan", vec!["ghost"]),
-            ],
+            concept_key: None,
+            desc: None,
+            children: vec![chain_node("orphan", vec!["ghost"])],
         };
         let tree = SkillTree::new(Polish, config);
         // Current behavior: orphan has `prerequisites = ["ghost"]` (non-empty), enters the tier
@@ -572,6 +640,7 @@ root:
             node_id: "dative".to_string(),
             action: "add".to_string(),
             parent_id: Some("cases".to_string()),
+            skill_id: None,
             node_name: Some("Celownik".to_string()),
             node_instructions: Some("Generate dative exercises.".to_string()),
             prerequisites: None,
@@ -590,6 +659,7 @@ root:
             node_id: "dative".to_string(),
             action: "add".to_string(),
             parent_id: Some("cases".to_string()),
+            skill_id: None,
             node_name: Some("Celownik".to_string()),
             node_instructions: Some("x".to_string()),
             prerequisites: Some(vec!["accusative".to_string()]),
@@ -606,6 +676,7 @@ root:
             node_id: "vocabulary".to_string(),
             action: "hide".to_string(),
             parent_id: None,
+            skill_id: None,
             node_name: None,
             node_instructions: None,
             prerequisites: None,
@@ -622,6 +693,7 @@ root:
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
+            skill_id: None,
             node_name: Some("Biernik (Accusative) - Edited".to_string()),
             node_instructions: None,
             prerequisites: None,
@@ -638,6 +710,7 @@ root:
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
+            skill_id: None,
             node_name: None,
             node_instructions: None,
             prerequisites: Some(vec!["cases".to_string()]),
@@ -651,11 +724,14 @@ root:
     fn apply_customizations_edit_prerequisites_none_leaves_unchanged() {
         let mut base = build_node(sample_config());
         // Seed accusative with prereqs first.
-        find_node_mut(&mut base, "accusative").unwrap().prerequisites = vec!["seed".to_string()];
+        find_node_mut(&mut base, "accusative")
+            .unwrap()
+            .prerequisites = vec!["seed".to_string()];
         let customizations = vec![TreeCustomization {
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
+            skill_id: None,
             node_name: Some("New Name".to_string()),
             node_instructions: None,
             prerequisites: None, // do not touch prereqs
@@ -674,13 +750,18 @@ root:
             TreeCustomization {
                 node_id: "nonexistent".to_string(),
                 action: "hide".to_string(),
-                parent_id: None, node_name: None, node_instructions: None, prerequisites: None,
+                parent_id: None,
+                skill_id: None,
+                node_name: None,
+                node_instructions: None,
+                prerequisites: None,
             },
             // Add under non-existent parent — should be skipped
             TreeCustomization {
                 node_id: "orphan".to_string(),
                 action: "add".to_string(),
                 parent_id: Some("ghost_parent".to_string()),
+                skill_id: None,
                 node_name: Some("Orphan".to_string()),
                 node_instructions: None,
                 prerequisites: None,
@@ -690,6 +771,7 @@ root:
                 node_id: "accusative".to_string(),
                 action: "add".to_string(),
                 parent_id: Some("root".to_string()),
+                skill_id: None,
                 node_name: Some("Duplicate".to_string()),
                 node_instructions: None,
                 prerequisites: None,
@@ -705,6 +787,7 @@ root:
     fn test_compute_tiers_incorporates_depth() {
         let mut root = SkillNode {
             id: "root".to_string(),
+            skill_id: "root".to_string(),
             name: "Root".to_string(),
             node_instructions: None,
             tier: 0,
@@ -714,27 +797,28 @@ root:
             children: vec![
                 SkillNode {
                     id: "child1".to_string(),
+                    skill_id: "child1".to_string(),
                     name: "Child 1".to_string(),
                     node_instructions: None,
                     tier: 0,
                     prerequisites: vec![],
                     concept_key: None,
                     desc: None,
-                    children: vec![
-                        SkillNode {
-                            id: "grandchild1".to_string(),
-                            name: "Grandchild 1".to_string(),
-                            node_instructions: None,
-                            tier: 0,
-                            prerequisites: vec!["child2".to_string()],
-                            concept_key: None,
-                            desc: None,
-                            children: vec![],
-                        }
-                    ],
+                    children: vec![SkillNode {
+                        id: "grandchild1".to_string(),
+                        skill_id: "grandchild1".to_string(),
+                        name: "Grandchild 1".to_string(),
+                        node_instructions: None,
+                        tier: 0,
+                        prerequisites: vec!["child2".to_string()],
+                        concept_key: None,
+                        desc: None,
+                        children: vec![],
+                    }],
                 },
                 SkillNode {
                     id: "child2".to_string(),
+                    skill_id: "child2".to_string(),
                     name: "Child 2".to_string(),
                     node_instructions: None,
                     tier: 0,
@@ -742,7 +826,7 @@ root:
                     concept_key: None,
                     desc: None,
                     children: vec![],
-                }
+                },
             ],
         };
 
@@ -754,7 +838,7 @@ root:
 
         // Structural depth: root=0, child1=1, child2=1, grandchild1=2
         // Prereqs: grandchild1 -> child2 (tier 1) => grandchild1.prereq_tier = 2
-        
+
         assert_eq!(root.tier, 0);
         assert_eq!(child1.tier, 1);
         assert_eq!(child2.tier, 1);

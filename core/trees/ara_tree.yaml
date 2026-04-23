@@ -1,3 +1,9 @@
+tree_id: 390f554a-c379-48f9-b5cb-bdcd4a2367f7
+tree_key: core
+tree_slug: arabic-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Arabic
 root:
   id: root

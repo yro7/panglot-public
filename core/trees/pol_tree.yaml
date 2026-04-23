@@ -1,3 +1,9 @@
+tree_id: eb101138-bd6e-450a-abe0-a24c604d1a4e
+tree_key: core
+tree_slug: polish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Polish
 root:
   id: root
