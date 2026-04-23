@@ -62,6 +62,7 @@ pub struct DeckInfo {
 pub struct NewCardEntry {
     pub front_html: String,
     pub back_html: String,
+    pub skill_id: String,
     pub skill_name: String,
     pub template_name: String,
     pub fields_json: String,

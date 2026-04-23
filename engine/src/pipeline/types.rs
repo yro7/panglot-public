@@ -61,6 +61,7 @@ pub fn cards_to_deck_data(
             NewCardEntry {
                 front_html: c.front_html.clone(),
                 back_html: c.back_html.clone(),
+                skill_id: c.skill_id.clone(),
                 skill_name: c.skill_name.clone(),
                 template_name: c.template_name.clone(),
                 fields_json,
