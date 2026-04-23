@@ -1,10 +1,74 @@
 use chrono::Utc;
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, sqlite::{SqlitePoolOptions, SqliteRow}};
 use std::path::Path;
-use uuid::Uuid; // TODO check plus précisément
+use uuid::Uuid;
 
 use crate::sanitize::escape_html;
 use crate::storage::{DeckInfo, NewCardEntry, NewDeckData, StorageProvider, StoredCard};
+
+const DEFAULT_USER_ID: &str = "default-user";
+
+// Shared SQL fragments. Keep bind-order comments at call sites in sync with placeholders here.
+//
+// DECK_CLOSURE_CTE binds (in order):
+//   1. user_id (closure anchor)
+//   2. user_id (closure recursion)
+//   3. user_id (review_counts)
+const DECK_CLOSURE_CTE: &str = r#"
+WITH RECURSIVE deck_closure(ancestor_id, descendant_id) AS (
+    SELECT id, id FROM decks WHERE user_id = ?
+    UNION ALL
+    SELECT dc.ancestor_id, d.id
+    FROM deck_closure dc
+    JOIN decks d ON d.parent_id = dc.descendant_id
+    WHERE d.user_id = ?
+),
+review_counts AS (
+    SELECT card_id, COUNT(*) as review_count
+    FROM review_log WHERE user_id = ? GROUP BY card_id
+)
+"#;
+
+// DECK_SUMMARY_SELECT binds (after CTE): due_cutoff ×3, reviews.user_id.
+const DECK_SUMMARY_SELECT: &str = r#"
+SELECT
+    d.id, d.parent_id, d.name, d.full_path,
+    COALESCE(d.target_language, '') as target_language,
+    COUNT(c.id) as total_cards,
+    SUM(CASE WHEN r.due_date <= ? AND r.interval_days = 0
+              AND COALESCE(rc.review_count, 0) = 0 THEN 1 ELSE 0 END) as due_new_cards,
+    SUM(CASE WHEN ((r.interval_days > 0 AND r.interval_days < 1)
+                OR (r.interval_days = 0 AND COALESCE(rc.review_count, 0) > 0))
+              AND r.due_date <= ? THEN 1 ELSE 0 END) as due_learning_cards,
+    SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as due_review_cards
+FROM decks d
+LEFT JOIN deck_closure dc ON dc.ancestor_id = d.id
+LEFT JOIN cards c ON c.deck_id = dc.descendant_id
+LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
+LEFT JOIN review_counts rc ON c.id = rc.card_id
+"#;
+
+// DECK_TREE_CTE binds: deck_id, user_id (anchor), user_id (recursion).
+const DECK_TREE_CTE: &str = r#"
+WITH RECURSIVE deck_tree(id) AS (
+    SELECT id FROM decks WHERE id = ? AND user_id = ?
+    UNION ALL
+    SELECT d.id FROM decks d JOIN deck_tree dt ON d.parent_id = dt.id WHERE d.user_id = ?
+)
+"#;
+
+const STUDY_CARD_PROJECTION: &str = r#"
+c.id, c.deck_id,
+COALESCE(c.skill_id, '') as skill_id,
+COALESCE(c.skill_name, '') as skill_name,
+COALESCE(c.template_name, '') as template_name,
+c.front_html, c.back_html, c.metadata_json, c.audio_path
+"#;
+
+const UPSERT_REVIEW_CACHE_SQL: &str =
+    "INSERT INTO reviews (card_id, user_id, due_date, interval_days) VALUES (?, ?, ?, ?) \
+     ON CONFLICT(card_id, user_id) DO UPDATE \
+     SET due_date = excluded.due_date, interval_days = excluded.interval_days";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StudyMode {
@@ -78,22 +142,91 @@ fn now_ms() -> i64 {
     Utc::now().timestamp_millis()
 }
 
-fn explanation_html_from_metadata(metadata_json: &str) -> String {
+fn parse_card_metadata(metadata_json: &str) -> (String, String) {
     let metadata: serde_json::Value = serde_json::from_str(metadata_json).unwrap_or_default();
-    metadata
+    let explanation = metadata
         .get("pedagogical_explanation")
         .and_then(|value| value.as_str())
         .map(|value| escape_html(value).replace('\n', "<br>"))
-        .unwrap_or_default()
-}
-
-fn ipa_from_metadata(metadata_json: &str) -> String {
-    let metadata: serde_json::Value = serde_json::from_str(metadata_json).unwrap_or_default();
-    metadata
+        .unwrap_or_default();
+    let ipa = metadata
         .get("ipa")
         .and_then(|value| value.as_str())
         .unwrap_or("")
-        .to_string()
+        .to_string();
+    (explanation, ipa)
+}
+
+fn explanation_html_from_metadata(metadata_json: &str) -> String {
+    parse_card_metadata(metadata_json).0
+}
+
+fn row_to_deck_summary(row: &SqliteRow) -> DeckSummaryRecord {
+    DeckSummaryRecord {
+        id: row.get("id"),
+        parent_deck_id: row.get("parent_id"),
+        name: row.get("name"),
+        full_path: row.get("full_path"),
+        target_language_iso: row.get("target_language"),
+        counts: DeckCountsRecord {
+            total_cards: row.get::<i64, _>("total_cards") as usize,
+            due_new_cards: row.get::<Option<i64>, _>("due_new_cards").unwrap_or(0) as usize,
+            due_learning_cards: row.get::<Option<i64>, _>("due_learning_cards").unwrap_or(0)
+                as usize,
+            due_review_cards: row.get::<Option<i64>, _>("due_review_cards").unwrap_or(0) as usize,
+        },
+    }
+}
+
+fn row_to_study_card(row: &SqliteRow) -> StudyCardRecord {
+    let metadata_json: String = row.get("metadata_json");
+    StudyCardRecord {
+        card_id: row.get("id"),
+        deck_id: row.get("deck_id"),
+        skill_id: row.get("skill_id"),
+        skill_name: row.get("skill_name"),
+        template_name: row.get("template_name"),
+        front_html: row.get("front_html"),
+        back_html: row.get("back_html"),
+        explanation_html: explanation_html_from_metadata(&metadata_json),
+        audio_path: row.get("audio_path"),
+    }
+}
+
+fn row_to_draft_card(row: &SqliteRow) -> DraftCard {
+    DraftCard {
+        id: row.get("id"),
+        skill_id: row.get("skill_id"),
+        skill_name: row.get("skill_name"),
+        template_name: row.get("template_name"),
+        fields_json: row.get("fields_json"),
+        explanation: row.get("explanation"),
+        metadata_json: row.get("metadata_json"),
+        created_at: row.get("created_at"),
+    }
+}
+
+fn row_to_customization(row: &SqliteRow) -> UserTreeCustomization {
+    UserTreeCustomization {
+        user_id: row.get("user_id"),
+        tree_definition_id: row.get("tree_definition_id"),
+        node_id: row.get("node_id"),
+        action: row.get("action"),
+        parent_id: row.get("parent_id"),
+        node_name: row.get("node_name"),
+        node_instructions: row.get("node_instructions"),
+        prerequisites_json: row.get("prerequisites_json"),
+        sort_order: row.get("sort_order"),
+        created_at: row.get("created_at"),
+    }
+}
+
+fn row_to_review_event(row: &SqliteRow) -> crate::srs::ReviewEvent {
+    let rating_u8 = row.get::<i64, _>("rating") as u8;
+    crate::srs::ReviewEvent {
+        rating: crate::srs::Rating::from_u8(rating_u8).unwrap_or(crate::srs::Rating::Again),
+        reviewed_at: row.get("reviewed_at"),
+    }
 }
 
 /// A SQLite-backed implementation of the `StorageProvider` trait for local studies.
@@ -155,6 +288,10 @@ impl LocalStorageProvider {
                     use sqlx::Executor;
                     conn.execute("PRAGMA foreign_keys = ON").await?;
                     conn.execute("PRAGMA journal_mode = WAL").await?;
+                    conn.execute("PRAGMA synchronous = NORMAL").await?;
+                    conn.execute("PRAGMA busy_timeout = 5000").await?;
+                    conn.execute("PRAGMA cache_size = -20000").await?;
+                    conn.execute("PRAGMA temp_store = MEMORY").await?;
                     Ok(())
                 })
             })
@@ -163,7 +300,7 @@ impl LocalStorageProvider {
 
         let provider = Self {
             pool,
-            user_id: "default-user".to_string(),
+            user_id: DEFAULT_USER_ID.to_string(),
         };
 
         sqlx::migrate!("./migrations")
@@ -192,8 +329,6 @@ impl LocalStorageProvider {
         language_code: &str,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> Result<String, sqlx::Error> {
-        use sqlx::Row;
-
         let parts: Vec<&str> = full_path.split("::").collect();
         let mut current_parent_id: Option<String> = None;
         let mut current_path = String::new();
@@ -206,7 +341,7 @@ impl LocalStorageProvider {
             }
             current_path.push_str(part);
 
-            let deck_id = Uuid::new_v4().to_string();
+            let deck_id = Uuid::now_v7().to_string();
             sqlx::query(
                 "INSERT OR IGNORE INTO decks (id, user_id, parent_id, name, full_path, target_language, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -233,21 +368,8 @@ impl LocalStorageProvider {
         Ok(last_deck_id)
     }
 
-    async fn compute_scheduling_output(
-        &self,
-        card_id: &str,
-        rating: crate::srs::Rating,
-        algorithm: &dyn crate::srs::SrsAlgorithm,
-        now: i64,
-    ) -> Result<crate::srs::SchedulingOutput, sqlx::Error> {
-        let history = self.get_review_history(card_id).await?;
-        Ok(algorithm.schedule(&history, rating, now))
-    }
-
     /// Fetch user settings from the database.
     pub async fn get_user_settings(&self) -> Result<crate::user::UserSettings, sqlx::Error> {
-        use sqlx::Row;
-
         let row = sqlx::query("SELECT settings FROM users WHERE id = ?")
             .bind(&self.user_id)
             .fetch_one(&self.pool)
@@ -263,7 +385,7 @@ impl LocalStorageProvider {
         &self,
         settings: &crate::user::UserSettings,
     ) -> Result<(), sqlx::Error> {
-        let settings_json = serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string());
+        let settings_json = serde_json::to_string(settings).expect("UserSettings serializes");
         sqlx::query("UPDATE users SET settings = ? WHERE id = ?")
             .bind(settings_json)
             .bind(&self.user_id)
@@ -293,186 +415,62 @@ impl LocalStorageProvider {
         Ok(count > 0)
     }
 
-    pub async fn list_deck_summaries(&self) -> Result<Vec<DeckSummaryRecord>, sqlx::Error> {
-        use sqlx::Row;
-
+    async fn due_cutoff(&self) -> i64 {
         let settings = self.get_user_settings().await.unwrap_or_default();
         let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
-        let due_cutoff = now_ms() + learn_ahead_ms;
+        now_ms() + learn_ahead_ms
+    }
 
-        let records = sqlx::query(
-            r#"
-            WITH RECURSIVE deck_closure(ancestor_id, descendant_id) AS (
-                SELECT id, id
-                FROM decks
-                WHERE user_id = ?
-                UNION ALL
-                SELECT dc.ancestor_id, d.id
-                FROM deck_closure dc
-                JOIN decks d ON d.parent_id = dc.descendant_id
-                WHERE d.user_id = ?
-            ),
-            review_counts AS (
-                SELECT card_id, COUNT(*) as review_count
-                FROM review_log
-                WHERE user_id = ?
-                GROUP BY card_id
-            )
-            SELECT
-                d.id,
-                d.parent_id,
-                d.name,
-                d.full_path,
-                COALESCE(d.target_language, '') as target_language,
-                COUNT(c.id) as total_cards,
-                SUM(CASE
-                    WHEN r.due_date <= ?
-                     AND r.interval_days = 0
-                     AND COALESCE(rc.review_count, 0) = 0
-                    THEN 1 ELSE 0
-                END) as due_new_cards,
-                SUM(CASE
-                    WHEN ((r.interval_days > 0 AND r.interval_days < 1)
-                      OR (r.interval_days = 0 AND COALESCE(rc.review_count, 0) > 0))
-                     AND r.due_date <= ?
-                    THEN 1 ELSE 0
-                END) as due_learning_cards,
-                SUM(CASE
-                    WHEN r.interval_days >= 1
-                     AND r.due_date <= ?
-                    THEN 1 ELSE 0
-                END) as due_review_cards
-            FROM decks d
-            LEFT JOIN deck_closure dc ON dc.ancestor_id = d.id
-            LEFT JOIN cards c ON c.deck_id = dc.descendant_id
-            LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
-            LEFT JOIN review_counts rc ON c.id = rc.card_id
-            WHERE d.user_id = ?
-            GROUP BY d.id
-            ORDER BY d.full_path
-            "#,
-        )
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .bind(due_cutoff)
-        .bind(due_cutoff)
-        .bind(due_cutoff)
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .fetch_all(&self.pool)
-        .await?;
+    fn build_deck_summary_sql(filter_by_id: bool) -> String {
+        let mut sql = String::with_capacity(1024);
+        sql.push_str(DECK_CLOSURE_CTE);
+        sql.push_str(DECK_SUMMARY_SELECT);
+        sql.push_str(if filter_by_id {
+            " WHERE d.user_id = ? AND d.id = ? GROUP BY d.id"
+        } else {
+            " WHERE d.user_id = ? GROUP BY d.id ORDER BY d.full_path"
+        });
+        sql
+    }
 
-        Ok(records
-            .into_iter()
-            .map(|row| DeckSummaryRecord {
-                id: row.get("id"),
-                parent_deck_id: row.get("parent_id"),
-                name: row.get("name"),
-                full_path: row.get("full_path"),
-                target_language_iso: row.get("target_language"),
-                counts: DeckCountsRecord {
-                    total_cards: row.get::<i64, _>("total_cards") as usize,
-                    due_new_cards: row.get::<Option<i64>, _>("due_new_cards").unwrap_or(0)
-                        as usize,
-                    due_learning_cards: row
-                        .get::<Option<i64>, _>("due_learning_cards")
-                        .unwrap_or(0) as usize,
-                    due_review_cards: row.get::<Option<i64>, _>("due_review_cards").unwrap_or(0)
-                        as usize,
-                },
-            })
-            .collect())
+    pub async fn list_deck_summaries(&self) -> Result<Vec<DeckSummaryRecord>, sqlx::Error> {
+        let due_cutoff = self.due_cutoff().await;
+        let sql = Self::build_deck_summary_sql(false);
+        let records = sqlx::query(&sql)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .bind(due_cutoff)
+            .bind(due_cutoff)
+            .bind(due_cutoff)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(records.iter().map(row_to_deck_summary).collect())
     }
 
     pub async fn get_deck_summary(
         &self,
         deck_id: &str,
     ) -> Result<Option<DeckSummaryRecord>, sqlx::Error> {
-        use sqlx::Row;
+        let due_cutoff = self.due_cutoff().await;
+        let sql = Self::build_deck_summary_sql(true);
+        let record = sqlx::query(&sql)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .bind(due_cutoff)
+            .bind(due_cutoff)
+            .bind(due_cutoff)
+            .bind(&self.user_id)
+            .bind(&self.user_id)
+            .bind(deck_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
-        let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
-        let due_cutoff = now_ms() + learn_ahead_ms;
-
-        let record = sqlx::query(
-            r#"
-            WITH RECURSIVE deck_closure(ancestor_id, descendant_id) AS (
-                SELECT id, id
-                FROM decks
-                WHERE user_id = ?
-                UNION ALL
-                SELECT dc.ancestor_id, d.id
-                FROM deck_closure dc
-                JOIN decks d ON d.parent_id = dc.descendant_id
-                WHERE d.user_id = ?
-            ),
-            review_counts AS (
-                SELECT card_id, COUNT(*) as review_count
-                FROM review_log
-                WHERE user_id = ?
-                GROUP BY card_id
-            )
-            SELECT
-                d.id,
-                d.parent_id,
-                d.name,
-                d.full_path,
-                COALESCE(d.target_language, '') as target_language,
-                COUNT(c.id) as total_cards,
-                SUM(CASE
-                    WHEN r.due_date <= ?
-                     AND r.interval_days = 0
-                     AND COALESCE(rc.review_count, 0) = 0
-                    THEN 1 ELSE 0
-                END) as due_new_cards,
-                SUM(CASE
-                    WHEN ((r.interval_days > 0 AND r.interval_days < 1)
-                      OR (r.interval_days = 0 AND COALESCE(rc.review_count, 0) > 0))
-                     AND r.due_date <= ?
-                    THEN 1 ELSE 0
-                END) as due_learning_cards,
-                SUM(CASE
-                    WHEN r.interval_days >= 1
-                     AND r.due_date <= ?
-                    THEN 1 ELSE 0
-                END) as due_review_cards
-            FROM decks d
-            LEFT JOIN deck_closure dc ON dc.ancestor_id = d.id
-            LEFT JOIN cards c ON c.deck_id = dc.descendant_id
-            LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
-            LEFT JOIN review_counts rc ON c.id = rc.card_id
-            WHERE d.user_id = ? AND d.id = ?
-            GROUP BY d.id
-            "#,
-        )
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .bind(due_cutoff)
-        .bind(due_cutoff)
-        .bind(due_cutoff)
-        .bind(&self.user_id)
-        .bind(&self.user_id)
-        .bind(deck_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(record.map(|row| DeckSummaryRecord {
-            id: row.get("id"),
-            parent_deck_id: row.get("parent_id"),
-            name: row.get("name"),
-            full_path: row.get("full_path"),
-            target_language_iso: row.get("target_language"),
-            counts: DeckCountsRecord {
-                total_cards: row.get::<i64, _>("total_cards") as usize,
-                due_new_cards: row.get::<Option<i64>, _>("due_new_cards").unwrap_or(0) as usize,
-                due_learning_cards: row.get::<Option<i64>, _>("due_learning_cards").unwrap_or(0)
-                    as usize,
-                due_review_cards: row.get::<Option<i64>, _>("due_review_cards").unwrap_or(0)
-                    as usize,
-            },
-        }))
+        Ok(record.as_ref().map(row_to_deck_summary))
     }
 
     pub async fn select_study_cards(
@@ -481,98 +479,40 @@ impl LocalStorageProvider {
         mode: StudyMode,
         limit: i64,
     ) -> Result<Vec<StudyCardRecord>, sqlx::Error> {
-        use sqlx::Row;
+        let due_cutoff = self.due_cutoff().await;
 
-        let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
-        let due_cutoff = now_ms() + learn_ahead_ms;
+        let mut sql = String::with_capacity(512);
+        sql.push_str(DECK_TREE_CTE);
+        sql.push_str("SELECT ");
+        sql.push_str(STUDY_CARD_PROJECTION);
+        sql.push_str(" FROM cards c ");
+        match mode {
+            StudyMode::Preview => sql.push_str(
+                "LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ? \
+                 WHERE c.deck_id IN deck_tree \
+                 ORDER BY COALESCE(r.due_date, 0) ASC, c.created_at ASC LIMIT ?",
+            ),
+            StudyMode::Review => sql.push_str(
+                "JOIN reviews r ON c.id = r.card_id \
+                 WHERE c.deck_id IN deck_tree AND r.user_id = ? AND r.due_date <= ? \
+                 ORDER BY r.due_date ASC, c.created_at ASC LIMIT ?",
+            ),
+        }
 
-        let query = match mode {
-            StudyMode::Preview => {
-                r#"
-                WITH RECURSIVE deck_tree(id) AS (
-                    SELECT id FROM decks WHERE id = ? AND user_id = ?
-                    UNION ALL
-                    SELECT d.id FROM decks d JOIN deck_tree dt ON d.parent_id = dt.id WHERE d.user_id = ?
-                )
-                SELECT
-                    c.id,
-                    c.deck_id,
-                    COALESCE(c.skill_id, '') as skill_id,
-                    COALESCE(c.skill_name, '') as skill_name,
-                    COALESCE(c.template_name, '') as template_name,
-                    c.front_html,
-                    c.back_html,
-                    c.metadata_json,
-                    c.audio_path
-                FROM cards c
-                LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
-                WHERE c.deck_id IN deck_tree
-                ORDER BY COALESCE(r.due_date, 0) ASC, c.created_at ASC
-                LIMIT ?
-                "#
-            }
-            StudyMode::Review => {
-                r#"
-                WITH RECURSIVE deck_tree(id) AS (
-                    SELECT id FROM decks WHERE id = ? AND user_id = ?
-                    UNION ALL
-                    SELECT d.id FROM decks d JOIN deck_tree dt ON d.parent_id = dt.id WHERE d.user_id = ?
-                )
-                SELECT
-                    c.id,
-                    c.deck_id,
-                    COALESCE(c.skill_id, '') as skill_id,
-                    COALESCE(c.skill_name, '') as skill_name,
-                    COALESCE(c.template_name, '') as template_name,
-                    c.front_html,
-                    c.back_html,
-                    c.metadata_json,
-                    c.audio_path
-                FROM cards c
-                JOIN reviews r ON c.id = r.card_id
-                WHERE c.deck_id IN deck_tree
-                  AND r.user_id = ?
-                  AND r.due_date <= ?
-                ORDER BY r.due_date ASC, c.created_at ASC
-                LIMIT ?
-                "#
-            }
-        };
-
-        let mut sql = sqlx::query(query)
+        let mut q = sqlx::query(&sql)
             .bind(deck_id)
             .bind(&self.user_id)
             .bind(&self.user_id)
             .bind(&self.user_id);
-
         if mode == StudyMode::Review {
-            sql = sql.bind(due_cutoff);
+            q = q.bind(due_cutoff);
         }
+        let records = q.bind(limit).fetch_all(&self.pool).await?;
 
-        let records = sql.bind(limit).fetch_all(&self.pool).await?;
-
-        Ok(records
-            .into_iter()
-            .map(|row| {
-                let metadata_json: String = row.get("metadata_json");
-                StudyCardRecord {
-                    card_id: row.get("id"),
-                    deck_id: row.get("deck_id"),
-                    skill_id: row.get("skill_id"),
-                    skill_name: row.get("skill_name"),
-                    template_name: row.get("template_name"),
-                    front_html: row.get("front_html"),
-                    back_html: row.get("back_html"),
-                    explanation_html: explanation_html_from_metadata(&metadata_json),
-                    audio_path: row.get("audio_path"),
-                }
-            })
-            .collect())
+        Ok(records.iter().map(row_to_study_card).collect())
     }
 
     pub async fn fetch_decks_for_export(&self) -> Result<Vec<NewDeckData>, sqlx::Error> {
-        use sqlx::Row;
         use std::collections::BTreeMap;
 
         let records = sqlx::query(
@@ -606,6 +546,7 @@ impl LocalStorageProvider {
                 .get::<Option<String>, _>("target_language")
                 .unwrap_or_default();
             let metadata_json: String = rec.get("metadata_json");
+            let (explanation, ipa) = parse_card_metadata(&metadata_json);
 
             let entry = NewCardEntry {
                 front_html: rec.get("front_html"),
@@ -616,8 +557,8 @@ impl LocalStorageProvider {
                 fields_json: rec
                     .get::<Option<String>, _>("fields_json")
                     .unwrap_or_else(|| "{}".to_string()),
-                explanation: explanation_html_from_metadata(&metadata_json),
-                ipa: ipa_from_metadata(&metadata_json),
+                explanation,
+                ipa,
                 metadata_json,
                 audio_path: rec.get("audio_path"),
             };
@@ -643,9 +584,9 @@ impl LocalStorageProvider {
         algorithm: &dyn crate::srs::SrsAlgorithm,
         now: i64,
     ) -> Result<crate::srs::SchedulingOutput, sqlx::Error> {
-        let output = self
-            .compute_scheduling_output(card_id, rating, algorithm, now)
-            .await?;
+        let mut tx = self.pool.begin().await?;
+        let history = self.read_review_history(card_id, &mut tx).await?;
+        let output = algorithm.schedule(&history, rating, now);
 
         sqlx::query(
             "INSERT INTO practice_log (card_id, user_id, rating, practiced_at) VALUES (?, ?, ?, ?)",
@@ -654,9 +595,10 @@ impl LocalStorageProvider {
         .bind(&self.user_id)
         .bind(i64::from(rating as u8))
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
+        tx.commit().await?;
         Ok(output)
     }
 
@@ -667,9 +609,9 @@ impl LocalStorageProvider {
         algorithm: &dyn crate::srs::SrsAlgorithm,
         now: i64,
     ) -> Result<crate::srs::SchedulingOutput, sqlx::Error> {
-        let output = self
-            .compute_scheduling_output(card_id, rating, algorithm, now)
-            .await?;
+        let mut tx = self.pool.begin().await?;
+        let history = self.read_review_history(card_id, &mut tx).await?;
+        let output = algorithm.schedule(&history, rating, now);
 
         sqlx::query(
             "INSERT INTO review_log (card_id, user_id, rating, reviewed_at) VALUES (?, ?, ?, ?)",
@@ -678,33 +620,40 @@ impl LocalStorageProvider {
         .bind(&self.user_id)
         .bind(i64::from(rating as u8))
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO reviews (card_id, user_id, due_date, interval_days)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(card_id, user_id) DO UPDATE
-            SET due_date = excluded.due_date, interval_days = excluded.interval_days
-            "#,
+        sqlx::query(UPSERT_REVIEW_CACHE_SQL)
+            .bind(card_id)
+            .bind(&self.user_id)
+            .bind(output.due_date)
+            .bind(output.interval_days)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(output)
+    }
+
+    async fn read_review_history(
+        &self,
+        card_id: &str,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<Vec<crate::srs::ReviewEvent>, sqlx::Error> {
+        let records = sqlx::query(
+            "SELECT rating, reviewed_at FROM review_log WHERE card_id = ? AND user_id = ? ORDER BY reviewed_at",
         )
         .bind(card_id)
         .bind(&self.user_id)
-        .bind(output.due_date)
-        .bind(output.interval_days)
-        .execute(&self.pool)
+        .fetch_all(&mut **tx)
         .await?;
-
-        Ok(output)
+        Ok(records.iter().map(row_to_review_event).collect())
     }
 
     pub async fn get_review_history(
         &self,
         card_id: &str,
     ) -> Result<Vec<crate::srs::ReviewEvent>, sqlx::Error> {
-        use sqlx::Row;
-
         let records = sqlx::query(
             "SELECT rating, reviewed_at FROM review_log WHERE card_id = ? AND user_id = ? ORDER BY reviewed_at",
         )
@@ -712,83 +661,74 @@ impl LocalStorageProvider {
         .bind(&self.user_id)
         .fetch_all(&self.pool)
         .await?;
-
-        Ok(records
-            .into_iter()
-            .map(|record| {
-                let rating_u8 = record.get::<i64, _>("rating") as u8;
-                crate::srs::ReviewEvent {
-                    rating: crate::srs::Rating::from_u8(rating_u8)
-                        .unwrap_or(crate::srs::Rating::Again),
-                    reviewed_at: record.get("reviewed_at"),
-                }
-            })
-            .collect())
+        Ok(records.iter().map(row_to_review_event).collect())
     }
 
     pub async fn rebuild_scheduling_cache(
         &self,
         algorithm: &dyn crate::srs::SrsAlgorithm,
     ) -> Result<usize, sqlx::Error> {
-        use sqlx::Row;
+        // Single fetch, pre-sorted by card_id so we can group in a linear pass.
+        let rows = sqlx::query(
+            "SELECT card_id, rating, reviewed_at FROM review_log \
+             WHERE user_id = ? ORDER BY card_id, reviewed_at",
+        )
+        .bind(&self.user_id)
+        .fetch_all(&self.pool)
+        .await?;
 
-        let card_rows = sqlx::query("SELECT DISTINCT card_id FROM review_log WHERE user_id = ?")
-            .bind(&self.user_id)
-            .fetch_all(&self.pool)
-            .await?;
-
-        let mut count = 0;
-        let mut tx = self.pool.begin().await?;
-
-        for row in &card_rows {
-            let card_id: String = row.get("card_id");
-            let records = sqlx::query(
-                "SELECT rating, reviewed_at FROM review_log WHERE card_id = ? AND user_id = ? ORDER BY reviewed_at",
-            )
-            .bind(&card_id)
-            .bind(&self.user_id)
-            .fetch_all(&self.pool)
-            .await?;
-
-            if records.is_empty() {
-                continue;
-            }
-
-            let mut history: Vec<crate::srs::ReviewEvent> = Vec::new();
-            let mut last_output = None;
-
-            for record in &records {
-                let rating_u8 = record.get::<i64, _>("rating") as u8;
-                let rating =
-                    crate::srs::Rating::from_u8(rating_u8).unwrap_or(crate::srs::Rating::Again);
-                let reviewed_at: i64 = record.get("reviewed_at");
-                let output = algorithm.schedule(&history, rating, reviewed_at);
-                last_output = Some(output);
-                history.push(crate::srs::ReviewEvent {
-                    rating,
-                    reviewed_at,
-                });
-            }
-
-            if let Some(output) = last_output {
-                sqlx::query(
-                    r#"
-                    INSERT INTO reviews (card_id, user_id, due_date, interval_days)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(card_id, user_id) DO UPDATE
-                    SET due_date = excluded.due_date, interval_days = excluded.interval_days
-                    "#,
-                )
-                .bind(&card_id)
-                .bind(&self.user_id)
-                .bind(output.due_date)
-                .bind(output.interval_days)
-                .execute(&mut *tx)
-                .await?;
-                count += 1;
-            }
+        if rows.is_empty() {
+            return Ok(0);
         }
 
+        // Group rows by card_id, fold history → final SchedulingOutput per card.
+        let mut outputs: Vec<(String, crate::srs::SchedulingOutput)> = Vec::new();
+        let mut current_card: Option<String> = None;
+        let mut history: Vec<crate::srs::ReviewEvent> = Vec::new();
+        let mut last_output: Option<crate::srs::SchedulingOutput> = None;
+
+        for row in &rows {
+            let card_id: String = row.get("card_id");
+            if current_card.as_deref() != Some(card_id.as_str()) {
+                if let (Some(prev), Some(out)) = (current_card.take(), last_output.take()) {
+                    outputs.push((prev, out));
+                }
+                current_card = Some(card_id);
+                history.clear();
+            }
+            let event = row_to_review_event(row);
+            let output = algorithm.schedule(&history, event.rating, event.reviewed_at);
+            last_output = Some(output);
+            history.push(event);
+        }
+        if let (Some(prev), Some(out)) = (current_card, last_output) {
+            outputs.push((prev, out));
+        }
+
+        if outputs.is_empty() {
+            return Ok(0);
+        }
+
+        // Batched UPSERT: 4 params/row, chunk at 200 rows to stay under SQLite's 999-param limit.
+        const CHUNK: usize = 200;
+        let count = outputs.len();
+        let mut tx = self.pool.begin().await?;
+        for chunk in outputs.chunks(CHUNK) {
+            let mut qb = QueryBuilder::<Sqlite>::new(
+                "INSERT INTO reviews (card_id, user_id, due_date, interval_days) ",
+            );
+            qb.push_values(chunk, |mut b, (card_id, out)| {
+                b.push_bind(card_id)
+                    .push_bind(&self.user_id)
+                    .push_bind(out.due_date)
+                    .push_bind(out.interval_days);
+            });
+            qb.push(
+                " ON CONFLICT(card_id, user_id) DO UPDATE \
+                 SET due_date = excluded.due_date, interval_days = excluded.interval_days",
+            );
+            qb.build().execute(&mut *tx).await?;
+        }
         tx.commit().await?;
         Ok(count)
     }
@@ -819,8 +759,6 @@ impl LocalStorageProvider {
     }
 
     pub async fn get_drafts(&self) -> Result<Vec<DraftCard>, sqlx::Error> {
-        use sqlx::Row;
-
         let records = sqlx::query(
             "SELECT id, skill_id, skill_name, template_name, fields_json, explanation, metadata_json, created_at FROM draft_cards WHERE user_id = ? ORDER BY created_at",
         )
@@ -828,19 +766,7 @@ impl LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(records
-            .into_iter()
-            .map(|record| DraftCard {
-                id: record.get("id"),
-                skill_id: record.get("skill_id"),
-                skill_name: record.get("skill_name"),
-                template_name: record.get("template_name"),
-                fields_json: record.get("fields_json"),
-                explanation: record.get("explanation"),
-                metadata_json: record.get("metadata_json"),
-                created_at: record.get("created_at"),
-            })
-            .collect())
+        Ok(records.iter().map(row_to_draft_card).collect())
     }
 
     pub async fn clear_drafts(&self) -> Result<(), sqlx::Error> {
@@ -853,16 +779,15 @@ impl LocalStorageProvider {
 
     pub async fn delete_drafts(&self, ids: &[String]) -> Result<(), sqlx::Error> {
         for chunk in ids.chunks(500) {
-            let placeholders = vec!["?"; chunk.len()].join(",");
-            let sql = format!(
-                "DELETE FROM draft_cards WHERE user_id = ? AND id IN ({})",
-                placeholders
-            );
-            let mut query = sqlx::query(&sql).bind(&self.user_id);
+            let mut qb =
+                QueryBuilder::<Sqlite>::new("DELETE FROM draft_cards WHERE user_id = ");
+            qb.push_bind(&self.user_id).push(" AND id IN (");
+            let mut sep = qb.separated(", ");
             for id in chunk {
-                query = query.bind(id);
+                sep.push_bind(id);
             }
-            query.execute(&self.pool).await?;
+            qb.push(")");
+            qb.build().execute(&self.pool).await?;
         }
         Ok(())
     }
@@ -871,8 +796,6 @@ impl LocalStorageProvider {
         &self,
         tree_definition_id: &str,
     ) -> Result<Vec<UserTreeCustomization>, sqlx::Error> {
-        use sqlx::Row;
-
         let records = sqlx::query(
             "SELECT user_id, tree_definition_id, node_id, action, parent_id, node_name, node_instructions, prerequisites_json, sort_order, created_at \
              FROM user_tree_customizations WHERE user_id = ? AND tree_definition_id = ? ORDER BY sort_order, created_at",
@@ -882,21 +805,7 @@ impl LocalStorageProvider {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(records
-            .into_iter()
-            .map(|record| UserTreeCustomization {
-                user_id: record.get("user_id"),
-                tree_definition_id: record.get("tree_definition_id"),
-                node_id: record.get("node_id"),
-                action: record.get("action"),
-                parent_id: record.get("parent_id"),
-                node_name: record.get("node_name"),
-                node_instructions: record.get("node_instructions"),
-                prerequisites_json: record.get("prerequisites_json"),
-                sort_order: record.get("sort_order"),
-                created_at: record.get("created_at"),
-            })
-            .collect())
+        Ok(records.iter().map(row_to_customization).collect())
     }
 
     pub async fn upsert_tree_customization(
@@ -945,8 +854,6 @@ impl StorageProvider for LocalStorageProvider {
     async fn fetch_cards(
         &self,
     ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
-        use sqlx::Row;
-
         let records = sqlx::query(
             r#"
             SELECT
@@ -1011,48 +918,66 @@ impl StorageProvider for LocalStorageProvider {
         &self,
         deck_data: &NewDeckData,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        let mut added = 0;
+        if deck_data.cards.is_empty() {
+            let mut tx = self.pool.begin().await?;
+            self.get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(0);
+        }
+
         let mut tx = self.pool.begin().await?;
         let deck_id = self
             .get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx)
             .await?;
         let now = now_ms();
 
-        for entry in &deck_data.cards {
-            let card_id = Uuid::new_v4().to_string();
+        // Pre-generate one UUID per card so both batched INSERTs align by index.
+        let card_ids: Vec<String> = (0..deck_data.cards.len())
+            .map(|_| Uuid::now_v7().to_string())
+            .collect();
 
-            sqlx::query(
-                "INSERT INTO cards (id, deck_id, skill_id, skill_name, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&card_id)
-            .bind(&deck_id)
-            .bind(&entry.skill_id)
-            .bind(&entry.skill_name)
-            .bind(&entry.template_name)
-            .bind(&entry.front_html)
-            .bind(&entry.back_html)
-            .bind(&entry.fields_json)
-            .bind(&entry.metadata_json)
-            .bind(&entry.audio_path)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
+        // cards: 11 params per row → cap at 80 rows per chunk to stay under SQLite's 999-param limit.
+        const CARDS_CHUNK: usize = 80;
+        for (chunk_idx, id_chunk) in card_ids.chunks(CARDS_CHUNK).enumerate() {
+            let offset = chunk_idx * CARDS_CHUNK;
+            let entries = &deck_data.cards[offset..offset + id_chunk.len()];
+            let mut qb = QueryBuilder::<Sqlite>::new(
+                "INSERT INTO cards (id, deck_id, skill_id, skill_name, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
+            );
+            qb.push_values(id_chunk.iter().zip(entries), |mut b, (id, entry)| {
+                b.push_bind(id)
+                    .push_bind(&deck_id)
+                    .push_bind(&entry.skill_id)
+                    .push_bind(&entry.skill_name)
+                    .push_bind(&entry.template_name)
+                    .push_bind(&entry.front_html)
+                    .push_bind(&entry.back_html)
+                    .push_bind(&entry.fields_json)
+                    .push_bind(&entry.metadata_json)
+                    .push_bind(&entry.audio_path)
+                    .push_bind(now);
+            });
+            qb.build().execute(&mut *tx).await?;
+        }
 
-            sqlx::query(
-                "INSERT INTO reviews (card_id, user_id, due_date, interval_days) VALUES (?, ?, ?, 0)",
-            )
-            .bind(&card_id)
-            .bind(&self.user_id)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-
-            added += 1;
+        // reviews: 4 params per row → cap at 200 rows per chunk.
+        const REVIEWS_CHUNK: usize = 200;
+        for id_chunk in card_ids.chunks(REVIEWS_CHUNK) {
+            let mut qb = QueryBuilder::<Sqlite>::new(
+                "INSERT INTO reviews (card_id, user_id, due_date, interval_days) ",
+            );
+            qb.push_values(id_chunk.iter(), |mut b, id| {
+                b.push_bind(id)
+                    .push_bind(&self.user_id)
+                    .push_bind(now)
+                    .push_bind(0i64);
+            });
+            qb.build().execute(&mut *tx).await?;
         }
 
         tx.commit().await?;
-        Ok(added)
+        Ok(card_ids.len())
     }
 
     async fn delete_deck(
