@@ -702,9 +702,10 @@ mod tests {
         let deck_data = NewDeckData {
             name: "Export Test".to_string(),
             language_code: "pol".to_string(),
-            cards: vec![NewCardEntry {
+            cards: vec![lc_core::storage::NewCardEntry {
                 front_html: "Test front".to_string(),
                 back_html: "Test back".to_string(),
+                skill_id: "skill-1".to_string(),
                 skill_name: "Grammar".to_string(),
                 template_name: "default".to_string(),
                 fields_json: "{}".to_string(),
@@ -735,9 +736,10 @@ mod tests {
         let deck_data = NewDeckData {
             name: "SQLite Test".to_string(),
             language_code: "pol".to_string(),
-            cards: vec![NewCardEntry {
+            cards: vec![lc_core::storage::NewCardEntry {
                 front_html: "hello".to_string(),
                 back_html: "hola".to_string(),
+                skill_id: "skill-2".to_string(),
                 skill_name: "s1".to_string(),
                 template_name: "default".to_string(),
                 fields_json: "{}".to_string(),
