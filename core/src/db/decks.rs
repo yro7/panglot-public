@@ -1,11 +1,71 @@
-use sqlx::Row;
+use sqlx::{QueryBuilder, Row, Sqlite};
 use uuid::Uuid;
 
 use super::LocalStorageProvider;
 use super::sql::{DECK_CLOSURE_CTE, DECK_SUMMARY_SELECT};
 use super::types::{DeckSummaryRecord, now_ms, row_to_deck_summary};
+use crate::storage::NewDeckData;
 
 impl LocalStorageProvider {
+    pub(crate) async fn save_new_deck_data_in_tx(
+        &self,
+        deck_data: &NewDeckData,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<(String, usize), sqlx::Error> {
+        let deck_id = self
+            .get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, tx)
+            .await?;
+
+        if deck_data.cards.is_empty() {
+            return Ok((deck_id, 0));
+        }
+
+        let now = now_ms();
+        let card_ids: Vec<String> = (0..deck_data.cards.len())
+            .map(|_| Uuid::now_v7().to_string())
+            .collect();
+
+        const CARDS_CHUNK: usize = 75;
+        for (chunk_idx, id_chunk) in card_ids.chunks(CARDS_CHUNK).enumerate() {
+            let offset = chunk_idx * CARDS_CHUNK;
+            let entries = &deck_data.cards[offset..offset + id_chunk.len()];
+            let mut qb = QueryBuilder::<Sqlite>::new(
+                "INSERT INTO cards (id, deck_id, user_id, skill_id, skill_name, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
+            );
+            qb.push_values(id_chunk.iter().zip(entries), |mut b, (id, entry)| {
+                b.push_bind(id)
+                    .push_bind(&deck_id)
+                    .push_bind(&self.user_id)
+                    .push_bind(&entry.skill_id)
+                    .push_bind(&entry.skill_name)
+                    .push_bind(&entry.template_name)
+                    .push_bind(&entry.front_html)
+                    .push_bind(&entry.back_html)
+                    .push_bind(&entry.fields_json)
+                    .push_bind(&entry.metadata_json)
+                    .push_bind(&entry.audio_path)
+                    .push_bind(now);
+            });
+            qb.build().execute(&mut **tx).await?;
+        }
+
+        const REVIEWS_CHUNK: usize = 200;
+        for id_chunk in card_ids.chunks(REVIEWS_CHUNK) {
+            let mut qb = QueryBuilder::<Sqlite>::new(
+                "INSERT INTO reviews (card_id, user_id, due_date, interval_days) ",
+            );
+            qb.push_values(id_chunk.iter(), |mut b, id| {
+                b.push_bind(id)
+                    .push_bind(&self.user_id)
+                    .push_bind(now)
+                    .push_bind(0i64);
+            });
+            qb.build().execute(&mut **tx).await?;
+        }
+
+        Ok((deck_id, card_ids.len()))
+    }
+
     pub(super) async fn get_or_create_deck_hierarchy(
         &self,
         full_path: &str,
@@ -116,5 +176,23 @@ impl LocalStorageProvider {
             .fetch_optional(&self.pool)
             .await?;
         Ok(record.as_ref().map(row_to_deck_summary))
+    }
+
+    pub async fn get_deck_summary_by_full_path(
+        &self,
+        full_path: &str,
+    ) -> Result<Option<DeckSummaryRecord>, sqlx::Error> {
+        let deck_id = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM decks WHERE user_id = ? AND full_path = ?",
+        )
+        .bind(&self.user_id)
+        .bind(full_path)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match deck_id {
+            Some(deck_id) => self.get_deck_summary(&deck_id).await,
+            None => Ok(None),
+        }
     }
 }
