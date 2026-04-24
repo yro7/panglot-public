@@ -61,10 +61,11 @@ impl LocalStorageProvider {
         Ok(count > 0)
     }
 
-    pub(super) async fn due_cutoff(&self) -> i64 {
-        let settings = self.get_user_settings().await.unwrap_or_default();
-        let learn_ahead_ms = i64::from(settings.learn_ahead_minutes.get()) * 60 * 1000;
-        now_ms() + learn_ahead_ms
+    pub(super) async fn due_cutoff(&self) -> Result<i64, sqlx::Error> {
+        let settings = self.get_user_settings().await?;
+        let learn_ahead_ms =
+            i64::from(settings.study_preferences.learn_ahead_minutes.get()) * 60 * 1000;
+        Ok(now_ms() + learn_ahead_ms)
     }
 
     fn build_deck_summary_sql(filter_by_id: bool) -> String {
@@ -80,7 +81,7 @@ impl LocalStorageProvider {
     }
 
     pub async fn list_deck_summaries(&self) -> Result<Vec<DeckSummaryRecord>, sqlx::Error> {
-        let due_cutoff = self.due_cutoff().await;
+        let due_cutoff = self.due_cutoff().await?;
         let sql = Self::build_deck_summary_sql(false);
         let records = sqlx::query(&sql)
             .bind(&self.user_id)
@@ -100,7 +101,7 @@ impl LocalStorageProvider {
         &self,
         deck_id: &str,
     ) -> Result<Option<DeckSummaryRecord>, sqlx::Error> {
-        let due_cutoff = self.due_cutoff().await;
+        let due_cutoff = self.due_cutoff().await?;
         let sql = Self::build_deck_summary_sql(true);
         let record = sqlx::query(&sql)
             .bind(&self.user_id)

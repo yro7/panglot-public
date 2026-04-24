@@ -24,12 +24,21 @@ use types::{DEFAULT_USER_ID, now_ms};
 pub struct LocalStorageProvider {
     pub pool: SqlitePool,
     pub user_id: String,
+    pub settings_defaults: crate::user::UserSettings,
 }
 
 impl LocalStorageProvider {
     /// Creates a provider scoped to a specific user (from JWT `sub` claim).
-    pub const fn for_user(pool: SqlitePool, user_id: String) -> Self {
-        Self { pool, user_id }
+    pub fn for_user(
+        pool: SqlitePool,
+        user_id: String,
+        settings_defaults: crate::user::UserSettings,
+    ) -> Self {
+        Self {
+            pool,
+            user_id,
+            settings_defaults,
+        }
     }
 
     /// Auto-provision user from JWT claims. Provider-agnostic:
@@ -46,14 +55,18 @@ impl LocalStorageProvider {
 
         let email = claims["email"].as_str();
 
+        let settings_json = serde_json::to_string(&self.settings_defaults)
+            .expect("default user settings should serialize");
+
         sqlx::query(
             "INSERT INTO users (id, display_name, email, settings, created_at)
-             VALUES (?, ?, ?, '{}', ?)
+             VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, email = COALESCE(excluded.email, email)",
         )
         .bind(&self.user_id)
         .bind(display_name)
         .bind(email)
+        .bind(settings_json)
         .bind(now_ms())
         .execute(&self.pool)
         .await?;
@@ -64,7 +77,10 @@ impl LocalStorageProvider {
     ///
     /// # Errors
     /// Returns a database error if the connection fails or migrations fail.
-    pub async fn init(db_path: impl AsRef<Path>) -> Result<Self, sqlx::Error> {
+    pub async fn init(
+        db_path: impl AsRef<Path>,
+        settings_defaults: crate::user::UserSettings,
+    ) -> Result<Self, sqlx::Error> {
         let db_path = db_path.as_ref();
 
         if let Some(parent) = db_path.parent() {
@@ -92,6 +108,7 @@ impl LocalStorageProvider {
         let provider = Self {
             pool,
             user_id: DEFAULT_USER_ID.to_string(),
+            settings_defaults,
         };
 
         sqlx::migrate!("./migrations")
@@ -104,10 +121,13 @@ impl LocalStorageProvider {
     }
 
     async fn ensure_default_user(&self) -> Result<(), sqlx::Error> {
-        let query = "INSERT INTO users (id, display_name, email, settings, created_at) VALUES (?, ?, NULL, '{}', ?) ON CONFLICT(id) DO NOTHING";
+        let settings_json = serde_json::to_string(&self.settings_defaults)
+            .expect("default user settings should serialize");
+        let query = "INSERT INTO users (id, display_name, email, settings, created_at) VALUES (?, ?, NULL, ?, ?) ON CONFLICT(id) DO NOTHING";
         sqlx::query(query)
             .bind(&self.user_id)
             .bind("Default User")
+            .bind(settings_json)
             .bind(now_ms())
             .execute(&self.pool)
             .await?;
@@ -122,21 +142,26 @@ impl LocalStorageProvider {
             .await?;
 
         let settings_json: String = row.get("settings");
-        let settings = serde_json::from_str(&settings_json).unwrap_or_default();
-        Ok(settings)
+        crate::user::parse_persisted_user_settings(&settings_json, &self.settings_defaults)
+            .map_err(|error| sqlx::Error::Protocol(error))
     }
 
-    /// Update user settings.
-    pub async fn update_user_settings(
+    /// Update user settings and rebuild the scheduling cache for the selected algorithm.
+    pub async fn update_user_settings_and_rebuild_scheduling_cache(
         &self,
         settings: &crate::user::UserSettings,
+        algorithm: &dyn crate::srs::SrsAlgorithm,
     ) -> Result<(), sqlx::Error> {
         let settings_json = serde_json::to_string(settings).expect("UserSettings serializes");
+        let mut tx = self.pool.begin().await?;
         sqlx::query("UPDATE users SET settings = ? WHERE id = ?")
             .bind(settings_json)
             .bind(&self.user_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        self.rebuild_scheduling_cache_in_tx(algorithm, &mut tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 }
@@ -174,8 +199,7 @@ impl StorageProvider for LocalStorageProvider {
             .map(|record| {
                 let card_id: String = record.get("card_id");
                 let metadata: String = record.get("metadata_json");
-                let fields =
-                    format!("{}\x1f{}", record.get::<String, _>("front_html"), metadata);
+                let fields = format!("{}\x1f{}", record.get::<String, _>("front_html"), metadata);
                 StoredCard {
                     note_id: card_id.clone(),
                     card_id,
@@ -293,7 +317,7 @@ impl StorageProvider for LocalStorageProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::srs::{Rating, SrsRegistry};
+    use crate::srs::{Rating, SrsAlgorithmId, SrsRegistry};
     use crate::storage::{NewCardEntry, StorageProvider};
 
     fn temp_db_path(test_name: &str) -> std::path::PathBuf {
@@ -301,9 +325,12 @@ mod tests {
     }
 
     async fn init_provider(test_name: &str) -> LocalStorageProvider {
-        LocalStorageProvider::init(temp_db_path(test_name))
-            .await
-            .expect("provider should initialize")
+        LocalStorageProvider::init(
+            temp_db_path(test_name),
+            crate::user::UserSettings::default(),
+        )
+        .await
+        .expect("provider should initialize")
     }
 
     fn test_deck(name: &str, skill_id: &str, skill_name: &str) -> NewDeckData {
@@ -379,7 +406,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn select_study_cards_recurses_for_preview_and_review() {
+    async fn select_study_cards_recurses_for_practice_and_review() {
         let provider = init_provider("study_cards").await;
         provider
             .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
@@ -392,46 +419,52 @@ mod tests {
 
         let parent_id = deck_id_for_path(&provider, "Vocabulary").await;
 
-        let preview_cards = provider
-            .select_study_cards(&parent_id, StudyMode::Preview, 20)
+        let practice_cards = provider
+            .select_study_cards(&parent_id, StudyMode::Practice, 20)
             .await
-            .expect("preview cards should load");
+            .expect("practice cards should load");
         let review_cards = provider
             .select_study_cards(&parent_id, StudyMode::Review, 20)
             .await
             .expect("review cards should load");
 
-        assert_eq!(preview_cards.len(), 2);
+        assert_eq!(practice_cards.len(), 2);
         assert_eq!(review_cards.len(), 2);
         assert!(
-            preview_cards
+            practice_cards
                 .iter()
                 .all(|card| !card.explanation_html.is_empty())
         );
     }
 
     #[tokio::test]
-    async fn preview_rating_writes_only_practice_log() {
-        let provider = init_provider("preview_rating").await;
+    async fn practice_rating_writes_only_practice_log() {
+        let provider = init_provider("practice_rating").await;
         provider
             .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
             .await
             .expect("deck should save");
 
         let card_id = first_card_id_for_path(&provider, "Vocabulary::Family").await;
-        let before_interval: f64 = sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
-            .bind(&card_id)
-            .bind(&provider.user_id)
-            .fetch_one(&provider.pool)
-            .await
-            .expect("review cache should exist")
-            .get("interval_days");
+        let before_interval: f64 =
+            sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review cache should exist")
+                .get("interval_days");
 
         let algorithm = SrsRegistry::new();
         let output = provider
-            .preview_rating(&card_id, Rating::Easy, algorithm.default(), 1_700_000_000_000)
+            .submit_practice(
+                &card_id,
+                Rating::Easy,
+                algorithm.default(),
+                1_700_000_000_000,
+            )
             .await
-            .expect("preview rating should succeed");
+            .expect("practice rating should succeed");
 
         let practice_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM practice_log WHERE card_id = ? AND user_id = ?",
@@ -441,21 +474,21 @@ mod tests {
         .fetch_one(&provider.pool)
         .await
         .expect("practice count should load");
-        let review_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM review_log WHERE card_id = ? AND user_id = ?",
-        )
-        .bind(&card_id)
-        .bind(&provider.user_id)
-        .fetch_one(&provider.pool)
-        .await
-        .expect("review count should load");
-        let after_interval: f64 = sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
-            .bind(&card_id)
-            .bind(&provider.user_id)
-            .fetch_one(&provider.pool)
-            .await
-            .expect("review cache should exist")
-            .get("interval_days");
+        let review_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM review_log WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review count should load");
+        let after_interval: f64 =
+            sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review cache should exist")
+                .get("interval_days");
 
         assert_eq!(practice_count, 1);
         assert_eq!(review_count, 0);
@@ -475,7 +508,12 @@ mod tests {
         let algorithm = SrsRegistry::new();
 
         provider
-            .submit_review(&card_id, Rating::Easy, algorithm.default(), 1_700_000_000_000)
+            .submit_review(
+                &card_id,
+                Rating::Easy,
+                algorithm.default(),
+                1_700_000_000_000,
+            )
             .await
             .expect("review should succeed");
 
@@ -487,14 +525,13 @@ mod tests {
         .fetch_one(&provider.pool)
         .await
         .expect("practice count should load");
-        let review_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM review_log WHERE card_id = ? AND user_id = ?",
-        )
-        .bind(&card_id)
-        .bind(&provider.user_id)
-        .fetch_one(&provider.pool)
-        .await
-        .expect("review count should load");
+        let review_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM review_log WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review count should load");
         let interval_days: f64 =
             sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
                 .bind(&card_id)
@@ -507,6 +544,64 @@ mod tests {
         assert_eq!(practice_count, 0);
         assert_eq!(review_count, 1);
         assert!(interval_days >= 1.0);
+    }
+
+    #[tokio::test]
+    async fn updating_settings_rebuilds_review_cache_for_new_algorithm() {
+        let provider = init_provider("settings_rebuild_cache").await;
+        provider
+            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
+            .await
+            .expect("deck should save");
+
+        let card_id = first_card_id_for_path(&provider, "Vocabulary::Family").await;
+        let registry = SrsRegistry::new();
+        let sm2 = registry
+            .get_typed(SrsAlgorithmId::Sm2)
+            .expect("sm2 should exist");
+        let leitner = registry
+            .get_typed(SrsAlgorithmId::Leitner)
+            .expect("leitner should exist");
+
+        provider
+            .submit_review(&card_id, Rating::Good, sm2, 1_700_000_000_000)
+            .await
+            .expect("review should succeed");
+        provider
+            .submit_review(&card_id, Rating::Good, sm2, 1_700_000_600_000)
+            .await
+            .expect("second review should succeed");
+
+        let interval_before: f64 =
+            sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review cache should exist")
+                .get("interval_days");
+
+        let mut settings = provider
+            .get_user_settings()
+            .await
+            .expect("settings should load");
+        settings.study_preferences.srs.algorithm_id = SrsAlgorithmId::Leitner;
+        provider
+            .update_user_settings_and_rebuild_scheduling_cache(&settings, leitner)
+            .await
+            .expect("settings update should rebuild cache");
+
+        let interval_after: f64 =
+            sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
+                .bind(&card_id)
+                .bind(&provider.user_id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("review cache should exist")
+                .get("interval_days");
+
+        assert_eq!(interval_before, 1.0);
+        assert_eq!(interval_after, 3.0);
     }
 
     #[tokio::test]
@@ -531,11 +626,14 @@ mod tests {
         .expect("card should exist");
         let deck_id = deck_id_for_path(&provider, "Grammar::Accusative").await;
         let study_cards = provider
-            .select_study_cards(&deck_id, StudyMode::Preview, 20)
+            .select_study_cards(&deck_id, StudyMode::Practice, 20)
             .await
             .expect("study cards should load");
 
-        assert_eq!(row.get::<Option<String>, _>("skill_id").unwrap_or_default(), "skill-accusative");
+        assert_eq!(
+            row.get::<Option<String>, _>("skill_id").unwrap_or_default(),
+            "skill-accusative"
+        );
         assert_eq!(row.get::<String, _>("skill_name"), "Accusative");
         assert_eq!(study_cards[0].skill_id, "skill-accusative");
         assert_eq!(study_cards[0].skill_name, "Accusative");

@@ -19,7 +19,7 @@ impl LocalStorageProvider {
         mode: StudyMode,
         limit: i64,
     ) -> Result<Vec<StudyCardRecord>, sqlx::Error> {
-        let due_cutoff = self.due_cutoff().await;
+        let due_cutoff = self.due_cutoff().await?;
 
         let mut sql = String::with_capacity(512);
         sql.push_str(DECK_TREE_CTE);
@@ -27,7 +27,7 @@ impl LocalStorageProvider {
         sql.push_str(STUDY_CARD_PROJECTION);
         sql.push_str(" FROM cards c ");
         match mode {
-            StudyMode::Preview => sql.push_str(
+            StudyMode::Practice => sql.push_str(
                 "LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ? \
                  WHERE c.deck_id IN deck_tree \
                  ORDER BY COALESCE(r.due_date, 0) ASC, c.created_at ASC LIMIT ?",

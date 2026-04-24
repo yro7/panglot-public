@@ -7,7 +7,7 @@ pub(super) const DEFAULT_USER_ID: &str = "default-user";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StudyMode {
-    Preview,
+    Practice,
     Review,
 }
 
