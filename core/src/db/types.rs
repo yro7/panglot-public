@@ -42,6 +42,40 @@ pub struct StudyCardRecord {
     pub audio_path: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenerationBatchRecord {
+    pub id: String,
+    pub language_iso: String,
+    pub tree_definition_id: String,
+    pub node_id: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub card_model_id: String,
+    pub default_deck_name: String,
+    pub materialized_deck_id: Option<String>,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenerationBatchCardRecord {
+    pub id: String,
+    pub template_name: String,
+    pub front_html: String,
+    pub back_html: String,
+    pub explanation_html: String,
+    pub fields_json: String,
+    pub metadata_json: String,
+    pub audio_path: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredGenerationBatch {
+    pub batch: GenerationBatchRecord,
+    pub cards: Vec<GenerationBatchCardRecord>,
+}
+
 /// A per-user customization applied on top of the base YAML skill tree.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct UserTreeCustomization {
@@ -71,6 +105,39 @@ pub struct DraftCard {
     pub explanation: String,
     pub metadata_json: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewGenerationBatchCard {
+    pub id: String,
+    pub template_name: String,
+    pub front_html: String,
+    pub back_html: String,
+    pub explanation_html: String,
+    pub fields_json: String,
+    pub metadata_json: String,
+    pub audio_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewGenerationBatch {
+    pub id: String,
+    pub language_iso: String,
+    pub tree_definition_id: String,
+    pub node_id: String,
+    pub skill_id: String,
+    pub skill_name: String,
+    pub card_model_id: String,
+    pub default_deck_name: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub cards: Vec<NewGenerationBatchCard>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterializedGenerationBatch {
+    pub deck_id: String,
+    pub created_card_count: usize,
 }
 
 pub(super) fn now_ms() -> i64 {
@@ -125,6 +192,36 @@ pub(super) fn row_to_study_card(row: &SqliteRow) -> StudyCardRecord {
         back_html: row.get("back_html"),
         explanation_html: explanation_html_from_metadata(&metadata_json),
         audio_path: row.get("audio_path"),
+    }
+}
+
+pub(super) fn row_to_generation_batch(row: &SqliteRow) -> GenerationBatchRecord {
+    GenerationBatchRecord {
+        id: row.get("id"),
+        language_iso: row.get("language_iso"),
+        tree_definition_id: row.get("tree_definition_id"),
+        node_id: row.get("node_id"),
+        skill_id: row.get("skill_id"),
+        skill_name: row.get("skill_name"),
+        card_model_id: row.get("card_model_id"),
+        default_deck_name: row.get("default_deck_name"),
+        materialized_deck_id: row.get("materialized_deck_id"),
+        created_at: row.get("created_at"),
+        expires_at: row.get("expires_at"),
+    }
+}
+
+pub(super) fn row_to_generation_batch_card(row: &SqliteRow) -> GenerationBatchCardRecord {
+    GenerationBatchCardRecord {
+        id: row.get("id"),
+        template_name: row.get("template_name"),
+        front_html: row.get("front_html"),
+        back_html: row.get("back_html"),
+        explanation_html: row.get("explanation_html"),
+        fields_json: row.get("fields_json"),
+        metadata_json: row.get("metadata_json"),
+        audio_path: row.get("audio_path"),
+        created_at: row.get("created_at"),
     }
 }
 

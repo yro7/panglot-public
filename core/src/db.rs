@@ -1,6 +1,5 @@
-use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 use std::path::Path;
-use uuid::Uuid;
 
 use crate::storage::{DeckInfo, NewDeckData, StorageProvider, StoredCard};
 
@@ -9,13 +8,16 @@ mod customizations;
 mod decks;
 mod drafts;
 mod export;
+mod generation_batches;
 mod sql;
 mod srs_ops;
 mod types;
 
+pub use generation_batches::{MaterializeGenerationBatchError, cleanup_expired_generation_batches};
 pub use types::{
-    DeckCountsRecord, DeckSummaryRecord, DraftCard, StudyCardRecord, StudyMode,
-    UserTreeCustomization,
+    DeckCountsRecord, DeckSummaryRecord, DraftCard, GenerationBatchRecord,
+    MaterializedGenerationBatch, NewGenerationBatch, NewGenerationBatchCard, StoredGenerationBatch,
+    StudyCardRecord, StudyMode, UserTreeCustomization,
 };
 
 use types::{DEFAULT_USER_ID, now_ms};
@@ -234,67 +236,10 @@ impl StorageProvider for LocalStorageProvider {
         &self,
         deck_data: &NewDeckData,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        if deck_data.cards.is_empty() {
-            let mut tx = self.pool.begin().await?;
-            self.get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx)
-                .await?;
-            tx.commit().await?;
-            return Ok(0);
-        }
-
         let mut tx = self.pool.begin().await?;
-        let deck_id = self
-            .get_or_create_deck_hierarchy(&deck_data.name, &deck_data.language_code, &mut tx)
-            .await?;
-        let now = now_ms();
-
-        // Pre-generate one UUID per card so both batched INSERTs align by index.
-        let card_ids: Vec<String> = (0..deck_data.cards.len())
-            .map(|_| Uuid::now_v7().to_string())
-            .collect();
-
-        // cards: 12 params per row → cap at 75 rows per chunk to stay under SQLite's 999-param limit.
-        const CARDS_CHUNK: usize = 75;
-        for (chunk_idx, id_chunk) in card_ids.chunks(CARDS_CHUNK).enumerate() {
-            let offset = chunk_idx * CARDS_CHUNK;
-            let entries = &deck_data.cards[offset..offset + id_chunk.len()];
-            let mut qb = QueryBuilder::<Sqlite>::new(
-                "INSERT INTO cards (id, deck_id, user_id, skill_id, skill_name, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
-            );
-            qb.push_values(id_chunk.iter().zip(entries), |mut b, (id, entry)| {
-                b.push_bind(id)
-                    .push_bind(&deck_id)
-                    .push_bind(&self.user_id)
-                    .push_bind(&entry.skill_id)
-                    .push_bind(&entry.skill_name)
-                    .push_bind(&entry.template_name)
-                    .push_bind(&entry.front_html)
-                    .push_bind(&entry.back_html)
-                    .push_bind(&entry.fields_json)
-                    .push_bind(&entry.metadata_json)
-                    .push_bind(&entry.audio_path)
-                    .push_bind(now);
-            });
-            qb.build().execute(&mut *tx).await?;
-        }
-
-        // reviews: 4 params per row → cap at 200 rows per chunk.
-        const REVIEWS_CHUNK: usize = 200;
-        for id_chunk in card_ids.chunks(REVIEWS_CHUNK) {
-            let mut qb = QueryBuilder::<Sqlite>::new(
-                "INSERT INTO reviews (card_id, user_id, due_date, interval_days) ",
-            );
-            qb.push_values(id_chunk.iter(), |mut b, id| {
-                b.push_bind(id)
-                    .push_bind(&self.user_id)
-                    .push_bind(now)
-                    .push_bind(0i64);
-            });
-            qb.build().execute(&mut *tx).await?;
-        }
-
+        let (_deck_id, created_count) = self.save_new_deck_data_in_tx(deck_data, &mut tx).await?;
         tx.commit().await?;
-        Ok(card_ids.len())
+        Ok(created_count)
     }
 
     async fn delete_deck(
@@ -374,8 +319,36 @@ mod tests {
         .bind(full_path)
         .fetch_one(&provider.pool)
         .await
-        .expect("card should exist")
-        .get("id")
+            .expect("card should exist")
+            .get("id")
+    }
+
+    fn test_generation_batch(batch_id: &str) -> NewGenerationBatch {
+        NewGenerationBatch {
+            id: batch_id.to_string(),
+            language_iso: "pol".to_string(),
+            tree_definition_id: "tree-pol".to_string(),
+            node_id: "greetings".to_string(),
+            skill_id: "greetings".to_string(),
+            skill_name: "Greetings".to_string(),
+            card_model_id: "ClozeTest".to_string(),
+            default_deck_name: "Polish::Greetings::ClozeTest".to_string(),
+            created_at: 1_700_000_000_000,
+            expires_at: 1_700_086_400_000,
+            cards: vec![NewGenerationBatchCard {
+                id: "generated-card-1".to_string(),
+                template_name: "cloze_test".to_string(),
+                front_html: "<div>front</div>".to_string(),
+                back_html: "<div>back</div>".to_string(),
+                explanation_html: "Explanation".to_string(),
+                fields_json: r#"{"sentence":"Hej"}"#.to_string(),
+                metadata_json: serde_json::json!({
+                    "pedagogical_explanation": "Explanation"
+                })
+                .to_string(),
+                audio_path: Some("audio/greetings.mp3".to_string()),
+            }],
+        }
     }
 
     #[tokio::test]
@@ -637,5 +610,97 @@ mod tests {
         assert_eq!(row.get::<String, _>("skill_name"), "Accusative");
         assert_eq!(study_cards[0].skill_id, "skill-accusative");
         assert_eq!(study_cards[0].skill_name, "Accusative");
+    }
+
+    #[tokio::test]
+    async fn generation_batch_round_trips_without_public_blob_leaks() {
+        let provider = init_provider("generation_batch_round_trip").await;
+        let batch = test_generation_batch("batch-round-trip");
+
+        provider
+            .save_generation_batch(&batch)
+            .await
+            .expect("generation batch should save");
+
+        let stored = provider
+            .get_generation_batch(&batch.id)
+            .await
+            .expect("generation batch should load")
+            .expect("generation batch should exist");
+
+        assert_eq!(stored.batch.id, batch.id);
+        assert_eq!(stored.batch.card_model_id, "ClozeTest");
+        assert_eq!(stored.cards.len(), 1);
+        assert_eq!(stored.cards[0].template_name, "cloze_test");
+        assert_eq!(stored.cards[0].fields_json, r#"{"sentence":"Hej"}"#);
+    }
+
+    #[tokio::test]
+    async fn materializing_generation_batch_is_one_shot() {
+        let provider = init_provider("materialize_generation_batch").await;
+        let batch = test_generation_batch("batch-materialize");
+        provider
+            .save_generation_batch(&batch)
+            .await
+            .expect("generation batch should save");
+
+        let first = provider
+            .materialize_generation_batch_to_deck(&batch.id, "Custom::Deck")
+            .await
+            .expect("materialization should succeed");
+        assert_eq!(first.created_card_count, 1);
+
+        let stored = provider
+            .get_generation_batch(&batch.id)
+            .await
+            .expect("generation batch should load")
+            .expect("generation batch should exist");
+        assert_eq!(
+            stored.batch.materialized_deck_id.as_deref(),
+            Some(first.deck_id.as_str())
+        );
+
+        match provider
+            .materialize_generation_batch_to_deck(&batch.id, "Custom::Deck")
+            .await
+        {
+            Err(MaterializeGenerationBatchError::AlreadyMaterialized { deck_id }) => {
+                assert_eq!(deck_id, first.deck_id);
+            }
+            other => panic!("expected already-materialized error, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_generation_batches_removes_batches_and_cards() {
+        let provider = init_provider("cleanup_generation_batches").await;
+        let mut expired = test_generation_batch("expired-batch");
+        expired.expires_at = 42;
+        provider
+            .save_generation_batch(&expired)
+            .await
+            .expect("expired generation batch should save");
+
+        let deleted = cleanup_expired_generation_batches(&provider.pool, 100)
+            .await
+            .expect("cleanup should succeed");
+        assert_eq!(deleted, 1);
+
+        let batch_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM generation_batches WHERE id = ?")
+                .bind(&expired.id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("batch count should load");
+        let card_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM generation_batch_cards WHERE generation_batch_id = ?",
+        )
+        .bind(&expired.id)
+        .fetch_one(&provider.pool)
+        .await
+        .expect("card count should load");
+
+        assert_eq!(batch_count, 0);
+        assert_eq!(card_count, 0);
     }
 }
