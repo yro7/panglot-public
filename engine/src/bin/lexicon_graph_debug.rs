@@ -47,8 +47,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut graphs: HashMap<String, StableGraph<GraphNode, String>> = HashMap::new();
     let mut node_maps: HashMap<String, HashMap<String, NodeIndex>> = HashMap::new();
 
-    if let Ok(init) = LocalStorageProvider::init(DB_PATH).await {
-        let provider = LocalStorageProvider::for_user(init.pool, USER_ID.to_string());
+    if let Ok(init) =
+        LocalStorageProvider::init(DB_PATH, lc_core::user::UserSettings::default()).await
+    {
+        let provider = LocalStorageProvider::for_user(
+            init.pool,
+            USER_ID.to_string(),
+            lc_core::user::UserSettings::default(),
+        );
         if let Ok(cards) = provider.fetch_cards().await {
             for card in &cards {
                 // Process Arabic
@@ -131,7 +137,6 @@ fn process_features<M>(
         // Actually, since we know it's Arabic or Polish, we can try to find relevant fields.
 
         // Let's use the field values directly from observations for maximum genericness
-        use panini_core::Aggregable;
         for obs_group in morphology.observations() {
             for (field_name, field_value) in obs_group {
                 let field_name: String = field_name;

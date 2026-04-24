@@ -42,8 +42,12 @@ impl LocalStorageProvider {
                 front_html: rec.get("front_html"),
                 back_html: rec.get("back_html"),
                 skill_id: rec.get::<Option<String>, _>("skill_id").unwrap_or_default(),
-                skill_name: rec.get::<Option<String>, _>("skill_name").unwrap_or_default(),
-                template_name: rec.get::<Option<String>, _>("template_name").unwrap_or_default(),
+                skill_name: rec
+                    .get::<Option<String>, _>("skill_name")
+                    .unwrap_or_default(),
+                template_name: rec
+                    .get::<Option<String>, _>("template_name")
+                    .unwrap_or_default(),
                 fields_json: rec
                     .get::<Option<String>, _>("fields_json")
                     .unwrap_or_else(|| "{}".to_string()),

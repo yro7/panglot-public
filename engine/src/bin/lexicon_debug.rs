@@ -22,8 +22,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut ara_morph_agg = BasicAggregator::new();
     let mut ara_root_agg = BasicAggregator::new();
 
-    if let Ok(init) = LocalStorageProvider::init(DB_PATH).await {
-        let provider = LocalStorageProvider::for_user(init.pool, USER_ID.to_string());
+    if let Ok(init) =
+        LocalStorageProvider::init(DB_PATH, lc_core::user::UserSettings::default()).await
+    {
+        let provider = LocalStorageProvider::for_user(
+            init.pool,
+            USER_ID.to_string(),
+            lc_core::user::UserSettings::default(),
+        );
         if let Ok(cards) = provider.fetch_cards().await {
             for card in &cards {
                 if let Some(metadata) =

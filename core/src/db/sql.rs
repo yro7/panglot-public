@@ -55,7 +55,6 @@ COALESCE(c.template_name, '') as template_name,
 c.front_html, c.back_html, c.metadata_json, c.audio_path
 "#;
 
-pub(super) const UPSERT_REVIEW_CACHE_SQL: &str =
-    "INSERT INTO reviews (card_id, user_id, due_date, interval_days) VALUES (?, ?, ?, ?) \
+pub(super) const UPSERT_REVIEW_CACHE_SQL: &str = "INSERT INTO reviews (card_id, user_id, due_date, interval_days) VALUES (?, ?, ?, ?) \
      ON CONFLICT(card_id, user_id) DO UPDATE \
      SET due_date = excluded.due_date, interval_days = excluded.interval_days";
