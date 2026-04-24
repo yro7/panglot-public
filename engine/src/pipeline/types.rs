@@ -94,7 +94,7 @@ pub(crate) fn to_panini_language_levels(
         .iter()
         .map(|l| panini_engine::prompts::LanguageLevel {
             iso_639_3: l.iso_639_3.clone(),
-            level: format!("{:?}", l.level),
+            level: l.level.as_panini_level().to_string(),
         })
         .collect()
 }

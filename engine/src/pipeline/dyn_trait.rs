@@ -1,6 +1,6 @@
 use lc_core::storage::StorageProvider;
 use lc_core::traits::{CardModel, Language, LinguisticDefinition};
-use lc_core::user::UserSettings;
+use lc_core::user::LearnerProfile;
 use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
@@ -34,7 +34,7 @@ pub trait DynPipeline: Send + Sync {
         card_model_id: CardModelId,
         num_cards: u32,
         difficulty: u8,
-        user_profile: UserSettings,
+        learner_profile: LearnerProfile,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
@@ -57,7 +57,7 @@ pub trait DynPipeline: Send + Sync {
         node_id: &str,
         card_model_id: CardModelId,
         difficulty: u8,
-        user_profile: UserSettings,
+        learner_profile: LearnerProfile,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview>;
@@ -124,7 +124,7 @@ where
         card_model_id: CardModelId,
         num_cards: u32,
         difficulty: u8,
-        user_profile: UserSettings,
+        learner_profile: LearnerProfile,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
@@ -139,7 +139,7 @@ where
             card_model_id,
             num_cards,
             difficulty,
-            user_profile,
+            learner_profile,
             user_prompt,
             lexicon_options,
             request_context,
@@ -190,7 +190,7 @@ where
         node_id: &str,
         card_model_id: CardModelId,
         difficulty: u8,
-        user_profile: UserSettings,
+        learner_profile: LearnerProfile,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview> {
@@ -201,7 +201,7 @@ where
             card_model_id,
             1,
             difficulty,
-            user_profile,
+            learner_profile,
             None,
             lexicon_options,
             None,
@@ -246,9 +246,11 @@ where
                 targets: Vec::new(),
                 pedagogical_context: node.node_instructions.clone(),
                 skill_path: Some(path.clone()),
-                learner_ui_language: req.user_profile.ui_language.clone(),
+                learner_ui_language: lc_core::user::explanation_language_name_from_iso(
+                    &req.learner_profile.explanation_language_iso,
+                ),
                 linguistic_background: to_panini_language_levels(
-                    &req.user_profile.linguistic_background,
+                    &req.learner_profile.known_languages,
                 ),
                 user_prompt: req.user_prompt.clone(),
             };

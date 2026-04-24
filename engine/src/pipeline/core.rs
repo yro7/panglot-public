@@ -1,5 +1,5 @@
 use lc_core::traits::Language;
-use lc_core::user::UserSettings;
+use lc_core::user::LearnerProfile;
 use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
@@ -246,7 +246,7 @@ where
         card_model_id: CardModelId,
         num_cards: u32,
         difficulty: u8,
-        user_profile: UserSettings,
+        learner_profile: LearnerProfile,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
@@ -277,7 +277,7 @@ where
             card_model_id,
             num_cards,
             difficulty,
-            user_profile,
+            learner_profile,
             user_prompt,
             transliteration: None,
             injected_vocabulary,

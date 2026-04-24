@@ -208,10 +208,10 @@ where
             targets: targets.clone(),
             pedagogical_context: ext_node.node_instructions.clone(),
             skill_path: Some(extraction_path.to_string()),
-            learner_ui_language: req.user_profile.ui_language.clone(),
-            linguistic_background: to_panini_language_levels(
-                &req.user_profile.linguistic_background,
+            learner_ui_language: lc_core::user::explanation_language_name_from_iso(
+                &req.learner_profile.explanation_language_iso,
             ),
+            linguistic_background: to_panini_language_levels(&req.learner_profile.known_languages),
             user_prompt: req.user_prompt.clone(),
         };
 

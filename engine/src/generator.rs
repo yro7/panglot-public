@@ -12,7 +12,7 @@ pub struct GenerationRequest<L: Language> {
     pub card_model_id: CardModelId,
     pub num_cards: u32,
     pub difficulty: u8,
-    pub user_profile: lc_core::user::UserSettings,
+    pub learner_profile: lc_core::user::LearnerProfile,
     pub user_prompt: Option<String>,
     /// Reserved for roadmap: transliteration script to request from the LLM.
     pub transliteration: Option<String>,
@@ -58,11 +58,10 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 5,
             difficulty: 3,
-            user_profile: lc_core::user::UserSettings::new(
-                "French".to_string(),
-                lc_core::user::UserSettings::DEFAULT_SRS.to_string(),
-                lc_core::user::UserSettings::DEFAULT_LEARN_AHEAD,
-            ),
+            learner_profile: lc_core::user::LearnerProfile {
+                explanation_language_iso: "fra".to_string(),
+                known_languages: Vec::new(),
+            },
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![],

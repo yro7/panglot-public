@@ -1,6 +1,5 @@
 use crate::generator::GenerationRequest;
 use crate::skill_tree::SkillNode;
-use isolang::Language as IsoLang;
 use lc_core::traits::{Language, LinguisticDefinition, MorphologyInfo};
 use regex::Regex;
 use serde::Deserialize;
@@ -280,10 +279,12 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
         let difficulty_val = self.request.difficulty.to_string();
         let count_val = self.request.num_cards.to_string();
 
-        let ui_lang_name = self.request.user_profile.ui_language.clone();
-        let ui_lang_iso_code = IsoLang::from_name(&ui_lang_name)
-            .map(|lang| lang.to_639_3().to_string())
-            .unwrap_or_else(|| "eng".to_string());
+        let ui_lang_iso_code = self
+            .request
+            .learner_profile
+            .explanation_language_iso
+            .clone();
+        let ui_lang_name = lc_core::user::explanation_language_name_from_iso(&ui_lang_iso_code);
 
         let directives = self.language.generation_directives().unwrap_or("");
 
@@ -415,7 +416,7 @@ mod tests {
     use crate::skill_tree::{SkillNodeConfig, SkillTree};
     use langs::Polish;
     use lc_core::domain::ExtractedFeature;
-    use lc_core::user::UserSettings;
+    use lc_core::user::{FluencyLevel, KnownLanguage, LearnerProfile};
 
     fn sample_tree() -> SkillTree<Polish> {
         let config = SkillNodeConfig {
@@ -512,11 +513,10 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 3,
             difficulty: 5,
-            user_profile: UserSettings::new(
-                "English".to_string(),
-                UserSettings::DEFAULT_SRS.to_string(),
-                UserSettings::DEFAULT_LEARN_AHEAD,
-            ),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "eng".to_string(),
+                known_languages: Vec::new(),
+            },
             user_prompt: Some("Use funny sentences.".to_string()),
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -565,11 +565,13 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserSettings::new(
-                "French".to_string(),
-                UserSettings::DEFAULT_SRS.to_string(),
-                UserSettings::DEFAULT_LEARN_AHEAD,
-            ),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "fra".to_string(),
+                known_languages: vec![KnownLanguage {
+                    iso_639_3: "eng".to_string(),
+                    level: FluencyLevel::Fluent,
+                }],
+            },
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -585,14 +587,16 @@ mod tests {
             targets: Vec::new(),
             pedagogical_context: node.node_instructions.clone(),
             skill_path: Some(path.clone()),
-            learner_ui_language: req.user_profile.ui_language.clone(),
+            learner_ui_language: lc_core::user::explanation_language_name_from_iso(
+                &req.learner_profile.explanation_language_iso,
+            ),
             linguistic_background: req
-                .user_profile
-                .linguistic_background
+                .learner_profile
+                .known_languages
                 .iter()
                 .map(|l| panini_engine::prompts::LanguageLevel {
                     iso_639_3: l.iso_639_3.clone(),
-                    level: format!("{:?}", l.level),
+                    level: l.level.as_panini_level().to_string(),
                 })
                 .collect(),
             user_prompt: req.user_prompt.clone(),
@@ -629,11 +633,10 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserSettings::new(
-                "English".to_string(),
-                UserSettings::DEFAULT_SRS.to_string(),
-                UserSettings::DEFAULT_LEARN_AHEAD,
-            ),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "eng".to_string(),
+                known_languages: Vec::new(),
+            },
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
