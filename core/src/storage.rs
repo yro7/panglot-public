@@ -64,6 +64,7 @@ pub struct NewCardEntry {
     pub back_html: String,
     pub skill_id: String,
     pub skill_name: String,
+    pub card_model_id: String,
     pub template_name: String,
     pub fields_json: String,
     pub explanation: String,

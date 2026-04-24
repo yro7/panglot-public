@@ -36,6 +36,7 @@ pub struct PipelineConfig {
 pub struct DynGeneratedCard {
     pub card_id: String,
     pub skill_id: String,
+    pub card_model_id: String,
     pub template_name: String,
     pub fields: HashMap<String, String>,
     pub explanation: String,
@@ -63,6 +64,7 @@ pub fn cards_to_deck_data(
                 back_html: c.back_html.clone(),
                 skill_id: c.skill_id.clone(),
                 skill_name: c.skill_name.clone(),
+                card_model_id: c.card_model_id.clone(),
                 template_name: c.template_name.clone(),
                 fields_json,
                 explanation: c.explanation.clone(),

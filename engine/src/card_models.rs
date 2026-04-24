@@ -294,7 +294,7 @@ impl CardModel for OralComprehension {
     }
 
     fn front_html(&self) -> String {
-        // Front is just a prompt to listen — audio tag is appended by DeckBuilder
+        // Front is just a prompt to listen; audio is served separately by the API.
         "<div class=\"listen-prompt\">Listen and translate</div>".to_string()
     }
 

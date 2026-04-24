@@ -124,7 +124,7 @@ where
 
         tracing::info!(card_id, voice, "Generating TTS audio");
 
-        // Write audio to a staging directory so DeckBuilder can find it
+        // Write audio to a staging directory so the API can serve it by card ownership.
         let staging_dir = std::env::temp_dir().join("lc_audio");
         std::fs::create_dir_all(&staging_dir).ok();
         let filename = format!("{}.mp3", card_id);

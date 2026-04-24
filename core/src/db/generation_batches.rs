@@ -112,6 +112,24 @@ impl LocalStorageProvider {
         }))
     }
 
+    pub async fn generation_batch_card_audio_path(
+        &self,
+        batch_id: &str,
+        card_id: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT gbc.audio_path \
+             FROM generation_batch_cards gbc \
+             JOIN generation_batches gb ON gb.id = gbc.generation_batch_id \
+             WHERE gb.id = ? AND gbc.id = ? AND gb.user_id = ? AND gbc.audio_path IS NOT NULL",
+        )
+        .bind(batch_id)
+        .bind(card_id)
+        .bind(&self.user_id)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
     pub async fn delete_generation_batch(&self, batch_id: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query("DELETE FROM generation_batches WHERE id = ? AND user_id = ?")
             .bind(batch_id)
@@ -129,7 +147,7 @@ impl LocalStorageProvider {
         let mut tx = self.pool.begin().await?;
 
         let batch_row = sqlx::query(
-            "SELECT id, language_iso, skill_id, skill_name, materialized_deck_id \
+            "SELECT id, language_iso, skill_id, skill_name, card_model_id, materialized_deck_id \
              FROM generation_batches WHERE id = ? AND user_id = ?",
         )
         .bind(batch_id)
@@ -153,7 +171,7 @@ impl LocalStorageProvider {
             node_id: String::new(),
             skill_id: batch_row.get("skill_id"),
             skill_name: batch_row.get("skill_name"),
-            card_model_id: String::new(),
+            card_model_id: batch_row.get("card_model_id"),
             default_deck_name: String::new(),
             materialized_deck_id: None,
             created_at: 0,
@@ -178,6 +196,7 @@ impl LocalStorageProvider {
                     back_html: row.get("back_html"),
                     skill_id: batch.skill_id.clone(),
                     skill_name: batch.skill_name.clone(),
+                    card_model_id: batch.card_model_id.clone(),
                     template_name: row.get("template_name"),
                     fields_json: row.get("fields_json"),
                     explanation: row.get("explanation_html"),

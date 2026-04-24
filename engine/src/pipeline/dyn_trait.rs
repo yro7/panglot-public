@@ -158,6 +158,7 @@ where
                 DynGeneratedCard {
                     card_id: c.metadata.card_id,
                     skill_id: c.metadata.skill_id,
+                    card_model_id: card_model_id.to_string(),
                     template_name: c.model.template_name().to_string(),
                     front_html: c.model.front_html(),
                     back_html: c.model.back_html(),

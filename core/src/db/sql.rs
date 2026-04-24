@@ -51,7 +51,7 @@ pub(super) const STUDY_CARD_PROJECTION: &str = r#"
 c.id, c.deck_id,
 COALESCE(c.skill_id, '') as skill_id,
 COALESCE(c.skill_name, '') as skill_name,
-COALESCE(c.template_name, '') as template_name,
+COALESCE(c.card_model_id, c.template_name, '') as card_model_id,
 c.front_html, c.back_html, c.metadata_json, c.audio_path
 "#;
 

@@ -30,7 +30,7 @@ impl LocalStorageProvider {
             let offset = chunk_idx * CARDS_CHUNK;
             let entries = &deck_data.cards[offset..offset + id_chunk.len()];
             let mut qb = QueryBuilder::<Sqlite>::new(
-                "INSERT INTO cards (id, deck_id, user_id, skill_id, skill_name, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
+                "INSERT INTO cards (id, deck_id, user_id, skill_id, skill_name, card_model_id, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
             );
             qb.push_values(id_chunk.iter().zip(entries), |mut b, (id, entry)| {
                 b.push_bind(id)
@@ -38,6 +38,7 @@ impl LocalStorageProvider {
                     .push_bind(&self.user_id)
                     .push_bind(&entry.skill_id)
                     .push_bind(&entry.skill_name)
+                    .push_bind(&entry.card_model_id)
                     .push_bind(&entry.template_name)
                     .push_bind(&entry.front_html)
                     .push_bind(&entry.back_html)

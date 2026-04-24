@@ -7,7 +7,6 @@ mod cards;
 mod customizations;
 mod decks;
 mod drafts;
-mod export;
 mod generation_batches;
 mod sql;
 mod srs_ops;
@@ -264,6 +263,7 @@ mod tests {
     use super::*;
     use crate::srs::{Rating, SrsAlgorithmId, SrsRegistry};
     use crate::storage::{NewCardEntry, StorageProvider};
+    use uuid::Uuid;
 
     fn temp_db_path(test_name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("panglot_{test_name}_{}.sqlite", Uuid::new_v4()))
@@ -287,6 +287,7 @@ mod tests {
                 back_html: "<div>answer</div>".to_string(),
                 skill_id: skill_id.to_string(),
                 skill_name: skill_name.to_string(),
+                card_model_id: "ClozeTest".to_string(),
                 template_name: "Recognition".to_string(),
                 fields_json: r#"{"front":"x","back":"y"}"#.to_string(),
                 explanation: "Explanation".to_string(),
@@ -590,7 +591,7 @@ mod tests {
             .expect("deck should save");
 
         let row = sqlx::query(
-            "SELECT c.skill_id, c.skill_name FROM cards c JOIN decks d ON c.deck_id = d.id WHERE d.user_id = ? AND d.full_path = ?",
+            "SELECT c.skill_id, c.skill_name, c.card_model_id FROM cards c JOIN decks d ON c.deck_id = d.id WHERE d.user_id = ? AND d.full_path = ?",
         )
         .bind(&provider.user_id)
         .bind("Grammar::Accusative")
@@ -608,8 +609,10 @@ mod tests {
             "skill-accusative"
         );
         assert_eq!(row.get::<String, _>("skill_name"), "Accusative");
+        assert_eq!(row.get::<String, _>("card_model_id"), "ClozeTest");
         assert_eq!(study_cards[0].skill_id, "skill-accusative");
         assert_eq!(study_cards[0].skill_name, "Accusative");
+        assert_eq!(study_cards[0].card_model_id, "ClozeTest");
     }
 
     #[tokio::test]
@@ -649,6 +652,14 @@ mod tests {
             .await
             .expect("materialization should succeed");
         assert_eq!(first.created_card_count, 1);
+        let card_model_id: String = sqlx::query_scalar(
+            "SELECT c.card_model_id FROM cards c JOIN decks d ON d.id = c.deck_id WHERE d.id = ?",
+        )
+        .bind(&first.deck_id)
+        .fetch_one(&provider.pool)
+        .await
+        .expect("materialized card model should load");
+        assert_eq!(card_model_id, "ClozeTest");
 
         let stored = provider
             .get_generation_batch(&batch.id)

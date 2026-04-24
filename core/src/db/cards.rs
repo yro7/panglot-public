@@ -13,6 +13,16 @@ impl LocalStorageProvider {
         Ok(count > 0)
     }
 
+    pub async fn card_audio_path(&self, card_id: &str) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT audio_path FROM cards WHERE id = ? AND user_id = ? AND audio_path IS NOT NULL",
+        )
+        .bind(card_id)
+        .bind(&self.user_id)
+        .fetch_optional(&self.pool)
+        .await
+    }
+
     pub async fn select_study_cards(
         &self,
         deck_id: &str,
