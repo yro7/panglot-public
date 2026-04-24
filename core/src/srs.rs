@@ -6,6 +6,6 @@ pub mod sm2;
 mod tests;
 pub mod traits;
 
-pub use models::{Rating, ReviewEvent, SchedulingChoices, SchedulingOutput};
+pub use models::{Rating, ReviewEvent, SchedulingChoices, SchedulingOutput, SrsAlgorithmId};
 pub use registry::SrsRegistry;
 pub use traits::SrsAlgorithm;
