@@ -24,21 +24,21 @@ pub struct GenerationRequest<L: Language> {
 
 // ----- Lexicon Options -----
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LexiconMode {
     Include,
     Exclude,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LexiconLevel {
     Known, // Only words that have been mastered
     All,   // All tracked words, even learning/struggling
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LexiconOption {
     pub mode: LexiconMode,
     pub pos_filter: Option<String>, // e.g. "Verb", "Noun", None means "All"

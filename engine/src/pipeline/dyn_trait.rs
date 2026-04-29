@@ -56,8 +56,10 @@ pub trait DynPipeline: Send + Sync {
         tree_root: &SkillNode,
         node_id: &str,
         card_model_id: CardModelId,
+        num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview>;
@@ -190,8 +192,10 @@ where
         tree_root: &SkillNode,
         node_id: &str,
         card_model_id: CardModelId,
+        num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
     ) -> Result<DynPromptPreview> {
@@ -200,10 +204,10 @@ where
             .and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
         let req = self.build_generation_request(
             card_model_id,
-            1,
+            num_cards,
             difficulty,
             learner_profile,
-            None,
+            user_prompt,
             lexicon_options,
             None,
             concrete,
