@@ -2,29 +2,31 @@ use sqlx::{Row, SqlitePool};
 
 use super::LocalStorageProvider;
 use super::types::{
-    GenerationBatchRecord, MaterializedGenerationBatch, NewGenerationBatch,
-    row_to_generation_batch, row_to_generation_batch_card,
+    MaterializedGeneration, NewGeneration, StoredGeneration,
+    row_to_generation, row_to_generation_card,
 };
 use crate::storage::{NewCardEntry, NewDeckData};
 
 #[derive(Debug)]
-pub enum MaterializeGenerationBatchError {
+pub enum MaterializeGenerationError {
     NotFound,
     AlreadyMaterialized { deck_id: String },
     Sql(sqlx::Error),
 }
 
-impl From<sqlx::Error> for MaterializeGenerationBatchError {
+impl From<sqlx::Error> for MaterializeGenerationError {
     fn from(value: sqlx::Error) -> Self {
         Self::Sql(value)
     }
 }
 
-pub async fn cleanup_expired_generation_batches(
+/// TTL'd cleanup of staged cards. The parent `generations` log row stays —
+/// it is permanent.
+pub async fn cleanup_expired_generation_cards(
     pool: &SqlitePool,
     cutoff_ms: i64,
 ) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query("DELETE FROM generation_batches WHERE expires_at < ?")
+    let result = sqlx::query("DELETE FROM generation_cards WHERE expires_at < ?")
         .bind(cutoff_ms)
         .execute(pool)
         .await?;
@@ -32,39 +34,43 @@ pub async fn cleanup_expired_generation_batches(
 }
 
 impl LocalStorageProvider {
-    pub async fn save_generation_batch(
+    pub async fn save_generation(
         &self,
-        batch: &NewGenerationBatch,
+        generation: &NewGeneration,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
-            "INSERT INTO generation_batches \
-             (id, user_id, language_iso, tree_definition_id, node_id, skill_id, skill_name, card_model_id, default_deck_name, materialized_deck_id, created_at, expires_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)",
+            "INSERT INTO generations \
+             (id, user_id, language_iso, tree_definition_id, tree_node_id, concept_key, \
+              card_model_id, card_count, difficulty, user_prompt, default_deck_name, \
+              materialized_deck_id, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
         )
-        .bind(&batch.id)
+        .bind(&generation.id)
         .bind(&self.user_id)
-        .bind(&batch.language_iso)
-        .bind(&batch.tree_definition_id)
-        .bind(&batch.node_id)
-        .bind(&batch.skill_id)
-        .bind(&batch.skill_name)
-        .bind(&batch.card_model_id)
-        .bind(&batch.default_deck_name)
-        .bind(batch.created_at)
-        .bind(batch.expires_at)
+        .bind(&generation.language_iso)
+        .bind(&generation.tree_definition_id)
+        .bind(&generation.tree_node_id)
+        .bind(&generation.concept_key)
+        .bind(&generation.card_model_id)
+        .bind(generation.card_count)
+        .bind(generation.difficulty)
+        .bind(&generation.user_prompt)
+        .bind(&generation.default_deck_name)
+        .bind(generation.created_at)
         .execute(&mut *tx)
         .await?;
 
-        for card in &batch.cards {
+        for card in &generation.cards {
             sqlx::query(
-                "INSERT INTO generation_batch_cards \
-                 (id, generation_batch_id, template_name, front_html, back_html, explanation_html, fields_json, metadata_json, audio_path, created_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO generation_cards \
+                 (id, generation_id, template_name, front_html, back_html, explanation_html, \
+                  fields_json, metadata_json, audio_path, created_at, expires_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&card.id)
-            .bind(&batch.id)
+            .bind(&generation.id)
             .bind(&card.template_name)
             .bind(&card.front_html)
             .bind(&card.back_html)
@@ -72,7 +78,8 @@ impl LocalStorageProvider {
             .bind(&card.fields_json)
             .bind(&card.metadata_json)
             .bind(&card.audio_path)
-            .bind(batch.created_at)
+            .bind(generation.created_at)
+            .bind(generation.expires_at)
             .execute(&mut *tx)
             .await?;
         }
@@ -81,122 +88,125 @@ impl LocalStorageProvider {
         Ok(())
     }
 
-    pub async fn get_generation_batch(
+    pub async fn get_generation(
         &self,
-        batch_id: &str,
-    ) -> Result<Option<super::types::StoredGenerationBatch>, sqlx::Error> {
-        let batch = sqlx::query(
-            "SELECT id, language_iso, tree_definition_id, node_id, skill_id, skill_name, card_model_id, default_deck_name, materialized_deck_id, created_at, expires_at \
-             FROM generation_batches WHERE id = ? AND user_id = ?",
+        generation_id: &str,
+    ) -> Result<Option<StoredGeneration>, sqlx::Error> {
+        let row = sqlx::query(
+            "SELECT id, language_iso, tree_definition_id, tree_node_id, concept_key, \
+             card_model_id, card_count, difficulty, user_prompt, default_deck_name, \
+             materialized_deck_id, created_at \
+             FROM generations WHERE id = ? AND user_id = ?",
         )
-        .bind(batch_id)
+        .bind(generation_id)
         .bind(&self.user_id)
         .fetch_optional(&self.pool)
         .await?;
 
-        let Some(batch_row) = batch else {
+        let Some(row) = row else {
             return Ok(None);
         };
 
-        let cards = sqlx::query(
-            "SELECT id, template_name, front_html, back_html, explanation_html, fields_json, metadata_json, audio_path, created_at \
-             FROM generation_batch_cards WHERE generation_batch_id = ? ORDER BY created_at, id",
+        let card_rows = sqlx::query(
+            "SELECT id, template_name, front_html, back_html, explanation_html, fields_json, \
+             metadata_json, audio_path, created_at, expires_at \
+             FROM generation_cards WHERE generation_id = ? ORDER BY created_at, id",
         )
-        .bind(batch_id)
+        .bind(generation_id)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(Some(super::types::StoredGenerationBatch {
-            batch: row_to_generation_batch(&batch_row),
-            cards: cards.iter().map(row_to_generation_batch_card).collect(),
+        Ok(Some(StoredGeneration {
+            generation: row_to_generation(&row),
+            cards: card_rows.iter().map(row_to_generation_card).collect(),
         }))
     }
 
-    pub async fn generation_batch_card_audio_path(
+    pub async fn generation_card_audio_path(
         &self,
-        batch_id: &str,
+        generation_id: &str,
         card_id: &str,
     ) -> Result<Option<String>, sqlx::Error> {
         sqlx::query_scalar(
-            "SELECT gbc.audio_path \
-             FROM generation_batch_cards gbc \
-             JOIN generation_batches gb ON gb.id = gbc.generation_batch_id \
-             WHERE gb.id = ? AND gbc.id = ? AND gb.user_id = ? AND gbc.audio_path IS NOT NULL",
+            "SELECT gc.audio_path \
+             FROM generation_cards gc \
+             JOIN generations g ON g.id = gc.generation_id \
+             WHERE g.id = ? AND gc.id = ? AND g.user_id = ? AND gc.audio_path IS NOT NULL",
         )
-        .bind(batch_id)
+        .bind(generation_id)
         .bind(card_id)
         .bind(&self.user_id)
         .fetch_optional(&self.pool)
         .await
     }
 
-    pub async fn delete_generation_batch(&self, batch_id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query("DELETE FROM generation_batches WHERE id = ? AND user_id = ?")
-            .bind(batch_id)
-            .bind(&self.user_id)
-            .execute(&self.pool)
-            .await?;
+    /// Deletes the staged cards for a generation. The generation log row stays.
+    /// Use this when the user explicitly discards a preview.
+    pub async fn discard_generation_cards(
+        &self,
+        generation_id: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "DELETE FROM generation_cards \
+             WHERE generation_id = ? \
+               AND generation_id IN (SELECT id FROM generations WHERE user_id = ?)",
+        )
+        .bind(generation_id)
+        .bind(&self.user_id)
+        .execute(&self.pool)
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn materialize_generation_batch_to_deck(
+    pub async fn materialize_generation_to_deck(
         &self,
-        batch_id: &str,
+        generation_id: &str,
         deck_name: &str,
-    ) -> Result<MaterializedGenerationBatch, MaterializeGenerationBatchError> {
+        parent_deck_id: Option<&str>,
+    ) -> Result<MaterializedGeneration, MaterializeGenerationError> {
         let mut tx = self.pool.begin().await?;
 
-        let batch_row = sqlx::query(
-            "SELECT id, language_iso, skill_id, skill_name, card_model_id, materialized_deck_id \
-             FROM generation_batches WHERE id = ? AND user_id = ?",
+        let row = sqlx::query(
+            "SELECT id, language_iso, card_model_id, materialized_deck_id \
+             FROM generations WHERE id = ? AND user_id = ?",
         )
-        .bind(batch_id)
+        .bind(generation_id)
         .bind(&self.user_id)
         .fetch_optional(&mut *tx)
         .await?;
 
-        let Some(batch_row) = batch_row else {
-            return Err(MaterializeGenerationBatchError::NotFound);
+        let Some(row) = row else {
+            return Err(MaterializeGenerationError::NotFound);
         };
 
-        let existing_deck_id: Option<String> = batch_row.get("materialized_deck_id");
+        let existing_deck_id: Option<String> = row.get("materialized_deck_id");
         if let Some(deck_id) = existing_deck_id {
-            return Err(MaterializeGenerationBatchError::AlreadyMaterialized { deck_id });
+            return Err(MaterializeGenerationError::AlreadyMaterialized { deck_id });
         }
 
-        let batch = GenerationBatchRecord {
-            id: batch_row.get("id"),
-            language_iso: batch_row.get("language_iso"),
-            tree_definition_id: String::new(),
-            node_id: String::new(),
-            skill_id: batch_row.get("skill_id"),
-            skill_name: batch_row.get("skill_name"),
-            card_model_id: batch_row.get("card_model_id"),
-            default_deck_name: String::new(),
-            materialized_deck_id: None,
-            created_at: 0,
-            expires_at: 0,
-        };
+        let language_iso: String = row.get("language_iso");
+        let card_model_id: String = row.get("card_model_id");
 
         let card_rows = sqlx::query(
-            "SELECT id, template_name, front_html, back_html, explanation_html, fields_json, metadata_json, audio_path, created_at \
-             FROM generation_batch_cards WHERE generation_batch_id = ? ORDER BY created_at, id",
+            "SELECT id, template_name, front_html, back_html, explanation_html, fields_json, \
+             metadata_json, audio_path, created_at \
+             FROM generation_cards WHERE generation_id = ? ORDER BY created_at, id",
         )
-        .bind(batch_id)
+        .bind(generation_id)
         .fetch_all(&mut *tx)
         .await?;
 
         let deck_data = NewDeckData {
             name: deck_name.to_string(),
-            language_code: batch.language_iso.clone(),
+            language_code: language_iso,
+            generation_id: Some(generation_id.to_string()),
+            parent_deck_id: parent_deck_id.map(|id| id.to_string()),
             cards: card_rows
                 .iter()
                 .map(|row| NewCardEntry {
                     front_html: row.get("front_html"),
                     back_html: row.get("back_html"),
-                    skill_id: batch.skill_id.clone(),
-                    skill_name: batch.skill_name.clone(),
-                    card_model_id: batch.card_model_id.clone(),
+                    card_model_id: card_model_id.clone(),
                     template_name: row.get("template_name"),
                     fields_json: row.get("fields_json"),
                     explanation: row.get("explanation_html"),
@@ -210,18 +220,24 @@ impl LocalStorageProvider {
         let (deck_id, created_card_count) =
             self.save_new_deck_data_in_tx(&deck_data, &mut tx).await?;
 
+        // Drop the staged cards now that they're persisted in `cards`.
+        sqlx::query("DELETE FROM generation_cards WHERE generation_id = ?")
+            .bind(generation_id)
+            .execute(&mut *tx)
+            .await?;
+
         sqlx::query(
-            "UPDATE generation_batches SET materialized_deck_id = ? WHERE id = ? AND user_id = ?",
+            "UPDATE generations SET materialized_deck_id = ? WHERE id = ? AND user_id = ?",
         )
         .bind(&deck_id)
-        .bind(batch_id)
+        .bind(generation_id)
         .bind(&self.user_id)
         .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;
 
-        Ok(MaterializedGenerationBatch {
+        Ok(MaterializedGeneration {
             deck_id,
             created_card_count,
         })

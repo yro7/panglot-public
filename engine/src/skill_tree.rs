@@ -12,7 +12,6 @@ pub use lc_core::skill_tree::{SkillNodeConfig, SkillTreeConfig};
 #[derive(Clone)]
 pub struct SkillNode {
     pub id: String,
-    pub skill_id: String,
     pub name: String,
     pub node_instructions: Option<String>,
     pub prerequisites: Vec<String>,
@@ -72,7 +71,6 @@ impl<L: Language> SkillTree<L> {
 pub fn build_node(config: SkillNodeConfig) -> SkillNode {
     let children = config.children.into_iter().map(build_node).collect();
     SkillNode {
-        skill_id: config.skill_id.clone().unwrap_or_else(|| config.id.clone()),
         id: config.id,
         name: config.name,
         node_instructions: config.node_instructions,
@@ -332,7 +330,6 @@ pub struct TreeCustomization {
     pub node_id: String,
     pub action: String, // "add" | "hide" | "edit"
     pub parent_id: Option<String>,
-    pub skill_id: Option<String>,
     pub node_name: Option<String>,
     pub node_instructions: Option<String>,
     /// For `add`: initial prereqs for the new node (None → empty).
@@ -381,7 +378,6 @@ pub fn apply_customizations(
                 };
                 parent.children.push(SkillNode {
                     id: c.node_id.clone(),
-                    skill_id: c.skill_id.clone().unwrap_or_else(|| c.node_id.clone()),
                     name: c.node_name.clone().unwrap_or_else(|| c.node_id.clone()),
                     node_instructions: c.node_instructions.clone(),
                     prerequisites: c.prerequisites.clone().unwrap_or_default(),
@@ -423,7 +419,6 @@ mod tests {
     fn sample_config() -> SkillNodeConfig {
         SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "Polski".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -432,7 +427,6 @@ mod tests {
             children: vec![
                 SkillNodeConfig {
                     id: "cases".to_string(),
-                    skill_id: None,
                     name: "Przypadki".to_string(),
                     node_instructions: None,
                     prerequisites: vec![],
@@ -440,7 +434,6 @@ mod tests {
                     desc: None,
                     children: vec![SkillNodeConfig {
                         id: "accusative".to_string(),
-                        skill_id: None,
                         name: "Biernik".to_string(),
                         node_instructions: Some(
                             "Generate a Polish accusative cloze test.".to_string(),
@@ -453,7 +446,6 @@ mod tests {
                 },
                 SkillNodeConfig {
                     id: "vocabulary".to_string(),
-                    skill_id: None,
                     name: "Słownictwo".to_string(),
                     node_instructions: Some("Generate vocabulary comprehension.".to_string()),
                     prerequisites: vec![],
@@ -497,7 +489,6 @@ mod tests {
         // Branch with instructions should be listed alongside leaves with instructions.
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "Root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -505,7 +496,6 @@ mod tests {
             desc: None,
             children: vec![SkillNodeConfig {
                 id: "grammar".to_string(),
-                skill_id: None,
                 name: "Grammar".to_string(),
                 node_instructions: Some("Broad grammar drill".to_string()),
                 prerequisites: vec![],
@@ -513,7 +503,6 @@ mod tests {
                 desc: None,
                 children: vec![SkillNodeConfig {
                     id: "present".to_string(),
-                    skill_id: None,
                     name: "Present".to_string(),
                     node_instructions: Some("Present tense".to_string()),
                     prerequisites: vec![],
@@ -624,7 +613,6 @@ root:
     fn chain_node(id: &str, prereqs: Vec<&str>) -> SkillNodeConfig {
         SkillNodeConfig {
             id: id.to_string(),
-            skill_id: None,
             name: id.to_string(),
             node_instructions: Some("x".to_string()),
             prerequisites: prereqs.into_iter().map(String::from).collect(),
@@ -640,7 +628,6 @@ root:
         // a -> b -> c  =>  tier(a)=1, tier(b)=1, tier(c)=2
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -664,7 +651,6 @@ root:
         // a, b -> c where a: tier 1, b: tier 1 (requires a), c: tier 2.
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -687,7 +673,6 @@ root:
         // a <-> b: cycle. Both get tier 0, no panic.
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -711,7 +696,6 @@ root:
         // prereqs. Test what we actually produce.
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "root".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -732,7 +716,6 @@ root:
             Polish,
             SkillNodeConfig {
                 id: "root".to_string(),
-                skill_id: None,
                 name: "root".to_string(),
                 node_instructions: None,
                 prerequisites: vec![],
@@ -757,7 +740,6 @@ root:
             Polish,
             SkillNodeConfig {
                 id: "root".to_string(),
-                skill_id: None,
                 name: "root".to_string(),
                 node_instructions: None,
                 prerequisites: vec![],
@@ -780,7 +762,6 @@ root:
             node_id: "dative".to_string(),
             action: "add".to_string(),
             parent_id: Some("cases".to_string()),
-            skill_id: None,
             node_name: Some("Celownik".to_string()),
             node_instructions: Some("Generate dative exercises.".to_string()),
             prerequisites: None,
@@ -799,7 +780,6 @@ root:
             node_id: "dative".to_string(),
             action: "add".to_string(),
             parent_id: Some("cases".to_string()),
-            skill_id: None,
             node_name: Some("Celownik".to_string()),
             node_instructions: Some("x".to_string()),
             prerequisites: Some(vec!["accusative".to_string()]),
@@ -816,7 +796,6 @@ root:
             node_id: "vocabulary".to_string(),
             action: "hide".to_string(),
             parent_id: None,
-            skill_id: None,
             node_name: None,
             node_instructions: None,
             prerequisites: None,
@@ -833,7 +812,6 @@ root:
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
-            skill_id: None,
             node_name: Some("Biernik (Accusative) - Edited".to_string()),
             node_instructions: None,
             prerequisites: None,
@@ -850,7 +828,6 @@ root:
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
-            skill_id: None,
             node_name: None,
             node_instructions: None,
             prerequisites: Some(vec!["cases".to_string()]),
@@ -871,7 +848,6 @@ root:
             node_id: "accusative".to_string(),
             action: "edit".to_string(),
             parent_id: None,
-            skill_id: None,
             node_name: Some("New Name".to_string()),
             node_instructions: None,
             prerequisites: None, // do not touch prereqs
@@ -891,7 +867,6 @@ root:
                 node_id: "nonexistent".to_string(),
                 action: "hide".to_string(),
                 parent_id: None,
-                skill_id: None,
                 node_name: None,
                 node_instructions: None,
                 prerequisites: None,
@@ -901,7 +876,6 @@ root:
                 node_id: "orphan".to_string(),
                 action: "add".to_string(),
                 parent_id: Some("ghost_parent".to_string()),
-                skill_id: None,
                 node_name: Some("Orphan".to_string()),
                 node_instructions: None,
                 prerequisites: None,
@@ -911,7 +885,6 @@ root:
                 node_id: "accusative".to_string(),
                 action: "add".to_string(),
                 parent_id: Some("root".to_string()),
-                skill_id: None,
                 node_name: Some("Duplicate".to_string()),
                 node_instructions: None,
                 prerequisites: None,
@@ -927,7 +900,6 @@ root:
     fn test_compute_tiers_incorporates_depth() {
         let mut root = SkillNode {
             id: "root".to_string(),
-            skill_id: "root".to_string(),
             name: "Root".to_string(),
             node_instructions: None,
             tier: 0,
@@ -937,7 +909,6 @@ root:
             children: vec![
                 SkillNode {
                     id: "child1".to_string(),
-                    skill_id: "child1".to_string(),
                     name: "Child 1".to_string(),
                     node_instructions: None,
                     tier: 0,
@@ -946,7 +917,6 @@ root:
                     desc: None,
                     children: vec![SkillNode {
                         id: "grandchild1".to_string(),
-                        skill_id: "grandchild1".to_string(),
                         name: "Grandchild 1".to_string(),
                         node_instructions: None,
                         tier: 0,
@@ -958,7 +928,6 @@ root:
                 },
                 SkillNode {
                     id: "child2".to_string(),
-                    skill_id: "child2".to_string(),
                     name: "Child 2".to_string(),
                     node_instructions: None,
                     tier: 0,

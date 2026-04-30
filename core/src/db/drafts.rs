@@ -9,13 +9,12 @@ impl LocalStorageProvider {
 
         for card in cards {
             sqlx::query(
-                "INSERT OR REPLACE INTO draft_cards (id, user_id, skill_id, skill_name, template_name, fields_json, explanation, metadata_json, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO draft_cards (id, user_id, generation_id, template_name, fields_json, explanation, metadata_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&card.id)
             .bind(&self.user_id)
-            .bind(&card.skill_id)
-            .bind(&card.skill_name)
+            .bind(&card.generation_id)
             .bind(&card.template_name)
             .bind(&card.fields_json)
             .bind(&card.explanation)
@@ -31,7 +30,7 @@ impl LocalStorageProvider {
 
     pub async fn get_drafts(&self) -> Result<Vec<DraftCard>, sqlx::Error> {
         let records = sqlx::query(
-            "SELECT id, skill_id, skill_name, template_name, fields_json, explanation, metadata_json, created_at FROM draft_cards WHERE user_id = ? ORDER BY created_at",
+            "SELECT id, generation_id, template_name, fields_json, explanation, metadata_json, created_at FROM draft_cards WHERE user_id = ? ORDER BY created_at",
         )
         .bind(&self.user_id)
         .fetch_all(&self.pool)

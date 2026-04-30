@@ -148,11 +148,11 @@ where
                 .iso_code()
                 .to_639_3()
                 .to_string(),
-            skill_id: extraction_node
+            source_node_id: extraction_node
                 .as_ref()
-                .map(|node| node.skill_id.clone())
+                .map(|node| node.id.clone())
                 .unwrap_or_else(|| skill_node_id.to_string()),
-            skill_name,
+            source_node_name: skill_name,
             pedagogical_explanation,
             target_features,
             context_features,

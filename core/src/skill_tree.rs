@@ -90,8 +90,6 @@ pub struct SkillTreeConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkillNodeConfig {
     pub id: String,
-    #[serde(default)]
-    pub skill_id: Option<String>,
     pub name: String,
     #[serde(default)]
     pub node_instructions: Option<String>,

@@ -62,8 +62,6 @@ pub struct DeckInfo {
 pub struct NewCardEntry {
     pub front_html: String,
     pub back_html: String,
-    pub skill_id: String,
-    pub skill_name: String,
     pub card_model_id: String,
     pub template_name: String,
     pub fields_json: String,
@@ -78,6 +76,8 @@ pub struct NewCardEntry {
 pub struct NewDeckData {
     pub name: String,
     pub language_code: String,
+    pub generation_id: Option<String>,
+    pub parent_deck_id: Option<String>,
     pub cards: Vec<NewCardEntry>,
 }
 

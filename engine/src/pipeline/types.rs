@@ -35,7 +35,7 @@ pub struct PipelineConfig {
 /// A generated card with all language-specific types erased to strings/JSON.
 pub struct DynGeneratedCard {
     pub card_id: String,
-    pub skill_id: String,
+    pub source_node_id: String,
     pub card_model_id: String,
     pub template_name: String,
     pub fields: HashMap<String, String>,
@@ -44,7 +44,7 @@ pub struct DynGeneratedCard {
     // Storage-ready fields (used by cards_to_deck_data)
     pub front_html: String,
     pub back_html: String,
-    pub skill_name: String,
+    pub source_node_name: String,
     pub ipa: String,
     pub audio_path: Option<String>,
 }
@@ -62,8 +62,6 @@ pub fn cards_to_deck_data(
             NewCardEntry {
                 front_html: c.front_html.clone(),
                 back_html: c.back_html.clone(),
-                skill_id: c.skill_id.clone(),
-                skill_name: c.skill_name.clone(),
                 card_model_id: c.card_model_id.clone(),
                 template_name: c.template_name.clone(),
                 fields_json,
@@ -77,6 +75,8 @@ pub fn cards_to_deck_data(
     NewDeckData {
         name: deck_name,
         language_code,
+        generation_id: None,
+        parent_deck_id: None,
         cards: new_cards,
     }
 }

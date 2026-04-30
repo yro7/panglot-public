@@ -7,16 +7,17 @@ mod cards;
 mod customizations;
 mod decks;
 mod drafts;
-mod generation_batches;
+mod generations;
 mod sql;
 mod srs_ops;
 mod types;
 
-pub use generation_batches::{MaterializeGenerationBatchError, cleanup_expired_generation_batches};
+pub use decks::MoveDeckError;
+pub use generations::{MaterializeGenerationError, cleanup_expired_generation_cards};
 pub use types::{
-    DeckCountsRecord, DeckSummaryRecord, DraftCard, GenerationBatchRecord,
-    MaterializedGenerationBatch, NewGenerationBatch, NewGenerationBatchCard, StoredGenerationBatch,
-    StudyCardRecord, StudyMode, UserTreeCustomization,
+    DeckCountsRecord, DeckSummaryRecord, DraftCard, GenerationCardRecord, GenerationRecord,
+    MaterializedGeneration, NewGeneration, NewGenerationCard, StoredGeneration, StudyCardRecord,
+    StudyMode, UserTreeCustomization,
 };
 
 use types::{DEFAULT_USER_ID, now_ms};
@@ -278,15 +279,20 @@ mod tests {
         .expect("provider should initialize")
     }
 
-    fn test_deck(name: &str, skill_id: &str, skill_name: &str) -> NewDeckData {
+    fn test_deck(
+        name: &str,
+        skill_id: &str,
+        skill_name: &str,
+        parent_deck_id: Option<&str>,
+    ) -> NewDeckData {
         NewDeckData {
             name: name.to_string(),
             language_code: "pol".to_string(),
+            generation_id: None,
+            parent_deck_id: parent_deck_id.map(str::to_string),
             cards: vec![NewCardEntry {
                 front_html: format!("<div>{name}</div>"),
                 back_html: "<div>answer</div>".to_string(),
-                skill_id: skill_id.to_string(),
-                skill_name: skill_name.to_string(),
                 card_model_id: "ClozeTest".to_string(),
                 template_name: "Recognition".to_string(),
                 fields_json: r#"{"front":"x","back":"y"}"#.to_string(),
@@ -294,7 +300,9 @@ mod tests {
                 ipa: "/ipa/".to_string(),
                 metadata_json: serde_json::json!({
                     "pedagogical_explanation": format!("Pedagogical {skill_name}"),
-                    "ipa": "/ipa/"
+                    "ipa": "/ipa/",
+                    "source_node_id": skill_id,
+                    "source_node_name": skill_name,
                 })
                 .to_string(),
                 audio_path: Some("audio/test.mp3".to_string()),
@@ -302,41 +310,50 @@ mod tests {
         }
     }
 
-    async fn deck_id_for_path(provider: &LocalStorageProvider, full_path: &str) -> String {
-        sqlx::query("SELECT id FROM decks WHERE user_id = ? AND full_path = ?")
-            .bind(&provider.user_id)
-            .bind(full_path)
-            .fetch_one(&provider.pool)
-            .await
-            .expect("deck should exist")
-            .get("id")
-    }
-
-    async fn first_card_id_for_path(provider: &LocalStorageProvider, full_path: &str) -> String {
+    async fn deck_id_for_name(
+        provider: &LocalStorageProvider,
+        name: &str,
+        parent_deck_id: Option<&str>,
+    ) -> String {
         sqlx::query(
-            "SELECT c.id FROM cards c JOIN decks d ON c.deck_id = d.id WHERE d.user_id = ? AND d.full_path = ? ORDER BY c.created_at LIMIT 1",
+            "SELECT id FROM decks WHERE user_id = ? AND name = ? \
+             AND IFNULL(parent_id, '') = IFNULL(?, '')",
         )
         .bind(&provider.user_id)
-        .bind(full_path)
+        .bind(name)
+        .bind(parent_deck_id)
         .fetch_one(&provider.pool)
         .await
-            .expect("card should exist")
-            .get("id")
+        .expect("deck should exist")
+        .get("id")
     }
 
-    fn test_generation_batch(batch_id: &str) -> NewGenerationBatch {
-        NewGenerationBatch {
+    async fn first_card_id_for_deck(provider: &LocalStorageProvider, deck_id: &str) -> String {
+        sqlx::query(
+            "SELECT id FROM cards WHERE deck_id = ? ORDER BY created_at LIMIT 1",
+        )
+        .bind(deck_id)
+        .fetch_one(&provider.pool)
+        .await
+        .expect("card should exist")
+        .get("id")
+    }
+
+    fn test_generation(batch_id: &str) -> NewGeneration {
+        NewGeneration {
             id: batch_id.to_string(),
             language_iso: "pol".to_string(),
-            tree_definition_id: "tree-pol".to_string(),
-            node_id: "greetings".to_string(),
-            skill_id: "greetings".to_string(),
-            skill_name: "Greetings".to_string(),
+            tree_definition_id: Some("tree-pol".to_string()),
+            tree_node_id: Some("greetings".to_string()),
+            concept_key: Some("vocab".to_string()),
             card_model_id: "ClozeTest".to_string(),
-            default_deck_name: "Polish::Greetings::ClozeTest".to_string(),
+            card_count: 1,
+            difficulty: 0,
+            user_prompt: None,
+            default_deck_name: "Greetings".to_string(),
             created_at: 1_700_000_000_000,
             expires_at: 1_700_086_400_000,
-            cards: vec![NewGenerationBatchCard {
+            cards: vec![NewGenerationCard {
                 id: "generated-card-1".to_string(),
                 template_name: "cloze_test".to_string(),
                 front_html: "<div>front</div>".to_string(),
@@ -352,17 +369,43 @@ mod tests {
         }
     }
 
+    async fn save_parent_with_children(
+        provider: &LocalStorageProvider,
+        parent_name: &str,
+        children: &[(&str, &str, &str)],
+    ) -> String {
+        provider
+            .save_deck(&NewDeckData {
+                name: parent_name.to_string(),
+                language_code: "pol".to_string(),
+                generation_id: None,
+                parent_deck_id: None,
+                cards: vec![],
+            })
+            .await
+            .expect("parent deck should save");
+        let parent_id = deck_id_for_name(provider, parent_name, None).await;
+        for (name, skill_id, skill_name) in children {
+            provider
+                .save_deck(&test_deck(name, skill_id, skill_name, Some(&parent_id)))
+                .await
+                .expect("child deck should save");
+        }
+        parent_id
+    }
+
     #[tokio::test]
     async fn list_deck_summaries_aggregates_descendant_counts() {
         let provider = init_provider("deck_summaries").await;
-        provider
-            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
-            .await
-            .expect("deck should save");
-        provider
-            .save_deck(&test_deck("Vocabulary::Months", "skill-months", "Months"))
-            .await
-            .expect("deck should save");
+        save_parent_with_children(
+            &provider,
+            "Vocabulary",
+            &[
+                ("Family", "skill-family", "Family"),
+                ("Months", "skill-months", "Months"),
+            ],
+        )
+        .await;
 
         let summaries = provider
             .list_deck_summaries()
@@ -382,16 +425,15 @@ mod tests {
     #[tokio::test]
     async fn select_study_cards_recurses_for_practice_and_review() {
         let provider = init_provider("study_cards").await;
-        provider
-            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
-            .await
-            .expect("deck should save");
-        provider
-            .save_deck(&test_deck("Vocabulary::Months", "skill-months", "Months"))
-            .await
-            .expect("deck should save");
-
-        let parent_id = deck_id_for_path(&provider, "Vocabulary").await;
+        let parent_id = save_parent_with_children(
+            &provider,
+            "Vocabulary",
+            &[
+                ("Family", "skill-family", "Family"),
+                ("Months", "skill-months", "Months"),
+            ],
+        )
+        .await;
 
         let practice_cards = provider
             .select_study_cards(&parent_id, StudyMode::Practice, 20)
@@ -415,11 +457,12 @@ mod tests {
     async fn practice_rating_writes_only_practice_log() {
         let provider = init_provider("practice_rating").await;
         provider
-            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
+            .save_deck(&test_deck("Family", "skill-family", "Family", None))
             .await
             .expect("deck should save");
 
-        let card_id = first_card_id_for_path(&provider, "Vocabulary::Family").await;
+        let deck_id = deck_id_for_name(&provider, "Family", None).await;
+        let card_id = first_card_id_for_deck(&provider, &deck_id).await;
         let before_interval: f64 =
             sqlx::query("SELECT interval_days FROM reviews WHERE card_id = ? AND user_id = ?")
                 .bind(&card_id)
@@ -474,11 +517,12 @@ mod tests {
     async fn review_rating_updates_review_log_and_cache() {
         let provider = init_provider("review_rating").await;
         provider
-            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
+            .save_deck(&test_deck("Family", "skill-family", "Family", None))
             .await
             .expect("deck should save");
 
-        let card_id = first_card_id_for_path(&provider, "Vocabulary::Family").await;
+        let deck_id = deck_id_for_name(&provider, "Family", None).await;
+        let card_id = first_card_id_for_deck(&provider, &deck_id).await;
         let algorithm = SrsRegistry::new();
 
         provider
@@ -524,11 +568,12 @@ mod tests {
     async fn updating_settings_rebuilds_review_cache_for_new_algorithm() {
         let provider = init_provider("settings_rebuild_cache").await;
         provider
-            .save_deck(&test_deck("Vocabulary::Family", "skill-family", "Family"))
+            .save_deck(&test_deck("Family", "skill-family", "Family", None))
             .await
             .expect("deck should save");
 
-        let card_id = first_card_id_for_path(&provider, "Vocabulary::Family").await;
+        let deck_id = deck_id_for_name(&provider, "Family", None).await;
+        let card_id = first_card_id_for_deck(&provider, &deck_id).await;
         let registry = SrsRegistry::new();
         let sm2 = registry
             .get_typed(SrsAlgorithmId::Sm2)
@@ -579,76 +624,84 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn save_deck_preserves_skill_identity() {
+    async fn save_deck_preserves_skill_identity_in_metadata_json() {
         let provider = init_provider("skill_identity").await;
         provider
             .save_deck(&test_deck(
-                "Grammar::Accusative",
+                "Accusative",
                 "skill-accusative",
                 "Accusative",
+                None,
             ))
             .await
             .expect("deck should save");
 
-        let row = sqlx::query(
-            "SELECT c.skill_id, c.skill_name, c.card_model_id FROM cards c JOIN decks d ON c.deck_id = d.id WHERE d.user_id = ? AND d.full_path = ?",
+        let metadata_json: String = sqlx::query_scalar(
+            "SELECT c.metadata_json FROM cards c \
+             JOIN decks d ON c.deck_id = d.id \
+             WHERE d.user_id = ? AND d.name = ?",
         )
         .bind(&provider.user_id)
-        .bind("Grammar::Accusative")
+        .bind("Accusative")
         .fetch_one(&provider.pool)
         .await
         .expect("card should exist");
-        let deck_id = deck_id_for_path(&provider, "Grammar::Accusative").await;
+        let metadata: serde_json::Value =
+            serde_json::from_str(&metadata_json).expect("metadata should parse");
+        assert_eq!(
+            metadata.get("source_node_id").and_then(|v| v.as_str()),
+            Some("skill-accusative")
+        );
+        assert_eq!(
+            metadata.get("source_node_name").and_then(|v| v.as_str()),
+            Some("Accusative")
+        );
+
+        let deck_id = deck_id_for_name(&provider, "Accusative", None).await;
         let study_cards = provider
             .select_study_cards(&deck_id, StudyMode::Practice, 20)
             .await
             .expect("study cards should load");
 
-        assert_eq!(
-            row.get::<Option<String>, _>("skill_id").unwrap_or_default(),
-            "skill-accusative"
-        );
-        assert_eq!(row.get::<String, _>("skill_name"), "Accusative");
-        assert_eq!(row.get::<String, _>("card_model_id"), "ClozeTest");
-        assert_eq!(study_cards[0].skill_id, "skill-accusative");
-        assert_eq!(study_cards[0].skill_name, "Accusative");
+        assert_eq!(study_cards[0].source_node_id, "skill-accusative");
+        assert_eq!(study_cards[0].source_node_name, "Accusative");
         assert_eq!(study_cards[0].card_model_id, "ClozeTest");
     }
 
     #[tokio::test]
-    async fn generation_batch_round_trips_without_public_blob_leaks() {
-        let provider = init_provider("generation_batch_round_trip").await;
-        let batch = test_generation_batch("batch-round-trip");
+    async fn generation_round_trips_without_public_blob_leaks() {
+        let provider = init_provider("generation_round_trip").await;
+        let generation = test_generation("generation-round-trip");
 
         provider
-            .save_generation_batch(&batch)
+            .save_generation(&generation)
             .await
-            .expect("generation batch should save");
+            .expect("generation should save");
 
         let stored = provider
-            .get_generation_batch(&batch.id)
+            .get_generation(&generation.id)
             .await
-            .expect("generation batch should load")
-            .expect("generation batch should exist");
+            .expect("generation should load")
+            .expect("generation should exist");
 
-        assert_eq!(stored.batch.id, batch.id);
-        assert_eq!(stored.batch.card_model_id, "ClozeTest");
+        assert_eq!(stored.generation.id, generation.id);
+        assert_eq!(stored.generation.card_model_id, "ClozeTest");
         assert_eq!(stored.cards.len(), 1);
         assert_eq!(stored.cards[0].template_name, "cloze_test");
         assert_eq!(stored.cards[0].fields_json, r#"{"sentence":"Hej"}"#);
     }
 
     #[tokio::test]
-    async fn materializing_generation_batch_is_one_shot() {
-        let provider = init_provider("materialize_generation_batch").await;
-        let batch = test_generation_batch("batch-materialize");
+    async fn materializing_generation_is_one_shot() {
+        let provider = init_provider("materialize_generation").await;
+        let generation = test_generation("generation-materialize");
         provider
-            .save_generation_batch(&batch)
+            .save_generation(&generation)
             .await
-            .expect("generation batch should save");
+            .expect("generation should save");
 
         let first = provider
-            .materialize_generation_batch_to_deck(&batch.id, "Custom::Deck")
+            .materialize_generation_to_deck(&generation.id, "CustomDeck", None)
             .await
             .expect("materialization should succeed");
         assert_eq!(first.created_card_count, 1);
@@ -662,20 +715,20 @@ mod tests {
         assert_eq!(card_model_id, "ClozeTest");
 
         let stored = provider
-            .get_generation_batch(&batch.id)
+            .get_generation(&generation.id)
             .await
-            .expect("generation batch should load")
-            .expect("generation batch should exist");
+            .expect("generation should load")
+            .expect("generation should exist");
         assert_eq!(
-            stored.batch.materialized_deck_id.as_deref(),
+            stored.generation.materialized_deck_id.as_deref(),
             Some(first.deck_id.as_str())
         );
 
         match provider
-            .materialize_generation_batch_to_deck(&batch.id, "Custom::Deck")
+            .materialize_generation_to_deck(&generation.id, "CustomDeck", None)
             .await
         {
-            Err(MaterializeGenerationBatchError::AlreadyMaterialized { deck_id }) => {
+            Err(MaterializeGenerationError::AlreadyMaterialized { deck_id }) => {
                 assert_eq!(deck_id, first.deck_id);
             }
             other => panic!("expected already-materialized error, got {:?}", other),
@@ -683,35 +736,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cleanup_expired_generation_batches_removes_batches_and_cards() {
-        let provider = init_provider("cleanup_generation_batches").await;
-        let mut expired = test_generation_batch("expired-batch");
+    async fn cleanup_expired_generation_cards_removes_staged_cards() {
+        let provider = init_provider("cleanup_generation_cards").await;
+        let mut expired = test_generation("expired-generation");
         expired.expires_at = 42;
         provider
-            .save_generation_batch(&expired)
+            .save_generation(&expired)
             .await
-            .expect("expired generation batch should save");
+            .expect("expired generation should save");
 
-        let deleted = cleanup_expired_generation_batches(&provider.pool, 100)
+        let deleted = cleanup_expired_generation_cards(&provider.pool, 100)
             .await
             .expect("cleanup should succeed");
         assert_eq!(deleted, 1);
 
-        let batch_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM generation_batches WHERE id = ?")
+        // Parent generation row stays (permanent log).
+        let generation_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM generations WHERE id = ?")
                 .bind(&expired.id)
                 .fetch_one(&provider.pool)
                 .await
-                .expect("batch count should load");
+                .expect("generation count should load");
+        // Staged cards removed.
         let card_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM generation_batch_cards WHERE generation_batch_id = ?",
+            "SELECT COUNT(*) FROM generation_cards WHERE generation_id = ?",
         )
         .bind(&expired.id)
         .fetch_one(&provider.pool)
         .await
         .expect("card count should load");
 
-        assert_eq!(batch_count, 0);
+        assert_eq!(generation_count, 1);
         assert_eq!(card_count, 0);
     }
 }

@@ -426,7 +426,7 @@ impl LibraryAnalyzer {
                 }
 
                 // Per-skill mature card accounting (feeds `is_skill_mastered`).
-                tracker.record_card(&metadata.skill_id, &card.card_id, card.is_mature());
+                tracker.record_card(&metadata.source_node_id, &card.card_id, card.is_mature());
 
                 for feature in metadata
                     .target_features
@@ -434,15 +434,15 @@ impl LibraryAnalyzer {
                     .chain(metadata.context_features.iter())
                 {
                     if card.is_leech() {
-                        tracker.mark_struggling(feature, &metadata.skill_id);
+                        tracker.mark_struggling(feature, &metadata.source_node_id);
                     }
 
                     if card.is_mature() {
-                        tracker.mark_mastered(feature, &metadata.skill_id);
+                        tracker.mark_mastered(feature, &metadata.source_node_id);
                     } else if card.interval_days > 0.0 {
-                        tracker.mark_learnt(feature, &metadata.skill_id);
+                        tracker.mark_learnt(feature, &metadata.source_node_id);
                     } else {
-                        tracker.mark_learning(feature, &metadata.skill_id);
+                        tracker.mark_learning(feature, &metadata.source_node_id);
                     }
                 }
             }
@@ -519,8 +519,8 @@ mod tests {
         let metadata = CardMetadata {
             card_id: format!("c{}", card_id),
             language: "pol".to_string(),
-            skill_id: skill_id.to_string(),
-            skill_name: String::new(),
+            source_node_id: skill_id.to_string(),
+            source_node_name: String::new(),
             pedagogical_explanation: String::new(),
             target_features: features,
             context_features: vec![],

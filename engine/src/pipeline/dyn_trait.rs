@@ -159,14 +159,14 @@ where
                         .replace('\n', "<br>");
                 DynGeneratedCard {
                     card_id: c.metadata.card_id,
-                    skill_id: c.metadata.skill_id,
+                    source_node_id: c.metadata.source_node_id,
                     card_model_id: card_model_id.to_string(),
                     template_name: c.model.template_name().to_string(),
                     front_html: c.model.front_html(),
                     back_html: c.model.back_html(),
                     fields: c.model.to_fields(),
                     explanation,
-                    skill_name: c.metadata.skill_name,
+                    source_node_name: c.metadata.source_node_name,
                     ipa: c.metadata.ipa.unwrap_or_default(),
                     audio_path: c.metadata.audio_file,
                     metadata_json,

@@ -4,7 +4,12 @@
 // DECK_CLOSURE_CTE binds (in order):
 //   1. user_id (closure anchor)
 //   2. user_id (closure recursion)
-//   3. user_id (review_counts)
+//   3. user_id (deck_path anchor)
+//   4. user_id (deck_path recursion)
+//   5. user_id (review_counts)
+//
+// `deck_path` derives the display path on the fly from the parent_id chain.
+// Replaces the old denormalized `decks.full_path` column.
 pub(super) const DECK_CLOSURE_CTE: &str = r#"
 WITH RECURSIVE deck_closure(ancestor_id, descendant_id) AS (
     SELECT id, id FROM decks WHERE user_id = ?
@@ -12,6 +17,13 @@ WITH RECURSIVE deck_closure(ancestor_id, descendant_id) AS (
     SELECT dc.ancestor_id, d.id
     FROM deck_closure dc
     JOIN decks d ON d.parent_id = dc.descendant_id
+    WHERE d.user_id = ?
+),
+deck_path(id, full_path) AS (
+    SELECT id, name FROM decks WHERE user_id = ? AND parent_id IS NULL
+    UNION ALL
+    SELECT d.id, dp.full_path || '::' || d.name
+    FROM decks d JOIN deck_path dp ON d.parent_id = dp.id
     WHERE d.user_id = ?
 ),
 review_counts AS (
@@ -23,7 +35,7 @@ review_counts AS (
 // DECK_SUMMARY_SELECT binds (after CTE): due_cutoff ×3, reviews.user_id.
 pub(super) const DECK_SUMMARY_SELECT: &str = r#"
 SELECT
-    d.id, d.parent_id, d.name, d.full_path, d.target_language,
+    d.id, d.parent_id, d.name, dp.full_path, d.target_language,
     COUNT(c.id) as total_cards,
     SUM(CASE WHEN r.due_date <= ? AND r.interval_days = 0
               AND COALESCE(rc.review_count, 0) = 0 THEN 1 ELSE 0 END) as due_new_cards,
@@ -32,6 +44,7 @@ SELECT
               AND r.due_date <= ? THEN 1 ELSE 0 END) as due_learning_cards,
     SUM(CASE WHEN r.interval_days >= 1 AND r.due_date <= ? THEN 1 ELSE 0 END) as due_review_cards
 FROM decks d
+LEFT JOIN deck_path dp ON dp.id = d.id
 LEFT JOIN deck_closure dc ON dc.ancestor_id = d.id
 LEFT JOIN cards c ON c.deck_id = dc.descendant_id
 LEFT JOIN reviews r ON c.id = r.card_id AND r.user_id = ?
@@ -49,8 +62,6 @@ WITH RECURSIVE deck_tree(id) AS (
 
 pub(super) const STUDY_CARD_PROJECTION: &str = r#"
 c.id, c.deck_id,
-COALESCE(c.skill_id, '') as skill_id,
-COALESCE(c.skill_name, '') as skill_name,
 COALESCE(c.card_model_id, c.template_name, '') as card_model_id,
 c.front_html, c.back_html, c.metadata_json, c.audio_path
 "#;

@@ -421,7 +421,6 @@ mod tests {
     fn sample_tree() -> SkillTree<Polish> {
         let config = SkillNodeConfig {
             id: "root".to_string(),
-            skill_id: None,
             name: "Polski".to_string(),
             node_instructions: None,
             prerequisites: vec![],
@@ -429,7 +428,6 @@ mod tests {
             desc: None,
             children: vec![SkillNodeConfig {
                 id: "accusative".to_string(),
-                skill_id: None,
                 name: "Biernik".to_string(),
                 node_instructions: Some("Focus on the accusative case.".to_string()),
                 prerequisites: vec![],
