@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rig::client::CompletionClient as _;
 use rig::completion::CompletionModel as _;
 use rig::providers::gemini;
@@ -18,11 +18,11 @@ const MODEL: &str = "gemini-3-flash-preview";
 //   - Italian  → Romance, non-agglutinative (GrammaticalFunction = ())
 //   - Polish   → Slavic, heavily inflected, non-agglutinative (GrammaticalFunction = ())
 const EXAMPLE_PANINI_RS_FILES: &[&str] = &[
-    "panini/panini-langs/src/turkish.rs",  // Agglutinative; GrammaticalFunction enum + Agglutinative impl
-    "panini/panini-langs/src/arabic.rs",   // Semitic root/pattern; GrammaticalFunction = ()
-    "panini/panini-langs/src/french.rs",   // Romance; GrammaticalFunction = ()
-    "panini/panini-langs/src/italian.rs",  // Romance; GrammaticalFunction = ()
-    "panini/panini-langs/src/polish.rs",   // Slavic inflectional; GrammaticalFunction = ()
+    "panini/panini-langs/src/turkish.rs", // Agglutinative; GrammaticalFunction enum + Agglutinative impl
+    "panini/panini-langs/src/arabic.rs",  // Semitic root/pattern; GrammaticalFunction = ()
+    "panini/panini-langs/src/french.rs",  // Romance; GrammaticalFunction = ()
+    "panini/panini-langs/src/italian.rs", // Romance; GrammaticalFunction = ()
+    "panini/panini-langs/src/polish.rs",  // Slavic inflectional; GrammaticalFunction = ()
 ];
 
 // ─── Example files for the PANGLOT wrapper ────────────────────────────────────
@@ -30,9 +30,9 @@ const EXAMPLE_PANINI_RS_FILES: &[&str] = &[
 // These show what goes in `langs/src/<iso>.rs`.
 // They are thin wrappers that delegate to the panini-langs impl.
 const EXAMPLE_PANGLOT_RS_FILES: &[&str] = &[
-    "langs/src/tur.rs",     // Wrapper for Turkish (agglutinative, NoExtraFields)
-    "langs/src/arabic.rs",  // Wrapper for Arabic (ArabicExtraFields with context_disambiguation)
-    "langs/src/polish.rs",  // Wrapper for Polish (NoExtraFields)
+    "langs/src/tur.rs",    // Wrapper for Turkish (agglutinative, NoExtraFields)
+    "langs/src/arabic.rs", // Wrapper for Arabic (ArabicExtraFields with context_disambiguation)
+    "langs/src/polish.rs", // Wrapper for Polish (NoExtraFields)
 ];
 
 // ─── Example skill tree YAML files ───────────────────────────────────────────
@@ -190,7 +190,8 @@ Output ONLY the Rust code, nothing else.",
         lang_name_upper = lang_name.to_uppercase().replace(' ', "_"),
     );
 
-    let raw = client.completion_request(&user)
+    let raw = client
+        .completion_request(&user)
         .preamble(system.to_string())
         .temperature(0.2)
         .max_tokens(10000)
@@ -200,7 +201,11 @@ Output ONLY the Rust code, nothing else.",
         .choice
         .into_iter()
         .find_map(|c| {
-            if let rig::completion::message::AssistantContent::Text(t) = c { Some(t.text) } else { None }
+            if let rig::completion::message::AssistantContent::Text(t) = c {
+                Some(t.text)
+            } else {
+                None
+            }
         })
         .ok_or_else(|| anyhow::anyhow!("LLM returned no text"))?;
     Ok(strip_code_fences(&raw))
@@ -306,7 +311,8 @@ Output ONLY the Rust code, nothing else.",
         examples = examples,
     );
 
-    let raw = client.completion_request(&user)
+    let raw = client
+        .completion_request(&user)
         .preamble(system.to_string())
         .temperature(0.2)
         .max_tokens(4000)
@@ -316,13 +322,21 @@ Output ONLY the Rust code, nothing else.",
         .choice
         .into_iter()
         .find_map(|c| {
-            if let rig::completion::message::AssistantContent::Text(t) = c { Some(t.text) } else { None }
+            if let rig::completion::message::AssistantContent::Text(t) = c {
+                Some(t.text)
+            } else {
+                None
+            }
         })
         .ok_or_else(|| anyhow::anyhow!("LLM returned no text"))?;
     Ok(strip_code_fences(&raw))
 }
 
-async fn generate_tree(client: &gemini::CompletionModel, iso: &str, lang_name: &str) -> Result<String> {
+async fn generate_tree(
+    client: &gemini::CompletionModel,
+    iso: &str,
+    lang_name: &str,
+) -> Result<String> {
     let examples = read_examples(EXAMPLE_TREE_FILES)?;
 
     let system = "\
@@ -356,7 +370,8 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
          Output ONLY the YAML, nothing else.",
     );
 
-    let raw = client.completion_request(&user)
+    let raw = client
+        .completion_request(&user)
         .preamble(system.to_string())
         .temperature(0.5)
         .max_tokens(4000)
@@ -366,7 +381,11 @@ Your output must be ONLY valid YAML — no markdown fences, no explanations.";
         .choice
         .into_iter()
         .find_map(|c| {
-            if let rig::completion::message::AssistantContent::Text(t) = c { Some(t.text) } else { None }
+            if let rig::completion::message::AssistantContent::Text(t) = c {
+                Some(t.text)
+            } else {
+                None
+            }
         })
         .ok_or_else(|| anyhow::anyhow!("LLM returned no text"))?;
     Ok(strip_code_fences(&raw))
@@ -402,7 +421,9 @@ fn to_module_name(lang_name: &str) -> String {
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
-        bail!("Usage: lc-codegen <iso-639-3-code>\nExample: lc-codegen swh\nBuild: cargo run -p lc-codegen <iso-639-3-code>");
+        bail!(
+            "Usage: lc-codegen <iso-639-3-code>\nExample: lc-codegen swh\nBuild: cargo run -p lc-codegen <iso-639-3-code>"
+        );
     }
     let iso = &args[1];
 
@@ -459,8 +480,7 @@ async fn main() -> Result<()> {
     // ── Step 3: Generate the skill tree YAML ─────────────────────────────────
     println!("\n[3/3] Generating {tree_path}...");
     let tree_content = generate_tree(&client, iso, &lang_name).await?;
-    fs::write(&tree_path, &tree_content)
-        .with_context(|| format!("Failed to write {tree_path}"))?;
+    fs::write(&tree_path, &tree_content).with_context(|| format!("Failed to write {tree_path}"))?;
     println!("  ✅ Written {tree_path}");
 
     println!("\n🎉 Done! Next steps:");
@@ -475,4 +495,3 @@ async fn main() -> Result<()> {
 }
 
 ///// TODO : give the this context:
-

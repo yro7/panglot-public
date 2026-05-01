@@ -19,7 +19,7 @@ iso15924 = "0.1.0"
 async-trait = "0.1.89"
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "uuid", "chrono", "migrate"] }
 chrono = "0.4.44"
-uuid = { version = "1.22.0", features = ["v4", "serde"] }
+uuid = { version = "1.22.0", features = ["v4", "v7", "serde"] }
 utoipa = "5"
 serde_json = "1"
 serde_yml = "0.0.12"

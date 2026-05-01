@@ -1,6 +1,6 @@
 use static_assertions::assert_impl_all;
 
-use langs::{Japanese, JapaneseMorphology, Polish, PolishMorphology};
+use langs::polish::{Polish, PolishMorphology};
 
 use crate::analyzer::{DynLexiconTracker, LexiconTracker, LibraryAnalyzer, WordProfile};
 use crate::card_models::{
@@ -28,13 +28,8 @@ assert_impl_all!(OralComprehension: Send, Sync);
 
 // ── Generator ──
 assert_impl_all!(GenerationRequest<Polish>: Send, Sync);
-assert_impl_all!(GenerationRequest<Japanese>: Send, Sync);
-
-// ── Pipeline ──
 assert_impl_all!(GeneratedCard<PolishMorphology>: Send, Sync);
-assert_impl_all!(GeneratedCard<JapaneseMorphology>: Send, Sync);
 assert_impl_all!(Pipeline<Polish>: Send, Sync);
-assert_impl_all!(Pipeline<Japanese>: Send, Sync);
 
 // ── Post-Processing ──
 assert_impl_all!(EarlyPostProcessResult: Send, Sync);
@@ -49,4 +44,3 @@ assert_impl_all!(SkillTreeConfig: Send, Sync);
 assert_impl_all!(SkillNodeConfig: Send, Sync);
 assert_impl_all!(SkillNode: Send, Sync);
 assert_impl_all!(SkillTree<Polish>: Send, Sync);
-assert_impl_all!(SkillTree<Japanese>: Send, Sync);

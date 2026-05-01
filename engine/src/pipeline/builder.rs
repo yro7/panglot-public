@@ -22,7 +22,12 @@ pub struct PipelineBuilder<L: Language + Send + Sync> {
 }
 
 impl<L: Language + Send + Sync> PipelineBuilder<L> {
-    pub fn new(language: L, llm_backend: LlmBackend, config: PipelineConfig, prompt_config: PromptConfig) -> Self {
+    pub fn new(
+        language: L,
+        llm_backend: LlmBackend,
+        config: PipelineConfig,
+        prompt_config: PromptConfig,
+    ) -> Self {
         Self {
             language,
             llm_backend,

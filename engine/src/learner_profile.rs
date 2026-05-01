@@ -273,7 +273,7 @@ where
     F: for<'de> serde::Deserialize<'de> + panini_core::aggregable::AggregableFields,
 {
     use panini_core::morpheme::WordSegmentation;
-    
+
     // Morphology: target_features
     if let Ok(morph) = extraction.get::<MorphSection<M>>("morphology") {
         for feature in &morph.target_features {
@@ -305,7 +305,7 @@ where
 /// This is the **simplest way** to get an aggregated lexicon profile for LLM prompts.
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// let provider = LocalStorageProvider::for_user(pool, user_id);
 /// let summary = build_lexicon_summary_for_llm::<TurkishMorphology, TurkishGrammaticalFunction>(
 ///     &provider,
@@ -334,7 +334,9 @@ where
         let fields: Vec<&str> = card.fields.split('\x1f').collect();
         for field in fields.into_iter().rev() {
             if field.trim().starts_with('{') {
-                if let Ok(metadata) = serde_json::from_str::<lc_core::domain::CardMetadata<M, F>>(field) {
+                if let Ok(metadata) =
+                    serde_json::from_str::<lc_core::domain::CardMetadata<M, F>>(field)
+                {
                     // Aggregate target and context features
                     for feature in &metadata.target_features {
                         agg.record(feature);
@@ -342,7 +344,7 @@ where
                     for feature in &metadata.context_features {
                         agg.record(feature);
                     }
-                    
+
                     // Aggregate morpheme segmentation if present
                     if let Some(segs) = &metadata.morpheme_segmentation {
                         for seg in segs {

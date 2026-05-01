@@ -1,6 +1,4 @@
-use super::{
-    ReviewEvent, SchedulingOutput, SchedulingChoices, Rating,
-};
+use super::{Rating, ReviewEvent, SchedulingChoices, SchedulingOutput};
 
 // ── SRS Algorithm trait ──
 
@@ -38,7 +36,11 @@ pub trait SrsAlgorithm: Send + Sync {
                     Rating::Again => CardState::Learning(1),
                     Rating::Hard => CardState::Learning(step), // repeat current step
                     Rating::Good => {
-                        if step == 1 { CardState::Learning(2) } else { CardState::Graduated }
+                        if step == 1 {
+                            CardState::Learning(2)
+                        } else {
+                            CardState::Graduated
+                        }
                     }
                     Rating::Easy => CardState::Graduated,
                 },
@@ -64,7 +66,7 @@ pub trait SrsAlgorithm: Send + Sync {
 
         match state {
             CardState::Learning(1) => SchedulingOutput {
-                due_date: now + 60_000,  // + 1 min
+                due_date: now + 60_000, // + 1 min
                 interval_days: 0.0,
             },
             CardState::Learning(2) => SchedulingOutput {
@@ -83,7 +85,11 @@ pub trait SrsAlgorithm: Send + Sync {
                         now - (now % ms_per_day)
                     } else {
                         let rem = now % ms_per_day;
-                        if rem == 0 { now } else { now - ms_per_day - rem }
+                        if rem == 0 {
+                            now
+                        } else {
+                            now - ms_per_day - rem
+                        }
                     };
                     out.due_date = start_of_day + (out.interval_days * ms_per_day as f64) as i64;
                 }
@@ -99,9 +105,9 @@ pub trait SrsAlgorithm: Send + Sync {
     fn preview_choices(&self, history: &[ReviewEvent], now: i64) -> SchedulingChoices {
         SchedulingChoices {
             again: self.schedule(history, Rating::Again, now),
-            hard:  self.schedule(history, Rating::Hard, now),
-            good:  self.schedule(history, Rating::Good, now),
-            easy:  self.schedule(history, Rating::Easy, now),
+            hard: self.schedule(history, Rating::Hard, now),
+            good: self.schedule(history, Rating::Good, now),
+            easy: self.schedule(history, Rating::Easy, now),
         }
     }
 }

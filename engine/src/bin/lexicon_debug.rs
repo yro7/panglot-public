@@ -5,9 +5,9 @@ use lc_core::storage::{StorageProvider, StoredCard};
 use panini_core::Aggregable;
 use panini_core::aggregable::digest::{AggregationResult, BasicAggregator};
 
-use langs::tur::TurkishGrammaticalFunction;
 use langs::TurkishMorphology;
 use langs::arabic::ArabicMorphology;
+use langs::tur::TurkishGrammaticalFunction;
 
 const DB_PATH: &str = "output/panglot.db";
 const USER_ID: &str = "80512005-26ae-4cce-9cdd-48ccc1a3d950";
@@ -22,11 +22,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut ara_morph_agg = BasicAggregator::new();
     let mut ara_root_agg = BasicAggregator::new();
 
-    if let Ok(init) = LocalStorageProvider::init(DB_PATH).await {
-        let provider = LocalStorageProvider::for_user(init.pool, USER_ID.to_string());
+    if let Ok(init) =
+        LocalStorageProvider::init(DB_PATH, lc_core::user::UserSettings::default()).await
+    {
+        let provider = LocalStorageProvider::for_user(
+            init.pool,
+            USER_ID.to_string(),
+            lc_core::user::UserSettings::default(),
+        );
         if let Ok(cards) = provider.fetch_cards().await {
             for card in &cards {
-                if let Some(metadata) = extract_metadata::<TurkishMorphology, TurkishGrammaticalFunction>(card) {
+                if let Some(metadata) =
+                    extract_metadata::<TurkishMorphology, TurkishGrammaticalFunction>(card)
+                {
                     if metadata.language != "tur" {
                         continue;
                     }
@@ -64,9 +72,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         .chain(metadata.context_features.iter());
                     for feature in features {
                         ara_morph_agg.record(feature);
-                        
-                        let root = feature.morphology.root().unwrap_or_else(|| feature.group_key());
-                        
+
+                        let root = feature
+                            .morphology
+                            .root()
+                            .unwrap_or_else(|| feature.group_key());
+
                         // Aggregator
                         ara_root_agg.record(&feature.pivoted(|_| root.clone()));
                     }
@@ -100,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     } else {
         println!("\n--- Standard Aggregation (by PoS) ---");
         ara_morph_result.print();
-        
+
         println!("\n--- Specialized Aggregation (by Root) ---");
         ara_root_result.print();
     }

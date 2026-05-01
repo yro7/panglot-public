@@ -1,3 +1,9 @@
+tree_id: 1f6cf552-984d-437a-ab20-cfe8307a4d50
+tree_key: core
+tree_slug: russian-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Russian
 root:
   id: root

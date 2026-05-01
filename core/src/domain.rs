@@ -12,8 +12,14 @@ pub struct CardMetadata<M, F = ()> {
     /// ISO 639-3 language code (e.g. "pol", "cmn"). Used to filter cards by language during lexicon scan.
     #[serde(default)]
     pub language: String,
-    pub skill_id: String,
-    pub skill_name: String,
+    /// The id of the tree node that triggered this generation. Snapshot taken
+    /// at gen time — survives YAML edits / node renames as opaque string.
+    #[serde(alias = "skill_id")]
+    pub source_node_id: String,
+    /// Display name of the source node at gen time. Used by the study UI; not
+    /// authoritative — re-resolve from the current tree if you need fresh data.
+    #[serde(alias = "skill_name")]
+    pub source_node_name: String,
     pub pedagogical_explanation: String,
     /// Features extracted from the target word(s) — what the card is testing.
     pub target_features: Vec<ExtractedFeature<M>>,

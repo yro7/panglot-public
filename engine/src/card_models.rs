@@ -9,7 +9,7 @@ use lc_core::traits::CardModel;
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 #[schemars(title = "CardModelSchema")]
 #[schemars(bound = "L::ExtraFields: schemars::JsonSchema, M: schemars::JsonSchema")]
-pub struct LLMResponse<M: schemars::JsonSchema, L: lc_core::traits::Language> 
+pub struct LLMResponse<M: schemars::JsonSchema, L: lc_core::traits::Language>
 where
     L::ExtraFields: schemars::JsonSchema,
 {
@@ -180,8 +180,6 @@ pub struct ClozeTest {
 
     #[serde(flatten)]
     pub common: CommonCardFront,
-
-
 }
 
 impl CardModel for ClozeTest {
@@ -205,10 +203,14 @@ impl CardModel for ClozeTest {
         let cloze_prompt = replace_cloze_with_blank(&self.sentence);
         let mut html = format!(
             "<div class=\"translation\">{}</div>\n<div class=\"cloze-sentence\">{}</div>",
-            escape_html(&self.common.translation), escape_html(&cloze_prompt)
+            escape_html(&self.common.translation),
+            escape_html(&cloze_prompt)
         );
         if let Some(hint) = &self.hint {
-            html.push_str(&format!("\n<div class=\"hint\">(Racine: {})</div>", escape_html(hint)));
+            html.push_str(&format!(
+                "\n<div class=\"hint\">(Racine: {})</div>",
+                escape_html(hint)
+            ));
         }
         html
     }
@@ -217,7 +219,8 @@ impl CardModel for ClozeTest {
         let full_sentence = strip_cloze_tags(&self.sentence);
         format!(
             "<div class=\"translation\">{}</div>\n<div class=\"full-sentence\">{}</div>",
-            escape_html(&self.common.translation), escape_html(&full_sentence)
+            escape_html(&self.common.translation),
+            escape_html(&full_sentence)
         )
     }
 }
@@ -249,13 +252,17 @@ impl CardModel for WrittenComprehension {
     }
 
     fn front_html(&self) -> String {
-        format!("<div class=\"text-prompt\">{}</div>", escape_html(&self.text_prompt))
+        format!(
+            "<div class=\"text-prompt\">{}</div>",
+            escape_html(&self.text_prompt)
+        )
     }
 
     fn back_html(&self) -> String {
         format!(
             "<div class=\"transcript\">{}</div>\n<div class=\"translation\">{}</div>",
-            escape_html(&self.transcript), escape_html(&self.common.translation)
+            escape_html(&self.transcript),
+            escape_html(&self.common.translation)
         )
     }
 }
@@ -287,24 +294,21 @@ impl CardModel for OralComprehension {
     }
 
     fn front_html(&self) -> String {
-        // Front is just a prompt to listen — audio tag is appended by DeckBuilder
+        // Front is just a prompt to listen; audio is served separately by the API.
         "<div class=\"listen-prompt\">Listen and translate</div>".to_string()
     }
 
     fn back_html(&self) -> String {
         format!(
             "<div class=\"transcript\">{}</div>\n<div class=\"translation\">{}</div>",
-            escape_html(&self.transcript), escape_html(&self.common.translation)
+            escape_html(&self.transcript),
+            escape_html(&self.common.translation)
         )
     }
 }
 
 // ----- REGISTER MODELS -----
-define_card_models!(
-    ClozeTest,
-    WrittenComprehension,
-    OralComprehension
-);
+define_card_models!(ClozeTest, WrittenComprehension, OralComprehension);
 
 // ----- AnyCard Helpers -----
 
@@ -401,7 +405,7 @@ mod tests {
                 translation: "I am reading a book.".to_string(),
                 ipa: Some("IPA string".to_string()),
                 transliteration: None, // No transliteration for polish
-            }
+            },
         };
         assert_eq!(card.template_name(), "cloze_test");
         let fields = card.to_fields();
@@ -447,7 +451,7 @@ mod tests {
                 assert!(c.hint.is_none()); // Defaults to None since not provided in JSON
                 assert!(c.common.ipa.is_none());
                 assert!(c.common.transliteration.is_none());
-            },
+            }
             _ => panic!("Parsed wrong enum variant"),
         }
     }

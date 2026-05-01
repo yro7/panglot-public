@@ -4,8 +4,8 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use lc_core::storage::{StorageProvider, StoredCard};
 use lc_core::domain::{CardMetadata, ExtractedFeature};
+use lc_core::storage::{StorageProvider, StoredCard};
 use lc_core::traits::MorphologyInfo;
 
 // ----- Word Profile -----
@@ -193,16 +193,12 @@ where
 
     /// Returns all known (mastered) words matching a specific PoS label (e.g. "Noun", "Verb").
     pub fn get_known_by_pos(&self, pos: &str) -> Vec<ExtractedFeature<M>> {
-        self.filter(|p| {
-            !p.mastered_skills.is_empty() && p.morphology.pos_label() == pos
-        })
+        self.filter(|p| !p.mastered_skills.is_empty() && p.morphology.pos_label() == pos)
     }
 
     /// Returns all tracked words matching a specific PoS label, known or not.
     pub fn get_all_by_pos(&self, pos: &str) -> Vec<ExtractedFeature<M>> {
-        self.filter(|p| {
-            p.morphology.pos_label() == pos
-        })
+        self.filter(|p| p.morphology.pos_label() == pos)
     }
 
     /// Returns all tracked words, known or not.
@@ -212,50 +208,88 @@ where
 
     // ── Convenience wrappers for each UD UPOS tag ──
 
-    pub fn get_known_adjectives(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Adjective") }
-    pub fn get_known_adpositions(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Adposition") }
-    pub fn get_known_adverbs(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Adverb") }
-    pub fn get_known_auxiliaries(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Auxiliary") }
-    pub fn get_known_coordinating_conjunctions(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("CoordinatingConjunction") }
-    pub fn get_known_determiners(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Determiner") }
-    pub fn get_known_interjections(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Interjection") }
-    pub fn get_known_nouns(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Noun") }
-    pub fn get_known_numerals(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Numeral") }
-    pub fn get_known_particles(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Particle") }
-    pub fn get_known_pronouns(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Pronoun") }
-    pub fn get_known_proper_nouns(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("ProperNoun") }
-    pub fn get_known_punctuation(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Punctuation") }
-    pub fn get_known_subordinating_conjunctions(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("SubordinatingConjunction") }
-    pub fn get_known_symbols(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Symbol") }
-    pub fn get_known_verbs(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Verb") }
-    pub fn get_known_other(&self) -> Vec<ExtractedFeature<M>> { self.get_known_by_pos("Other") }
+    pub fn get_known_adjectives(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Adjective")
+    }
+    pub fn get_known_adpositions(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Adposition")
+    }
+    pub fn get_known_adverbs(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Adverb")
+    }
+    pub fn get_known_auxiliaries(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Auxiliary")
+    }
+    pub fn get_known_coordinating_conjunctions(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("CoordinatingConjunction")
+    }
+    pub fn get_known_determiners(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Determiner")
+    }
+    pub fn get_known_interjections(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Interjection")
+    }
+    pub fn get_known_nouns(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Noun")
+    }
+    pub fn get_known_numerals(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Numeral")
+    }
+    pub fn get_known_particles(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Particle")
+    }
+    pub fn get_known_pronouns(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Pronoun")
+    }
+    pub fn get_known_proper_nouns(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("ProperNoun")
+    }
+    pub fn get_known_punctuation(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Punctuation")
+    }
+    pub fn get_known_subordinating_conjunctions(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("SubordinatingConjunction")
+    }
+    pub fn get_known_symbols(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Symbol")
+    }
+    pub fn get_known_verbs(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Verb")
+    }
+    pub fn get_known_other(&self) -> Vec<ExtractedFeature<M>> {
+        self.get_known_by_pos("Other")
+    }
 
     /// Returns ALL words with their PoS, mastery status, and skill counts.
     pub fn all_words_with_status(&self) -> Vec<serde_json::Value>
     where
         M: Serialize,
     {
-        let mut entries: Vec<serde_json::Value> = self.profiles.values().map(|p| {
-            let status = if !p.struggling_skills.is_empty() {
-                "struggling"
-            } else if !p.mastered_skills.is_empty() {
-                "mastered"
-            } else if !p.learnt_skills.is_empty() {
-                "learnt"
-            } else {
-                "learning"
-            };
-            serde_json::json!({
-                "lemma": p.lemma,
-                "pos": p.morphology.pos_label(),
-                "morphology": p.morphology,
-                "status": status,
-                "learning_count": p.learning_skills.len(),
-                "learnt_count": p.learnt_skills.len(),
-                "mastered_count": p.mastered_skills.len(),
-                "struggling_count": p.struggling_skills.len(),
+        let mut entries: Vec<serde_json::Value> = self
+            .profiles
+            .values()
+            .map(|p| {
+                let status = if !p.struggling_skills.is_empty() {
+                    "struggling"
+                } else if !p.mastered_skills.is_empty() {
+                    "mastered"
+                } else if !p.learnt_skills.is_empty() {
+                    "learnt"
+                } else {
+                    "learning"
+                };
+                serde_json::json!({
+                    "lemma": p.lemma,
+                    "pos": p.morphology.pos_label(),
+                    "morphology": p.morphology,
+                    "status": status,
+                    "learning_count": p.learning_skills.len(),
+                    "learnt_count": p.learnt_skills.len(),
+                    "mastered_count": p.mastered_skills.len(),
+                    "struggling_count": p.struggling_skills.len(),
+                })
             })
-        }).collect();
+            .collect();
         entries.sort_by(|a, b| {
             let pos_a = a["pos"].as_str().unwrap_or("");
             let pos_b = b["pos"].as_str().unwrap_or("");
@@ -273,7 +307,9 @@ where
         let mut counts: HashMap<String, usize> = HashMap::new();
         for profile in self.profiles.values() {
             if !profile.mastered_skills.is_empty() {
-                *counts.entry(profile.morphology.pos_label().to_string()).or_insert(0) += 1;
+                *counts
+                    .entry(profile.morphology.pos_label().to_string())
+                    .or_insert(0) += 1;
             }
         }
         counts
@@ -298,6 +334,7 @@ pub trait DynLexiconTracker: Send + Sync {
     fn is_empty(&self) -> bool;
     fn is_skill_mastered(&self, skill_id: &str) -> bool;
     fn mastered_skills(&self) -> HashSet<String>;
+    fn mature_card_counts(&self) -> HashMap<String, usize>;
     /// Downcast to concrete type for generation (which needs `ExtractedFeature<M>`).
     fn as_any(&self) -> &dyn Any;
 }
@@ -315,7 +352,8 @@ where
             Some(p) => self.get_known_by_pos(p),
             None => self.mastered_words(),
         };
-        features.into_iter()
+        features
+            .into_iter()
             .filter_map(|f| serde_json::to_value(&f).ok())
             .collect()
     }
@@ -338,6 +376,13 @@ where
 
     fn mastered_skills(&self) -> HashSet<String> {
         self.mastered_skills()
+    }
+
+    fn mature_card_counts(&self) -> HashMap<String, usize> {
+        self.mature_cards_per_skill
+            .iter()
+            .map(|(id, cards)| (id.clone(), cards.len()))
+            .collect()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -381,19 +426,23 @@ impl LibraryAnalyzer {
                 }
 
                 // Per-skill mature card accounting (feeds `is_skill_mastered`).
-                tracker.record_card(&metadata.skill_id, &card.card_id, card.is_mature());
+                tracker.record_card(&metadata.source_node_id, &card.card_id, card.is_mature());
 
-                for feature in metadata.target_features.iter().chain(metadata.context_features.iter()) {
+                for feature in metadata
+                    .target_features
+                    .iter()
+                    .chain(metadata.context_features.iter())
+                {
                     if card.is_leech() {
-                        tracker.mark_struggling(feature, &metadata.skill_id);
+                        tracker.mark_struggling(feature, &metadata.source_node_id);
                     }
 
                     if card.is_mature() {
-                        tracker.mark_mastered(feature, &metadata.skill_id);
+                        tracker.mark_mastered(feature, &metadata.source_node_id);
                     } else if card.interval_days > 0.0 {
-                        tracker.mark_learnt(feature, &metadata.skill_id);
+                        tracker.mark_learnt(feature, &metadata.source_node_id);
                     } else {
-                        tracker.mark_learning(feature, &metadata.skill_id);
+                        tracker.mark_learning(feature, &metadata.source_node_id);
                     }
                 }
             }
@@ -417,7 +466,7 @@ impl LibraryAnalyzer {
                 return Some(metadata);
             }
         }
-        
+
         None
     }
 }
@@ -427,8 +476,8 @@ impl LibraryAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lc_core::storage::{StorageProvider, StoredCard, DeckInfo, NewDeckData};
     use langs::PolishMorphology;
+    use lc_core::storage::{DeckInfo, NewDeckData, StorageProvider, StoredCard};
 
     struct MockProvider {
         cards: Vec<StoredCard>,
@@ -436,16 +485,26 @@ mod tests {
 
     #[async_trait::async_trait]
     impl StorageProvider for MockProvider {
-        async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
+        async fn fetch_cards(
+            &self,
+        ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
             Ok(self.cards.clone())
         }
-        async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
+        async fn fetch_decks(
+            &self,
+        ) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>> {
             Ok(vec![])
         }
-        async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        async fn save_deck(
+            &self,
+            _deck: &NewDeckData,
+        ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
             Ok(0)
         }
-        async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        async fn delete_deck(
+            &self,
+            _deck_id: &str,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
     }
@@ -460,8 +519,8 @@ mod tests {
         let metadata = CardMetadata {
             card_id: format!("c{}", card_id),
             language: "pol".to_string(),
-            skill_id: skill_id.to_string(),
-            skill_name: String::new(),
+            source_node_id: skill_id.to_string(),
+            source_node_name: String::new(),
             pedagogical_explanation: String::new(),
             target_features: features,
             context_features: vec![],
@@ -512,7 +571,11 @@ mod tests {
         let entry = noun("dom", "dom");
         tracker.mark_mastered(&entry, "polish_nom");
         assert_eq!(tracker.len(), 1);
-        assert!(tracker.profiles["dom"].mastered_skills.contains("polish_nom"));
+        assert!(
+            tracker.profiles["dom"]
+                .mastered_skills
+                .contains("polish_nom")
+        );
     }
 
     #[test]
@@ -543,10 +606,7 @@ mod tests {
             make_card_with_metadata(
                 1,
                 "polish_acc",
-                vec![
-                    noun("książkę", "książka"),
-                    verb("czytać", "czytać"),
-                ],
+                vec![noun("książkę", "książka"), verb("czytać", "czytać")],
                 30.0, // mature
                 "grammar",
             ),
@@ -554,21 +614,24 @@ mod tests {
                 2,
                 "polish_nom",
                 vec![noun("dom", "dom")],
-                5.0, // not mature
+                5.0,                // not mature
                 "leech vocabulary", // struggling
             ),
             make_card_with_metadata(
                 3,
                 "polish_gen",
                 vec![noun("książki", "książka")],
-                25.0, // mature
+                25.0,    // mature
                 "leech", // also struggling
             ),
         ];
 
         let provider = MockProvider { cards };
         let analyzer = LibraryAnalyzer;
-        let tracker: LexiconTracker<PolishMorphology> = analyzer.extract_tracker_async(&provider, Some("pol")).await.unwrap();
+        let tracker: LexiconTracker<PolishMorphology> = analyzer
+            .extract_tracker_async(&provider, Some("pol"))
+            .await
+            .unwrap();
 
         // książka: mastered in polish_acc and polish_gen, struggling in polish_gen
         // Now keyed by lemma "książka" (not surface form)
@@ -602,7 +665,10 @@ mod tests {
 
         let provider = MockProvider { cards };
         let analyzer = LibraryAnalyzer;
-        let tracker: LexiconTracker<PolishMorphology> = analyzer.extract_tracker_async(&provider, Some("pol")).await.unwrap();
+        let tracker: LexiconTracker<PolishMorphology> = analyzer
+            .extract_tracker_async(&provider, Some("pol"))
+            .await
+            .unwrap();
 
         assert!(tracker.is_empty());
     }
@@ -611,33 +677,42 @@ mod tests {
     fn test_get_known_by_pos_and_summary() {
         let mut tracker = LexiconTracker::new();
 
-        tracker.mark_mastered(&ExtractedFeature {
-            word: "książkę".to_string(),
-            morphology: PolishMorphology::Noun {
-                lemma: "książka".to_string(),
-                gender: langs::polish::PolishGender::Feminine,
-                case: langs::polish::PolishCase::Accusative,
+        tracker.mark_mastered(
+            &ExtractedFeature {
+                word: "książkę".to_string(),
+                morphology: PolishMorphology::Noun {
+                    lemma: "książka".to_string(),
+                    gender: langs::polish::PolishGender::Feminine,
+                    case: langs::polish::PolishCase::Accusative,
+                },
             },
-        }, "polish_acc");
+            "polish_acc",
+        );
 
-        tracker.mark_mastered(&ExtractedFeature {
-            word: "czytam".to_string(),
-            morphology: PolishMorphology::Verb {
-                lemma: "czytać".to_string(),
-                aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
-                tense: langs::polish::PolishTense::Present,
+        tracker.mark_mastered(
+            &ExtractedFeature {
+                word: "czytam".to_string(),
+                morphology: PolishMorphology::Verb {
+                    lemma: "czytać".to_string(),
+                    aspect: lc_core::morphology_enums::SlavicAspect::Imperfective,
+                    tense: langs::polish::PolishTense::Present,
+                },
             },
-        }, "polish_acc");
+            "polish_acc",
+        );
 
         // Unmastered adjective
-        tracker.mark_struggling(&ExtractedFeature {
-            word: "nowy".to_string(),
-            morphology: PolishMorphology::Adjective {
-                lemma: "nowy".to_string(),
-                gender: langs::polish::PolishGender::MasculinePersonal,
-                case: langs::polish::PolishCase::Nominative,
+        tracker.mark_struggling(
+            &ExtractedFeature {
+                word: "nowy".to_string(),
+                morphology: PolishMorphology::Adjective {
+                    lemma: "nowy".to_string(),
+                    gender: langs::polish::PolishGender::MasculinePersonal,
+                    case: langs::polish::PolishCase::Nominative,
+                },
             },
-        }, "polish_nom");
+            "polish_nom",
+        );
 
         // get_known_by_pos
         let nouns = tracker.get_known_by_pos("Noun");

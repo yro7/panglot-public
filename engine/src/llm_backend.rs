@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
 use rig::client::CompletionClient;
 use rig::completion::CompletionModel as _;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use anyhow::Result;
 
 use crate::usage::{LlmProviderUsageEvent, UsageRecorder};
 
@@ -24,20 +24,20 @@ impl LlmProvider {
     /// Default base URL for this provider's chat-completions endpoint.
     pub fn default_base_url(&self) -> &'static str {
         match self {
-            Self::Google    => "https://generativelanguage.googleapis.com/v1beta/openai",
+            Self::Google => "https://generativelanguage.googleapis.com/v1beta/openai",
             Self::Anthropic => "https://api.anthropic.com/v1",
-            Self::OpenAi    => "https://api.openai.com/v1",
-            Self::Custom    => "",
+            Self::OpenAi => "https://api.openai.com/v1",
+            Self::Custom => "",
         }
     }
 
     /// Environment variable name that holds the API key for this provider.
     pub fn default_api_key_env(&self) -> &'static str {
         match self {
-            Self::Google    => "GOOGLE_API_KEY",
+            Self::Google => "GOOGLE_API_KEY",
             Self::Anthropic => "ANTHROPIC_API_KEY",
-            Self::OpenAi    => "OPENAI_API_KEY",
-            Self::Custom    => "LLM_API_KEY",
+            Self::OpenAi => "OPENAI_API_KEY",
+            Self::Custom => "LLM_API_KEY",
         }
     }
 }
@@ -45,10 +45,10 @@ impl LlmProvider {
 impl fmt::Display for LlmProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Google    => write!(f, "google"),
+            Self::Google => write!(f, "google"),
             Self::Anthropic => write!(f, "anthropic"),
-            Self::OpenAi    => write!(f, "openai"),
-            Self::Custom    => write!(f, "custom"),
+            Self::OpenAi => write!(f, "openai"),
+            Self::Custom => write!(f, "custom"),
         }
     }
 }
@@ -57,12 +57,13 @@ impl FromStr for LlmProvider {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
-            "google" | "gemini"    => Ok(Self::Google),
+            "google" | "gemini" => Ok(Self::Google),
             "anthropic" | "claude" => Ok(Self::Anthropic),
-            "openai" | "gpt"      => Ok(Self::OpenAi),
-            "custom"              => Ok(Self::Custom),
+            "openai" | "gpt" => Ok(Self::OpenAi),
+            "custom" => Ok(Self::Custom),
             other => Err(anyhow::anyhow!(
-                "Unknown LLM provider '{}'. Expected: google, anthropic, openai, custom", other
+                "Unknown LLM provider '{}'. Expected: google, anthropic, openai, custom",
+                other
             )),
         }
     }
@@ -124,7 +125,8 @@ impl LlmBackend {
 
         macro_rules! send_and_extract {
             ($m:expr) => {{
-                let req_builder = $m.completion_request(user_content)
+                let req_builder = $m
+                    .completion_request(user_content)
                     .preamble(system_prompt.to_string())
                     .temperature(temperature as f64)
                     .max_tokens(max_tokens as u64)
@@ -137,13 +139,15 @@ impl LlmBackend {
                         let text = response.choice.into_iter().find_map(|c| {
                             if let rig::completion::message::AssistantContent::Text(t) = c {
                                 Some(t.text)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         });
                         Ok((tokens_in, tokens_out, text))
                     }
                     Err(e) => Err(anyhow::anyhow!("LLM request failed: {}", e)),
                 }
-            }}
+            }};
         }
 
         let (tokens_in, tokens_out, text) = match self {
@@ -174,7 +178,12 @@ impl LlmBackend {
         text.ok_or_else(|| anyhow::anyhow!("LLM returned no text content"))
     }
 
-    pub fn build(provider: LlmProvider, model: &str, api_key: &str, _base_url: &str) -> anyhow::Result<Self> {
+    pub fn build(
+        provider: LlmProvider,
+        model: &str,
+        api_key: &str,
+        _base_url: &str,
+    ) -> anyhow::Result<Self> {
         match provider {
             LlmProvider::OpenAi | LlmProvider::Custom => {
                 let client = rig::providers::openai::Client::new(api_key)

@@ -20,7 +20,6 @@ const MAX_INTERVAL: f64 = 365.0;
 /// Learning steps are 1 min / 10 min — both well below 1 day.
 const SHORT_TERM_THRESHOLD_DAYS: f64 = 1.0;
 
-
 // ═══════════════════════════════════════════════════════════════
 // FSRS-4.5  —  17 parameters
 // ═══════════════════════════════════════════════════════════════
@@ -95,15 +94,22 @@ impl Fsrs {
 
     /// I(r,S) = (S/FACTOR)·(r^(1/DECAY) − 1)
     fn next_interval(&self, stability: f64) -> f64 {
-        let interval =
-            (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
+        let interval = (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
         interval.clamp(1.0, MAX_INTERVAL)
     }
 
     /// S′r(D,S,R,G) = S·(e^w8·(11−D)·S^(−w9)·(e^(w10·(1−R))−1)·penalty·bonus + 1),  SInc≥1
     fn stability_after_recall(&self, d: f64, s: f64, r: f64, rating: Rating) -> f64 {
-        let hard_penalty = if rating == Rating::Hard { self.w[15] } else { 1.0 };
-        let easy_bonus = if rating == Rating::Easy { self.w[16] } else { 1.0 };
+        let hard_penalty = if rating == Rating::Hard {
+            self.w[15]
+        } else {
+            1.0
+        };
+        let easy_bonus = if rating == Rating::Easy {
+            self.w[16]
+        } else {
+            1.0
+        };
         let s_inc = (self.w[8].exp()
             * (11.0 - d)
             * s.powf(-self.w[9])
@@ -143,8 +149,7 @@ impl Fsrs {
         let mut last_reviewed_at = history[0].reviewed_at;
 
         for event in &history[1..] {
-            let elapsed_days =
-                (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
+            let elapsed_days = (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
             let r = self.retrievability(elapsed_days, s);
 
             d = self.next_difficulty(d, event.rating);
@@ -186,7 +191,6 @@ impl SrsAlgorithm for Fsrs {
         self.compute_internal(history, rating, now)
     }
 }
-
 
 // ═══════════════════════════════════════════════════════════════
 // FSRS-5  —  19 parameters
@@ -278,8 +282,7 @@ impl Fsrs5 {
 
     /// I(r,S) using FSRS-4.5 constants  (same as FSRS-4.5)
     fn next_interval(&self, stability: f64) -> f64 {
-        let interval =
-            (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
+        let interval = (stability / FACTOR_45) * (DESIRED_RETENTION.powf(1.0 / DECAY_45) - 1.0);
         interval.clamp(1.0, MAX_INTERVAL)
     }
 
@@ -291,8 +294,16 @@ impl Fsrs5 {
 
     /// S′r — same formula as FSRS-4.5.
     fn stability_after_recall(&self, d: f64, s: f64, r: f64, rating: Rating) -> f64 {
-        let hard_penalty = if rating == Rating::Hard { self.w[15] } else { 1.0 };
-        let easy_bonus = if rating == Rating::Easy { self.w[16] } else { 1.0 };
+        let hard_penalty = if rating == Rating::Hard {
+            self.w[15]
+        } else {
+            1.0
+        };
+        let easy_bonus = if rating == Rating::Easy {
+            self.w[16]
+        } else {
+            1.0
+        };
         let s_inc = (self.w[8].exp()
             * (11.0 - d)
             * s.powf(-self.w[9])
@@ -332,8 +343,7 @@ impl Fsrs5 {
         let mut last_reviewed_at = history[0].reviewed_at;
 
         for event in &history[1..] {
-            let elapsed_days =
-                (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
+            let elapsed_days = (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
             let r = self.retrievability(elapsed_days, s);
 
             if elapsed_days < SHORT_TERM_THRESHOLD_DAYS {
@@ -393,7 +403,6 @@ impl SrsAlgorithm for Fsrs5 {
     }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
 // FSRS-6  —  21 parameters
 // ═══════════════════════════════════════════════════════════════
@@ -409,27 +418,27 @@ impl SrsAlgorithm for Fsrs5 {
 //   • D0, D′, Sr, Sf: same formulas as FSRS-5
 
 const DEFAULT_W_6: [f64; 21] = [
-    0.212,   // w0:  S0(Again)
-    1.2931,  // w1:  S0(Hard)
-    2.3065,  // w2:  S0(Good)
-    8.2956,  // w3:  S0(Easy)
-    6.4133,  // w4:  D0(1) = D0(Again)
-    0.8334,  // w5:  D0 exponential factor
-    3.0194,  // w6:  linear damping step
-    0.001,   // w7:  mean-reversion weight
-    1.8722,  // w8:  Sr exponent (base)
-    0.1666,  // w9:  Sr stability power
-    0.796,   // w10: Sr retrievability exponent
-    1.4835,  // w11: Sf base
-    0.0614,  // w12: Sf difficulty power
-    0.2629,  // w13: Sf stability power
-    1.6483,  // w14: Sf retrievability exponent
-    0.6014,  // w15: Hard penalty
-    1.8729,  // w16: Easy bonus
-    0.5425,  // w17: short-term stability exponent
-    0.0912,  // w18: short-term stability offset
-    0.0658,  // w19: short-term S dampening (S^(−w19))
-    0.1542,  // w20: trainable DECAY magnitude  (DECAY = −w20)
+    0.212,  // w0:  S0(Again)
+    1.2931, // w1:  S0(Hard)
+    2.3065, // w2:  S0(Good)
+    8.2956, // w3:  S0(Easy)
+    6.4133, // w4:  D0(1) = D0(Again)
+    0.8334, // w5:  D0 exponential factor
+    3.0194, // w6:  linear damping step
+    0.001,  // w7:  mean-reversion weight
+    1.8722, // w8:  Sr exponent (base)
+    0.1666, // w9:  Sr stability power
+    0.796,  // w10: Sr retrievability exponent
+    1.4835, // w11: Sf base
+    0.0614, // w12: Sf difficulty power
+    0.2629, // w13: Sf stability power
+    1.6483, // w14: Sf retrievability exponent
+    0.6014, // w15: Hard penalty
+    1.8729, // w16: Easy bonus
+    0.5425, // w17: short-term stability exponent
+    0.0912, // w18: short-term stability offset
+    0.0658, // w19: short-term S dampening (S^(−w19))
+    0.1542, // w20: trainable DECAY magnitude  (DECAY = −w20)
 ];
 
 pub struct Fsrs6 {
@@ -512,8 +521,16 @@ impl Fsrs6 {
 
     /// S′r — same as FSRS-4.5 / FSRS-5.
     fn stability_after_recall(&self, d: f64, s: f64, r: f64, rating: Rating) -> f64 {
-        let hard_penalty = if rating == Rating::Hard { self.w[15] } else { 1.0 };
-        let easy_bonus = if rating == Rating::Easy { self.w[16] } else { 1.0 };
+        let hard_penalty = if rating == Rating::Hard {
+            self.w[15]
+        } else {
+            1.0
+        };
+        let easy_bonus = if rating == Rating::Easy {
+            self.w[16]
+        } else {
+            1.0
+        };
         let s_inc = (self.w[8].exp()
             * (11.0 - d)
             * s.powf(-self.w[9])
@@ -553,8 +570,7 @@ impl Fsrs6 {
         let mut last_reviewed_at = history[0].reviewed_at;
 
         for event in &history[1..] {
-            let elapsed_days =
-                (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
+            let elapsed_days = (event.reviewed_at - last_reviewed_at).max(0) as f64 / MS_PER_DAY;
             let r = self.retrievability(elapsed_days, s);
 
             if elapsed_days < SHORT_TERM_THRESHOLD_DAYS {
@@ -612,7 +628,6 @@ impl SrsAlgorithm for Fsrs6 {
         self.compute_internal(history, rating, now)
     }
 }
-
 
 // ── Tests ──────────────────────────────────────────────────────
 
@@ -760,7 +775,12 @@ mod tests {
         let algo = Fsrs5::new();
         // D0(1) = w4 - e^(w5*0) + 1 = w4 - 1 + 1 = w4
         let d_again = algo.initial_difficulty(Rating::Again);
-        assert!((d_again - DEFAULT_W_5[4]).abs() < 1e-6, "D0(Again)=w4: {} vs {}", d_again, DEFAULT_W_5[4]);
+        assert!(
+            (d_again - DEFAULT_W_5[4]).abs() < 1e-6,
+            "D0(Again)=w4: {} vs {}",
+            d_again,
+            DEFAULT_W_5[4]
+        );
     }
 
     #[test]
@@ -769,7 +789,12 @@ mod tests {
         // Good review on same day should increase stability
         let s_before = 2.0;
         let s_after = algo.stability_short_term(s_before, Rating::Good);
-        assert!(s_after >= s_before, "Good short-term should not shrink stability: {} vs {}", s_after, s_before);
+        assert!(
+            s_after >= s_before,
+            "Good short-term should not shrink stability: {} vs {}",
+            s_after,
+            s_before
+        );
     }
 
     #[test]
@@ -834,7 +859,11 @@ mod tests {
         let algo = Fsrs6::new();
         // factor ensures R(S,S) = 0.9 for the trainable decay
         let r = algo.retrievability(10.0, 10.0);
-        assert!((r - 0.9).abs() < 0.01, "trainable decay: R(S,S)≈0.9, got {}", r);
+        assert!(
+            (r - 0.9).abs() < 0.01,
+            "trainable decay: R(S,S)≈0.9, got {}",
+            r
+        );
     }
 
     #[test]
@@ -843,7 +872,12 @@ mod tests {
         // For a very stable card, SInc raw might be < 1, but we enforce >= 1 for Good
         let s_large = 200.0;
         let s_after = algo.stability_short_term(s_large, Rating::Good);
-        assert!(s_after >= s_large, "Good short-term must not shrink stability for Good: {} vs {}", s_after, s_large);
+        assert!(
+            s_after >= s_large,
+            "Good short-term must not shrink stability for Good: {} vs {}",
+            s_after,
+            s_large
+        );
     }
 
     #[test]

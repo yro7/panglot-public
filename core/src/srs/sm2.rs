@@ -20,9 +20,9 @@ impl Sm2 {
             let q = event.rating as u8 as f64; // 1..4 mapped to SM-2's q (we treat 1=0, 2=1, 3=3, 4=5 scale)
             let q_sm2 = match event.rating {
                 Rating::Again => 0.0,
-                Rating::Hard  => 2.0,
-                Rating::Good  => 4.0,
-                Rating::Easy  => 5.0,
+                Rating::Hard => 2.0,
+                Rating::Good => 4.0,
+                Rating::Easy => 5.0,
             };
             let _ = q; // suppress unused warning
 
@@ -49,9 +49,9 @@ impl Sm2 {
         // Now apply the new rating
         let q_sm2 = match rating {
             Rating::Again => 0.0,
-            Rating::Hard  => 2.0,
-            Rating::Good  => 4.0,
-            Rating::Easy  => 5.0,
+            Rating::Hard => 2.0,
+            Rating::Good => 4.0,
+            Rating::Easy => 5.0,
         };
 
         ef = ef + (0.1 - (5.0 - q_sm2) * (0.08 + (5.0 - q_sm2) * 0.02));
@@ -80,8 +80,12 @@ impl Sm2 {
 }
 
 impl SrsAlgorithm for Sm2 {
-    fn id(&self) -> &'static str { "sm2" }
-    fn name(&self) -> &'static str { "SM-2" }
+    fn id(&self) -> &'static str {
+        "sm2"
+    }
+    fn name(&self) -> &'static str {
+        "SM-2"
+    }
 
     fn compute(&self, history: &[ReviewEvent], rating: Rating, now: i64) -> SchedulingOutput {
         Self::compute(history, rating, now)
@@ -96,10 +100,14 @@ mod tests {
     const DAY: i64 = 86_400_000;
 
     fn make_history(ratings: &[Rating]) -> Vec<ReviewEvent> {
-        ratings.iter().enumerate().map(|(i, &r)| ReviewEvent {
-            rating: r,
-            reviewed_at: NOW + (i as i64) * DAY,
-        }).collect()
+        ratings
+            .iter()
+            .enumerate()
+            .map(|(i, &r)| ReviewEvent {
+                rating: r,
+                reviewed_at: NOW + (i as i64) * DAY,
+            })
+            .collect()
     }
 
     // ── Happy paths ──
@@ -123,7 +131,11 @@ mod tests {
         // Second Good -> interval 6d, then third
         let h2 = make_history(&[Rating::Good, Rating::Good]);
         let out2 = algo.compute(&h2, Rating::Good, NOW + 7 * DAY);
-        assert!(out2.interval_days > 6.0, "interval should grow: got {}", out2.interval_days);
+        assert!(
+            out2.interval_days > 6.0,
+            "interval should grow: got {}",
+            out2.interval_days
+        );
     }
 
     #[test]
@@ -132,7 +144,10 @@ mod tests {
         // Build up progress then fail
         let history = make_history(&[Rating::Good, Rating::Good, Rating::Good]);
         let out = algo.compute(&history, Rating::Again, NOW + 10 * DAY);
-        assert_eq!(out.interval_days, 1.0, "Again should reset interval to 1 day");
+        assert_eq!(
+            out.interval_days, 1.0,
+            "Again should reset interval to 1 day"
+        );
     }
 
     #[test]
@@ -166,9 +181,12 @@ mod tests {
         let h3_easy = make_history(&[Rating::Easy, Rating::Easy]);
         let out3_good = algo.compute(&h3_good, Rating::Good, NOW + 7 * DAY);
         let out3_easy = algo.compute(&h3_easy, Rating::Easy, NOW + 7 * DAY);
-        assert!(out3_easy.interval_days >= out3_good.interval_days,
+        assert!(
+            out3_easy.interval_days >= out3_good.interval_days,
             "Easy EF ({}) should produce >= interval than Good EF ({})",
-            out3_easy.interval_days, out3_good.interval_days);
+            out3_easy.interval_days,
+            out3_good.interval_days
+        );
     }
 
     // ── Edge cases ──
@@ -199,17 +217,33 @@ mod tests {
         assert!(out.interval_days > 0.0);
         assert!(out.due_date > NOW);
         // Should not overflow or produce unreasonable values
-        assert!(out.interval_days < 365.0 * 10.0, "interval should be reasonable: {}", out.interval_days);
+        assert!(
+            out.interval_days < 365.0 * 10.0,
+            "interval should be reasonable: {}",
+            out.interval_days
+        );
     }
 
     #[test]
     fn alternating_again_good() {
         let algo = Sm2;
-        let ratings: Vec<Rating> = (0..10).map(|i| if i % 2 == 0 { Rating::Again } else { Rating::Good }).collect();
+        let ratings: Vec<Rating> = (0..10)
+            .map(|i| {
+                if i % 2 == 0 {
+                    Rating::Again
+                } else {
+                    Rating::Good
+                }
+            })
+            .collect();
         let history = make_history(&ratings);
         let out = algo.compute(&history, Rating::Good, NOW + 20 * DAY);
         assert!(out.interval_days >= 1.0);
-        assert!(out.interval_days < 100.0, "should not diverge: {}", out.interval_days);
+        assert!(
+            out.interval_days < 100.0,
+            "should not diverge: {}",
+            out.interval_days
+        );
     }
 
     #[test]
@@ -220,7 +254,11 @@ mod tests {
         assert!(out.interval_days > 0.0);
         assert!(out.interval_days.is_finite());
         // Should still be reasonable (not years)
-        assert!(out.interval_days < 365.0 * 5.0, "should be reasonable: {}", out.interval_days);
+        assert!(
+            out.interval_days < 365.0 * 5.0,
+            "should be reasonable: {}",
+            out.interval_days
+        );
     }
 
     #[test]

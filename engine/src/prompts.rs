@@ -1,10 +1,9 @@
-use lc_core::traits::{Language, LinguisticDefinition, MorphologyInfo};
 use crate::generator::GenerationRequest;
 use crate::skill_tree::SkillNode;
-use serde::{Deserialize};
-use std::collections::HashMap;
+use lc_core::traits::{Language, LinguisticDefinition, MorphologyInfo};
 use regex::Regex;
-use isolang::Language as IsoLang;
+use serde::Deserialize;
+use std::collections::HashMap;
 
 // ----- Prompt Builder Errors -----
 
@@ -15,7 +14,10 @@ pub enum PromptBuilderError {
     #[error("Failed to load prompt config: {0}")]
     ConfigLoadError(String),
     #[error("Invalid placeholder in template '{template}': '{placeholder}' not found in context")]
-    MissingPlaceholder { template: String, placeholder: String },
+    MissingPlaceholder {
+        template: String,
+        placeholder: String,
+    },
     #[error("Placeholder '{placeholder}' in template is not available in context")]
     PlaceholderNotAvailable { placeholder: String },
 }
@@ -44,9 +46,7 @@ pub struct GenerationParams {
 }
 
 // Extractor prompt structs — single source of truth in panini-engine.
-pub use panini_engine::prompts::{
-    ExtractorPrompts, LearnerProfile, SkillContextPrompts,
-};
+pub use panini_engine::prompts::{ExtractorPrompts, LearnerProfile, SkillContextPrompts};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserMessages {
@@ -97,30 +97,81 @@ impl PromptConfig {
         let templates = vec![
             ("generator.system_role", &self.generator.system_role),
             ("generator.target_language", &self.generator.target_language),
-            ("generator.language_directives", &self.generator.language_directives),
+            (
+                "generator.language_directives",
+                &self.generator.language_directives,
+            ),
             ("generator.skill_context", &self.generator.skill_context),
-            ("generator.generation_params.num_cards", &self.generator.generation_params.num_cards),
-            ("generator.generation_params.difficulty", &self.generator.generation_params.difficulty),
-            ("generator.generation_params.ui_language", &self.generator.generation_params.ui_language),
+            (
+                "generator.generation_params.num_cards",
+                &self.generator.generation_params.num_cards,
+            ),
+            (
+                "generator.generation_params.difficulty",
+                &self.generator.generation_params.difficulty,
+            ),
+            (
+                "generator.generation_params.ui_language",
+                &self.generator.generation_params.ui_language,
+            ),
             ("generator.user_prompt", &self.generator.user_prompt),
-            ("generator.injected_vocabulary", &self.generator.injected_vocabulary),
-            ("generator.excluded_vocabulary", &self.generator.excluded_vocabulary),
+            (
+                "generator.injected_vocabulary",
+                &self.generator.injected_vocabulary,
+            ),
+            (
+                "generator.excluded_vocabulary",
+                &self.generator.excluded_vocabulary,
+            ),
             ("generator.output_single", &self.generator.output_single),
             ("generator.output_multiple", &self.generator.output_multiple),
             ("extractor.system_role", &self.extractor.system_role),
             ("extractor.target_language", &self.extractor.target_language),
-            ("extractor.extraction_directives", &self.extractor.extraction_directives),
-            ("extractor.learner_profile.ui_language", &self.extractor.learner_profile.ui_language),
-            ("extractor.learner_profile.linguistic_background_intro", &self.extractor.learner_profile.linguistic_background_intro),
-            ("extractor.learner_profile.linguistic_background_entry", &self.extractor.learner_profile.linguistic_background_entry),
-            ("extractor.skill_context.skill_tree_path", &self.extractor.skill_context.skill_tree_path),
-            ("extractor.skill_context.pedagogical_focus", &self.extractor.skill_context.pedagogical_focus),
+            (
+                "extractor.extraction_directives",
+                &self.extractor.extraction_directives,
+            ),
+            (
+                "extractor.learner_profile.ui_language",
+                &self.extractor.learner_profile.ui_language,
+            ),
+            (
+                "extractor.learner_profile.linguistic_background_intro",
+                &self.extractor.learner_profile.linguistic_background_intro,
+            ),
+            (
+                "extractor.learner_profile.linguistic_background_entry",
+                &self.extractor.learner_profile.linguistic_background_entry,
+            ),
+            (
+                "extractor.skill_context.skill_tree_path",
+                &self.extractor.skill_context.skill_tree_path,
+            ),
+            (
+                "extractor.skill_context.pedagogical_focus",
+                &self.extractor.skill_context.pedagogical_focus,
+            ),
             ("extractor.user_context", &self.extractor.user_context),
-            ("extractor.output_instruction", &self.extractor.output_instruction),
-            ("user_messages.generator_user", &self.user_messages.generator_user),
-            ("user_messages.generator_retry_user", &self.user_messages.generator_retry_user),
-            ("user_messages.extractor_user", &self.user_messages.extractor_user),
-            ("user_messages.extractor_retry_user", &self.user_messages.extractor_retry_user),
+            (
+                "extractor.output_instruction",
+                &self.extractor.output_instruction,
+            ),
+            (
+                "user_messages.generator_user",
+                &self.user_messages.generator_user,
+            ),
+            (
+                "user_messages.generator_retry_user",
+                &self.user_messages.generator_retry_user,
+            ),
+            (
+                "user_messages.extractor_user",
+                &self.user_messages.extractor_user,
+            ),
+            (
+                "user_messages.extractor_retry_user",
+                &self.user_messages.extractor_retry_user,
+            ),
         ];
 
         let placeholder_re = Regex::new(r"\{(\w+)\}").unwrap();
@@ -130,16 +181,29 @@ impl PromptConfig {
                 let placeholder = cap[1].to_string();
                 // List of known placeholders that will be filled at runtime
                 let known_placeholders = vec![
-                    "language", "directives", "instructions", "node_path",
-                    "num_cards", "difficulty", "iso", "name",
-                    "prompt", "user_prompt", "list", "targets", "card_json", "feedback",
-                    "error", "count", "path", "level", "context_description",
+                    "language",
+                    "directives",
+                    "instructions",
+                    "node_path",
+                    "num_cards",
+                    "difficulty",
+                    "iso",
+                    "name",
+                    "prompt",
+                    "user_prompt",
+                    "list",
+                    "targets",
+                    "card_json",
+                    "feedback",
+                    "error",
+                    "count",
+                    "path",
+                    "level",
+                    "context_description",
                 ];
 
                 if !known_placeholders.contains(&placeholder.as_str()) {
-                    return Err(PromptBuilderError::PlaceholderNotAvailable {
-                        placeholder,
-                    });
+                    return Err(PromptBuilderError::PlaceholderNotAvailable { placeholder });
                 }
             }
         }
@@ -150,11 +214,13 @@ impl PromptConfig {
 
 // Helper to load YAML files
 fn load_yaml<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, PromptBuilderError> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| PromptBuilderError::ConfigLoadError(format!("Failed to read {}: {}", path, e)))?;
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        PromptBuilderError::ConfigLoadError(format!("Failed to read {}: {}", path, e))
+    })?;
 
-    serde_yml::from_str(&content)
-        .map_err(|e| PromptBuilderError::ConfigLoadError(format!("Failed to parse {}: {}", path, e)))
+    serde_yml::from_str(&content).map_err(|e| {
+        PromptBuilderError::ConfigLoadError(format!("Failed to parse {}: {}", path, e))
+    })
 }
 
 // ----- Helper Functions -----
@@ -165,13 +231,17 @@ pub fn wrap_tag(tag: &str, content: &str) -> String {
 }
 
 /// Interpolates placeholders in a template string
-pub fn interpolate<V: AsRef<str>>(template: &str, context: &HashMap<&str, V>) -> Result<String, PromptBuilderError> {
+pub fn interpolate<V: AsRef<str>>(
+    template: &str,
+    context: &HashMap<&str, V>,
+) -> Result<String, PromptBuilderError> {
     let placeholder_re = Regex::new(r"\{(\w+)\}").unwrap();
     let mut result = template.to_string();
 
     for cap in placeholder_re.captures_iter(template) {
         let placeholder = &cap[1];
-        let value = context.get(placeholder)
+        let value = context
+            .get(placeholder)
             .ok_or_else(|| PromptBuilderError::PlaceholderNotAvailable {
                 placeholder: placeholder.to_string(),
             })?
@@ -197,7 +267,10 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
     pub fn generate_prompt(self) -> Result<String, PromptBuilderError> {
         let cfg = &self.prompt_config.generator;
 
-        let instructions = self.skill_node.node_instructions.as_deref()
+        let instructions = self
+            .skill_node
+            .node_instructions
+            .as_deref()
             .unwrap_or(&self.prompt_config.common.no_instructions_fallback);
 
         // === BUILD GLOBAL PLACEHOLDER CONTEXT ===
@@ -206,16 +279,19 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
         let difficulty_val = self.request.difficulty.to_string();
         let count_val = self.request.num_cards.to_string();
 
-        let ui_lang_name = self.request.user_profile.ui_language.clone();
-        let ui_lang_iso_code = IsoLang::from_name(&ui_lang_name)
-            .map(|lang| lang.to_639_3().to_string())
-            .unwrap_or_else(|| "eng".to_string());
+        let ui_lang_iso_code = self
+            .request
+            .learner_profile
+            .explanation_language_iso
+            .clone();
+        let ui_lang_name = lc_core::user::explanation_language_name_from_iso(&ui_lang_iso_code);
 
         let directives = self.language.generation_directives().unwrap_or("");
 
         // Build vocabulary lists (upfront for global access)
         let injected_list = if !self.request.injected_vocabulary.is_empty() {
-            self.request.injected_vocabulary
+            self.request
+                .injected_vocabulary
                 .iter()
                 .map(|e| format!("{} ({})", e.word, e.morphology.pos_label()))
                 .collect::<Vec<_>>()
@@ -225,7 +301,8 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
         };
 
         let excluded_list = if !self.request.excluded_vocabulary.is_empty() {
-            self.request.excluded_vocabulary
+            self.request
+                .excluded_vocabulary
                 .iter()
                 .map(|e| format!("{} ({})", e.word, e.morphology.pos_label()))
                 .collect::<Vec<_>>()
@@ -309,7 +386,10 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
 
         // Conjugation instructions (if applicable)
         if self.request.card_model_id == crate::card_models::CardModelId::Conjugation {
-            blocks.push(wrap_tag("conjugation_instructions", &self.prompt_config.common.conjugation_instructions));
+            blocks.push(wrap_tag(
+                "conjugation_instructions",
+                &self.prompt_config.common.conjugation_instructions,
+            ));
         }
 
         // Output instruction section
@@ -332,11 +412,11 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lc_core::domain::ExtractedFeature;
-    use langs::Polish;
     use crate::card_models::CardModelId;
     use crate::skill_tree::{SkillNodeConfig, SkillTree};
-    use lc_core::user::UserSettings;
+    use langs::Polish;
+    use lc_core::domain::ExtractedFeature;
+    use lc_core::user::{FluencyLevel, KnownLanguage, LearnerProfile};
 
     fn sample_tree() -> SkillTree<Polish> {
         let config = SkillNodeConfig {
@@ -344,11 +424,15 @@ mod tests {
             name: "Polski".to_string(),
             node_instructions: None,
             prerequisites: vec![],
+            concept_key: None,
+            desc: None,
             children: vec![SkillNodeConfig {
                 id: "accusative".to_string(),
                 name: "Biernik".to_string(),
                 node_instructions: Some("Focus on the accusative case.".to_string()),
                 prerequisites: vec![],
+                concept_key: None,
+                desc: None,
                 children: vec![],
             }],
         };
@@ -360,8 +444,7 @@ mod tests {
             .parent()
             .expect("Failed to get parent directory")
             .join("prompts");
-        PromptConfig::load(prompts_path.to_str().unwrap())
-            .expect("Failed to load prompts config")
+        PromptConfig::load(prompts_path.to_str().unwrap()).expect("Failed to load prompts config")
     }
 
     #[test]
@@ -412,7 +495,10 @@ mod tests {
             .expect("Failed to get parent directory")
             .join("prompts");
         let result = PromptConfig::load(prompts_path.to_str().unwrap());
-        assert!(result.is_ok(), "Prompt config should load and validate successfully");
+        assert!(
+            result.is_ok(),
+            "Prompt config should load and validate successfully"
+        );
     }
 
     #[test]
@@ -425,7 +511,10 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 3,
             difficulty: 5,
-            user_profile: UserSettings::new("English".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "eng".to_string(),
+                known_languages: Vec::new(),
+            },
             user_prompt: Some("Use funny sentences.".to_string()),
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -452,7 +541,10 @@ mod tests {
         assert!(prompt.contains("Focus on the accusative case."));
         assert!(prompt.contains("Number of distinct cards to generate: 3"));
         assert!(prompt.contains("English"));
-        assert!(prompt.contains("eng"), "ISO 639-3 code should be dynamically resolved from 'English'");
+        assert!(
+            prompt.contains("eng"),
+            "ISO 639-3 code should be dynamically resolved from 'English'"
+        );
         assert!(prompt.contains("Use funny sentences."));
         assert!(prompt.contains("EXACTLY 3 distinct objects"));
         assert!(prompt.contains("<target_language>"));
@@ -471,7 +563,13 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserSettings::new("French".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "fra".to_string(),
+                known_languages: vec![KnownLanguage {
+                    iso_639_3: "eng".to_string(),
+                    level: FluencyLevel::Fluent,
+                }],
+            },
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -487,27 +585,36 @@ mod tests {
             targets: Vec::new(),
             pedagogical_context: node.node_instructions.clone(),
             skill_path: Some(path.clone()),
-            learner_ui_language: req.user_profile.ui_language.clone(),
-            linguistic_background: req.user_profile.linguistic_background.iter().map(|l| {
-                panini_engine::prompts::LanguageLevel {
+            learner_ui_language: lc_core::user::explanation_language_name_from_iso(
+                &req.learner_profile.explanation_language_iso,
+            ),
+            linguistic_background: req
+                .learner_profile
+                .known_languages
+                .iter()
+                .map(|l| panini_engine::prompts::LanguageLevel {
                     iso_639_3: l.iso_639_3.clone(),
-                    level: format!("{:?}", l.level),
-                }
-            }).collect(),
+                    level: l.level.as_panini_level().to_string(),
+                })
+                .collect(),
             user_prompt: req.user_prompt.clone(),
         };
         let prompt = panini_engine::prompts::build_extraction_prompt(
             tree.language.linguistic_def(),
             &extraction_req,
             &config.extractor,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(prompt.contains("expert computational linguist"));
         assert!(prompt.contains("Polish"));
         assert!(prompt.contains("<extraction_directives>"));
         assert!(prompt.contains("</extraction_directives>"));
         assert!(prompt.contains("French"));
-        assert!(prompt.contains("fra"), "ISO 639-3 code should be dynamically resolved from 'French'");
+        assert!(
+            prompt.contains("fra"),
+            "ISO 639-3 code should be dynamically resolved from 'French'"
+        );
         assert!(prompt.contains("<learner_profile>"));
         assert!(prompt.contains("</learner_profile>"));
         assert!(prompt.contains("<skill_context>"));
@@ -524,7 +631,10 @@ mod tests {
             card_model_id: CardModelId::ClozeTest,
             num_cards: 1,
             difficulty: 5,
-            user_profile: UserSettings::new("English".to_string(), UserSettings::DEFAULT_SRS.to_string(), UserSettings::DEFAULT_LEARN_AHEAD),
+            learner_profile: LearnerProfile {
+                explanation_language_iso: "eng".to_string(),
+                known_languages: Vec::new(),
+            },
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),

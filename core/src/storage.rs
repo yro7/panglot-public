@@ -41,6 +41,8 @@ pub struct DeckInfo {
     pub deck_id: String,
     /// The name of the deck.
     pub name: String,
+    /// The ISO 639-3 code of the target language this deck was generated for.
+    pub target_language: String,
     /// Total number of cards in the deck.
     pub card_count: usize,
     /// Number of new cards (Nouvelles).
@@ -60,7 +62,7 @@ pub struct DeckInfo {
 pub struct NewCardEntry {
     pub front_html: String,
     pub back_html: String,
-    pub skill_name: String,
+    pub card_model_id: String,
     pub template_name: String,
     pub fields_json: String,
     pub explanation: String,
@@ -74,6 +76,8 @@ pub struct NewCardEntry {
 pub struct NewDeckData {
     pub name: String,
     pub language_code: String,
+    pub generation_id: Option<String>,
+    pub parent_deck_id: Option<String>,
     pub cards: Vec<NewCardEntry>,
 }
 
@@ -83,16 +87,24 @@ pub struct NewDeckData {
 #[async_trait::async_trait]
 pub trait StorageProvider: Send + Sync {
     /// Fetches cards from the storage to be analyzed (e.g. for Lexicon extraction).
-    async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>>;
-    
+    async fn fetch_cards(
+        &self,
+    ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>>;
+
     /// Fetches summary info for all available decks.
     async fn fetch_decks(&self) -> Result<Vec<DeckInfo>, Box<dyn std::error::Error + Send + Sync>>;
-    
+
     /// Pushes a newly generated deck to the storage.
-    async fn save_deck(&self, deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
+    async fn save_deck(
+        &self,
+        deck: &NewDeckData,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Deletes a deck and all its associated cards and data.
-    async fn delete_deck(&self, deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_deck(
+        &self,
+        deck_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// A read-only provider that serves pre-fetched cards. Used to feed merged
@@ -109,7 +121,9 @@ impl SnapshotProvider {
 
 #[async_trait::async_trait]
 impl StorageProvider for SnapshotProvider {
-    async fn fetch_cards(&self) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_cards(
+        &self,
+    ) -> Result<Vec<StoredCard>, Box<dyn std::error::Error + Send + Sync>> {
         Ok(self.cards.clone())
     }
 
@@ -117,11 +131,17 @@ impl StorageProvider for SnapshotProvider {
         Ok(vec![])
     }
 
-    async fn save_deck(&self, _deck: &NewDeckData) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    async fn save_deck(
+        &self,
+        _deck: &NewDeckData,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         Err("SnapshotProvider is read-only".into())
     }
 
-    async fn delete_deck(&self, _deck_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn delete_deck(
+        &self,
+        _deck_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Err("SnapshotProvider is read-only".into())
     }
 }

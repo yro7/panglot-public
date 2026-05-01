@@ -1,11 +1,11 @@
-pub mod sm2;
-pub mod leitner;
 pub mod fsrs;
+pub mod leitner;
 pub mod models;
-pub mod traits;
 pub mod registry;
+pub mod sm2;
 mod tests;
+pub mod traits;
 
-pub use models::{Rating, ReviewEvent, SchedulingOutput, SchedulingChoices};
-pub use traits::SrsAlgorithm;
+pub use models::{Rating, ReviewEvent, SchedulingChoices, SchedulingOutput, SrsAlgorithmId};
 pub use registry::SrsRegistry;
+pub use traits::SrsAlgorithm;

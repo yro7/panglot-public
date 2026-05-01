@@ -19,7 +19,10 @@ macro_rules! bounded_int {
                 if !(Self::MIN..=Self::MAX).contains(&value) {
                     Err(format!(
                         "{}: value {} is out of range {}..={}",
-                        $label, value, Self::MIN, Self::MAX
+                        $label,
+                        value,
+                        Self::MIN,
+                        Self::MAX
                     ))
                 } else {
                     Ok(Self(value))
@@ -178,9 +181,15 @@ int_schema!(CardCount, "Number of cards to generate (1-20)");
 int_schema!(Difficulty, "Exercise difficulty level (0-10)");
 int_schema!(LearnAheadMinutes, "Learn-ahead window in minutes (0-1440)");
 
-string_schema!(UserPrompt, "User-provided prompt for card generation (max 2000 chars)");
+string_schema!(
+    UserPrompt,
+    "User-provided prompt for card generation (max 2000 chars)"
+);
 string_schema!(NodeName, "Skill tree node name (max 200 chars)");
-string_schema!(NodeInstructions, "Pedagogical instructions for a skill node (max 5000 chars)");
+string_schema!(
+    NodeInstructions,
+    "Pedagogical instructions for a skill node (max 5000 chars)"
+);
 
 // ── Default for LearnAheadMinutes (DB backward compat) ──
 

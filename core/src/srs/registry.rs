@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-use super::traits::SrsAlgorithm;
-use super::sm2;
-use super::leitner;
 use super::fsrs;
+use super::leitner;
+use super::models::SrsAlgorithmId;
+use super::sm2;
+use super::traits::SrsAlgorithm;
+use std::collections::HashMap;
 
 // ── Registry ──
 
@@ -37,15 +38,22 @@ impl SrsRegistry {
         self.algorithms.get(id).map(AsRef::as_ref)
     }
 
+    pub fn get_typed(&self, id: SrsAlgorithmId) -> Option<&dyn SrsAlgorithm> {
+        self.get(id.as_str())
+    }
+
     /// # Panics
     ///
     /// Panics if the "sm2" algorithm is not registered.
     pub fn default(&self) -> &dyn SrsAlgorithm {
-        self.get("sm2").expect("SM-2 must always be registered")
+        self.get_typed(SrsAlgorithmId::default())
+            .expect("SM-2 must always be registered")
     }
 
     pub fn list(&self) -> Vec<(&'static str, &'static str)> {
-        let mut out: Vec<_> = self.algorithms.values()
+        let mut out: Vec<_> = self
+            .algorithms
+            .values()
             .map(|a| (a.id(), a.name()))
             .collect();
         out.sort_by_key(|&(id, _)| id);

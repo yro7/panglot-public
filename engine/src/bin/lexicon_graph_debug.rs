@@ -1,8 +1,8 @@
+use langs::arabic::ArabicMorphology;
+use langs::polish::PolishMorphology;
 use lc_core::db::LocalStorageProvider;
 use lc_core::domain::CardMetadata;
 use lc_core::storage::{StorageProvider, StoredCard};
-use langs::arabic::ArabicMorphology;
-use langs::polish::PolishMorphology;
 use panini_core::traits::MorphologyInfo;
 use petgraph::stable_graph::{NodeIndex, StableGraph};
 use serde::Serialize;
@@ -47,8 +47,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut graphs: HashMap<String, StableGraph<GraphNode, String>> = HashMap::new();
     let mut node_maps: HashMap<String, HashMap<String, NodeIndex>> = HashMap::new();
 
-    if let Ok(init) = LocalStorageProvider::init(DB_PATH).await {
-        let provider = LocalStorageProvider::for_user(init.pool, USER_ID.to_string());
+    if let Ok(init) =
+        LocalStorageProvider::init(DB_PATH, lc_core::user::UserSettings::default()).await
+    {
+        let provider = LocalStorageProvider::for_user(
+            init.pool,
+            USER_ID.to_string(),
+            lc_core::user::UserSettings::default(),
+        );
         if let Ok(cards) = provider.fetch_cards().await {
             for card in &cards {
                 // Process Arabic
@@ -86,7 +92,7 @@ fn process_features<M>(
     graph: &mut StableGraph<GraphNode, String>,
     node_map: &mut HashMap<String, NodeIndex>,
     metadata: &CardMetadata<M, ()>,
-) where 
+) where
     M: MorphologyInfo + Serialize + panini_core::Aggregable,
 {
     let features = metadata
@@ -98,7 +104,7 @@ fn process_features<M>(
         let morphology = &feature.morphology;
         let lemma = morphology.lemma().to_string();
         let pos = morphology.pos_label().to_lowercase();
-        
+
         // --- 1. Lemma Node ---
         let lemma_id = format!("lemma_{}_{}", lemma, pos);
         let lemma_node_idx = *node_map.entry(lemma_id.clone()).or_insert_with(|| {
@@ -129,9 +135,8 @@ fn process_features<M>(
         // (This is a bit hacky but works because MorphologyInfo generates root() for Arabic)
         // Since we are generic, we'll try to get it if we can.
         // Actually, since we know it's Arabic or Polish, we can try to find relevant fields.
-        
+
         // Let's use the field values directly from observations for maximum genericness
-        use panini_core::Aggregable;
         for obs_group in morphology.observations() {
             for (field_name, field_value) in obs_group {
                 let field_name: String = field_name;
@@ -165,15 +170,16 @@ fn process_features<M>(
                     }
                     "aspect" => {
                         let aspect_id = format!("aspect_{}", field_value);
-                        let aspect_node_idx = *node_map.entry(aspect_id.clone()).or_insert_with(|| {
-                            graph.add_node(GraphNode {
-                                id: aspect_id,
-                                label: field_value.clone().to_uppercase(),
-                                node_type: "aspect".to_string(),
-                                pos: "aspect".to_string(),
-                                color: "#00b894".to_string(), // Mint Green
-                            })
-                        });
+                        let aspect_node_idx =
+                            *node_map.entry(aspect_id.clone()).or_insert_with(|| {
+                                graph.add_node(GraphNode {
+                                    id: aspect_id,
+                                    label: field_value.clone().to_uppercase(),
+                                    node_type: "aspect".to_string(),
+                                    pos: "aspect".to_string(),
+                                    color: "#00b894".to_string(), // Mint Green
+                                })
+                            });
                         add_unique_edge(graph, aspect_node_idx, lemma_node_idx, "aspect");
                     }
                     _ => {}
@@ -183,7 +189,12 @@ fn process_features<M>(
     }
 }
 
-fn add_unique_edge(graph: &mut StableGraph<GraphNode, String>, source: NodeIndex, target: NodeIndex, edge_type: &str) {
+fn add_unique_edge(
+    graph: &mut StableGraph<GraphNode, String>,
+    source: NodeIndex,
+    target: NodeIndex,
+    edge_type: &str,
+) {
     if !graph.edge_indices().any(|idx| {
         let (s, t) = graph.edge_endpoints(idx).unwrap();
         s == source && t == target && graph[idx] == edge_type
@@ -206,10 +217,15 @@ fn get_pos_color(pos: &str) -> &'static str {
     }
 }
 
-fn export_graph_to_html(lang: &str, graph: &StableGraph<GraphNode, String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn export_graph_to_html(
+    lang: &str,
+    graph: &StableGraph<GraphNode, String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut elements = Vec::new();
     for node_idx in graph.node_indices() {
-        elements.push(CytoscapeElement { data: CytoscapeData::Node(graph[node_idx].clone()) });
+        elements.push(CytoscapeElement {
+            data: CytoscapeData::Node(graph[node_idx].clone()),
+        });
     }
     for edge_idx in graph.edge_indices() {
         let (source_idx, target_idx) = graph.edge_endpoints(edge_idx).unwrap();
@@ -225,7 +241,8 @@ fn export_graph_to_html(lang: &str, graph: &StableGraph<GraphNode, String>) -> R
     let elements_json = serde_json::to_string_pretty(&elements)?;
     let title = format!("Panini Lexicon Explorer ({})", lang.to_uppercase());
 
-    let html_content = format!(r#"
+    let html_content = format!(
+        r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -311,7 +328,9 @@ fn export_graph_to_html(lang: &str, graph: &StableGraph<GraphNode, String>) -> R
     </script>
 </body>
 </html>
-"#, title, title, elements_json);
+"#,
+        title, title, elements_json
+    );
 
     let filename = format!("output/lexicon_graph_{}.html", lang);
     fs::create_dir_all("output")?;

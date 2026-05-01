@@ -7,7 +7,8 @@ use crate::card_models::AnyCard;
 /// Returns Ok(()) if valid, Err(feedback) with a message to inject into the retry prompt.
 #[async_trait]
 pub trait CardValidator<L: Language + Send + Sync>: Send + Sync
-where L::Morphology: Send + Sync
+where
+    L::Morphology: Send + Sync,
 {
     async fn validate(
         &self,

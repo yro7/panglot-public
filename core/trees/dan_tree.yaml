@@ -1,3 +1,9 @@
+tree_id: c8ee894e-b3df-46dc-b17c-c467576a9fb1
+tree_key: core
+tree_slug: danish-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Danish
 root:
   id: root

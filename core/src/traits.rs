@@ -25,12 +25,13 @@ pub enum TtsConfig {
     None,
 }
 
-/// Imports a language definition from Panini. 
+/// Imports a language definition from Panini.
 #[macro_export]
 macro_rules! import_from_panini {
     ($panini_path:path) => {
         type Morphology = <$panini_path as $crate::traits::LinguisticDefinition>::Morphology;
-        type GrammaticalFunction = <$panini_path as $crate::traits::LinguisticDefinition>::GrammaticalFunction;
+        type GrammaticalFunction =
+            <$panini_path as $crate::traits::LinguisticDefinition>::GrammaticalFunction;
         type LinguisticDef = $panini_path;
 
         fn linguistic_def(&self) -> &Self::LinguisticDef {
@@ -46,13 +47,24 @@ macro_rules! import_from_panini {
 /// generation directives) live here; extraction concerns live in `LinguisticDef`.
 pub trait Language {
     /// The language's morphological enum (POS-tagged, with `#[derive(MorphologyInfo)]`).
-    type Morphology: Debug + Clone + Serialize + for<'de> Deserialize<'de>
-        + schemars::JsonSchema + MorphologyInfo + Send + Sync;
+    type Morphology: Debug
+        + Clone
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + MorphologyInfo
+        + Send
+        + Sync;
 
     /// For agglutinative languages: the grammatical function enum. `()` otherwise.
-    type GrammaticalFunction: Debug + Clone + PartialEq
-        + Serialize + for<'de> Deserialize<'de>
-        + schemars::JsonSchema + Send + Sync;
+    type GrammaticalFunction: Debug
+        + Clone
+        + PartialEq
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + schemars::JsonSchema
+        + Send
+        + Sync;
 
     /// The specific extra features this language requires the LLM to provide,
     /// defined as a statically typed struct for compile-time JSON Schema generation.
@@ -60,9 +72,10 @@ pub trait Language {
 
     /// The concrete panini-core `LinguisticDefinition` backing this language.
     type LinguisticDef: LinguisticDefinition<
-        Morphology = Self::Morphology,
-        GrammaticalFunction = Self::GrammaticalFunction,
-    > + Send + Sync;
+            Morphology = Self::Morphology,
+            GrammaticalFunction = Self::GrammaticalFunction,
+        > + Send
+        + Sync;
 
     /// Access the panini linguistic definition — the only surface of contact with Panini.
     fn linguistic_def(&self) -> &Self::LinguisticDef;
@@ -127,15 +140,19 @@ impl ToFieldString for Option<String> {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn script_constants_resolve_to_valid_iso15924() {
-        let scripts = [Script::LATN, Script::CYRL, Script::HIRA, Script::KANA, Script::HANI];
+        let scripts = [
+            Script::LATN,
+            Script::CYRL,
+            Script::HIRA,
+            Script::KANA,
+            Script::HANI,
+        ];
         for script in &scripts {
             let resolved = script.resolve();
             assert_eq!(resolved.code.as_ref(), script.code());

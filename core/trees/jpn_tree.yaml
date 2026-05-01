@@ -1,3 +1,9 @@
+tree_id: d52db4d5-750b-4a02-ac77-6e14d8d64326
+tree_key: core
+tree_slug: japanese-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Japanese
 root:
   id: root

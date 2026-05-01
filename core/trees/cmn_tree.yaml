@@ -1,3 +1,9 @@
+tree_id: 01a02d30-b124-414f-97d6-4a172012e36a
+tree_key: core
+tree_slug: mandarin-core
+tree_version: 1
+tree_name: Core
+is_default: true
 language_name: Mandarin Chinese
 root:
   id: root
