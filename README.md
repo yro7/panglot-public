@@ -45,4 +45,4 @@ cargo build --release
 
 ## License
 
-MIT
+GNU Affero General Public License v3 (AGPL-3.0-or-later)
