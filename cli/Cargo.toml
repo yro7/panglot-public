@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 engine = { path = "../engine" }
-core = { package = "lc_core", path = "../core" }
+lc_core = { path = "../core" }
 langs = { path = "../langs" }
 anki_bridge = { path = "../anki_bridge" }
 tokio = { version = "1", features = ["full"] }
