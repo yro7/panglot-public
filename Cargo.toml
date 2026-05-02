@@ -4,7 +4,6 @@ members = [
     "engine",
     "anki_bridge",
     "langs",
-    "app",
     "lc_macro",
     "codegen",
     "panini/panini-core",
