@@ -39,6 +39,7 @@ pub struct StudyCardRecord {
     pub front_html: String,
     pub back_html: String,
     pub explanation_html: String,
+    pub ipa: Option<String>,
     pub audio_path: Option<String>,
 }
 
@@ -148,7 +149,7 @@ pub(super) fn now_ms() -> i64 {
     Utc::now().timestamp_millis()
 }
 
-pub(super) fn parse_card_metadata(metadata_json: &str) -> (String, String) {
+pub(super) fn parse_card_metadata(metadata_json: &str) -> (String, Option<String>) {
     let metadata: serde_json::Value = serde_json::from_str(metadata_json).unwrap_or_default();
     let explanation = metadata
         .get("pedagogical_explanation")
@@ -158,13 +159,10 @@ pub(super) fn parse_card_metadata(metadata_json: &str) -> (String, String) {
     let ipa = metadata
         .get("ipa")
         .and_then(|value| value.as_str())
-        .unwrap_or("")
-        .to_string();
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
     (explanation, ipa)
-}
-
-pub(super) fn explanation_html_from_metadata(metadata_json: &str) -> String {
-    parse_card_metadata(metadata_json).0
 }
 
 /// Reads `source_node_id` (from `CardMetadata.skill_id` post-rename) and the
@@ -207,6 +205,7 @@ pub(super) fn row_to_deck_summary(row: &SqliteRow) -> DeckSummaryRecord {
 pub(super) fn row_to_study_card(row: &SqliteRow) -> StudyCardRecord {
     let metadata_json: String = row.get("metadata_json");
     let (source_node_id, source_node_name) = source_node_from_metadata(&metadata_json);
+    let (explanation_html, ipa) = parse_card_metadata(&metadata_json);
     StudyCardRecord {
         card_id: row.get("id"),
         deck_id: row.get("deck_id"),
@@ -215,7 +214,8 @@ pub(super) fn row_to_study_card(row: &SqliteRow) -> StudyCardRecord {
         card_model_id: row.get("card_model_id"),
         front_html: row.get("front_html"),
         back_html: row.get("back_html"),
-        explanation_html: explanation_html_from_metadata(&metadata_json),
+        explanation_html,
+        ipa,
         audio_path: row.get("audio_path"),
     }
 }
