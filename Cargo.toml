@@ -12,6 +12,7 @@ members = [
     "panini/panini-engine",
     "panini/panini-langs",
     "panini/panini",
+    "cli",
 ]
 resolver = "2"
 
