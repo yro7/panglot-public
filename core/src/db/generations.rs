@@ -2,8 +2,8 @@ use sqlx::{Row, SqlitePool};
 
 use super::LocalStorageProvider;
 use super::types::{
-    MaterializedGeneration, NewGeneration, StoredGeneration,
-    row_to_generation, row_to_generation_card,
+    MaterializedGeneration, NewGeneration, StoredGeneration, row_to_generation,
+    row_to_generation_card,
 };
 use crate::storage::{NewCardEntry, NewDeckData};
 
@@ -34,10 +34,7 @@ pub async fn cleanup_expired_generation_cards(
 }
 
 impl LocalStorageProvider {
-    pub async fn save_generation(
-        &self,
-        generation: &NewGeneration,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn save_generation(&self, generation: &NewGeneration) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -142,10 +139,7 @@ impl LocalStorageProvider {
 
     /// Deletes the staged cards for a generation. The generation log row stays.
     /// Use this when the user explicitly discards a preview.
-    pub async fn discard_generation_cards(
-        &self,
-        generation_id: &str,
-    ) -> Result<bool, sqlx::Error> {
+    pub async fn discard_generation_cards(&self, generation_id: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             "DELETE FROM generation_cards \
              WHERE generation_id = ? \
@@ -186,6 +180,12 @@ impl LocalStorageProvider {
 
         let language_iso: String = row.get("language_iso");
         let card_model_id: String = row.get("card_model_id");
+        let deck_path = deck_path_parts(deck_name);
+        let leaf_deck_name = deck_path
+            .last()
+            .cloned()
+            .unwrap_or_else(|| deck_name.trim().to_string());
+        let mut current_parent_id = parent_deck_id.map(str::to_string);
 
         let card_rows = sqlx::query(
             "SELECT id, template_name, front_html, back_html, explanation_html, fields_json, \
@@ -196,11 +196,23 @@ impl LocalStorageProvider {
         .fetch_all(&mut *tx)
         .await?;
 
+        for parent_name in deck_path.iter().take(deck_path.len().saturating_sub(1)) {
+            let deck_id = self
+                .get_or_create_empty_deck_in_tx(
+                    parent_name,
+                    &language_iso,
+                    current_parent_id.as_deref(),
+                    &mut tx,
+                )
+                .await?;
+            current_parent_id = Some(deck_id);
+        }
+
         let deck_data = NewDeckData {
-            name: deck_name.to_string(),
+            name: leaf_deck_name,
             language_code: language_iso,
             generation_id: Some(generation_id.to_string()),
-            parent_deck_id: parent_deck_id.map(|id| id.to_string()),
+            parent_deck_id: current_parent_id,
             cards: card_rows
                 .iter()
                 .map(|row| NewCardEntry {
@@ -226,14 +238,12 @@ impl LocalStorageProvider {
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query(
-            "UPDATE generations SET materialized_deck_id = ? WHERE id = ? AND user_id = ?",
-        )
-        .bind(&deck_id)
-        .bind(generation_id)
-        .bind(&self.user_id)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("UPDATE generations SET materialized_deck_id = ? WHERE id = ? AND user_id = ?")
+            .bind(&deck_id)
+            .bind(generation_id)
+            .bind(&self.user_id)
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
 
@@ -241,5 +251,20 @@ impl LocalStorageProvider {
             deck_id,
             created_card_count,
         })
+    }
+}
+
+fn deck_path_parts(deck_name: &str) -> Vec<String> {
+    let parts: Vec<String> = deck_name
+        .split("::")
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    if parts.is_empty() {
+        vec![deck_name.trim().to_string()]
+    } else {
+        parts
     }
 }

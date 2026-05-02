@@ -310,6 +310,42 @@ mod tests {
         }
     }
 
+    fn test_generation_for_node(
+        id: &str,
+        source_node_id: &str,
+        source_node_name: &str,
+    ) -> NewGeneration {
+        NewGeneration {
+            id: id.to_string(),
+            language_iso: "pol".to_string(),
+            tree_definition_id: Some("eb101138-bd6e-450a-abe0-a24c604d1a4e".to_string()),
+            tree_node_id: Some(source_node_id.to_string()),
+            concept_key: None,
+            card_model_id: "ClozeTest".to_string(),
+            card_count: 1,
+            difficulty: 5,
+            user_prompt: None,
+            default_deck_name: "Polski::ClozeTest".to_string(),
+            created_at: now_ms(),
+            expires_at: now_ms() + 86_400_000,
+            cards: vec![NewGenerationCard {
+                id: format!("{id}-card"),
+                template_name: "Recognition".to_string(),
+                front_html: format!("<div>{source_node_name} front</div>"),
+                back_html: format!("<div>{source_node_name} back</div>"),
+                explanation_html: "Explanation".to_string(),
+                fields_json: r#"{"front":"x","back":"y"}"#.to_string(),
+                metadata_json: serde_json::json!({
+                    "pedagogical_explanation": format!("Pedagogical {source_node_name}"),
+                    "source_node_id": source_node_id,
+                    "source_node_name": source_node_name,
+                })
+                .to_string(),
+                audio_path: Some(format!("audio/{id}.mp3")),
+            }],
+        }
+    }
+
     async fn deck_id_for_name(
         provider: &LocalStorageProvider,
         name: &str,
@@ -329,14 +365,12 @@ mod tests {
     }
 
     async fn first_card_id_for_deck(provider: &LocalStorageProvider, deck_id: &str) -> String {
-        sqlx::query(
-            "SELECT id FROM cards WHERE deck_id = ? ORDER BY created_at LIMIT 1",
-        )
-        .bind(deck_id)
-        .fetch_one(&provider.pool)
-        .await
-        .expect("card should exist")
-        .get("id")
+        sqlx::query("SELECT id FROM cards WHERE deck_id = ? ORDER BY created_at LIMIT 1")
+            .bind(deck_id)
+            .fetch_one(&provider.pool)
+            .await
+            .expect("card should exist")
+            .get("id")
     }
 
     fn test_generation(batch_id: &str) -> NewGeneration {
@@ -392,6 +426,99 @@ mod tests {
                 .expect("child deck should save");
         }
         parent_id
+    }
+
+    #[tokio::test]
+    async fn materialize_generation_creates_real_hierarchy_and_reuses_parents() {
+        let provider = init_provider("materialize_hierarchy").await;
+        let first = test_generation_for_node("gen-hierarchy-1", "accusative", "Accusative");
+        provider
+            .save_generation(&first)
+            .await
+            .expect("first generation should save");
+
+        let materialized = provider
+            .materialize_generation_to_deck(
+                &first.id,
+                "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest",
+                None,
+            )
+            .await
+            .expect("generation should materialize");
+        assert_eq!(materialized.created_card_count, 1);
+
+        let second = test_generation_for_node("gen-hierarchy-2", "locative", "Locative");
+        provider
+            .save_generation(&second)
+            .await
+            .expect("second generation should save");
+        provider
+            .materialize_generation_to_deck(
+                &second.id,
+                "Core::Polski::Przypadki (Cases)::Miejscownik (Locative)::ClozeTest",
+                None,
+            )
+            .await
+            .expect("second generation should materialize");
+
+        let summaries = provider
+            .list_deck_summaries()
+            .await
+            .expect("summaries should load");
+        let core = summaries
+            .iter()
+            .find(|summary| summary.full_path == "Core")
+            .expect("Core parent should exist");
+        let polski = summaries
+            .iter()
+            .find(|summary| summary.full_path == "Core::Polski")
+            .expect("Polski parent should exist");
+        let cases = summaries
+            .iter()
+            .find(|summary| summary.full_path == "Core::Polski::Przypadki (Cases)")
+            .expect("Cases parent should exist");
+        let accusative_leaf = summaries
+            .iter()
+            .find(|summary| {
+                summary.full_path
+                    == "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest"
+            })
+            .expect("Accusative leaf should exist");
+
+        assert_eq!(core.counts.total_cards, 2);
+        assert_eq!(polski.parent_deck_id.as_deref(), Some(core.id.as_str()));
+        assert_eq!(cases.parent_deck_id.as_deref(), Some(polski.id.as_str()));
+        assert!(
+            summaries
+                .iter()
+                .all(|summary| summary.full_path != "Core::Core")
+        );
+        assert_eq!(
+            accusative_leaf.parent_deck_id.as_deref(),
+            summaries
+                .iter()
+                .find(|summary| {
+                    summary.full_path == "Core::Polski::Przypadki (Cases)::Biernik (Accusative)"
+                })
+                .map(|summary| summary.id.as_str())
+        );
+
+        let parent_cards = provider
+            .select_study_cards(&core.id, StudyMode::Review, 20)
+            .await
+            .expect("parent study cards should load");
+        assert_eq!(parent_cards.len(), 2);
+
+        let core_rows = summaries
+            .iter()
+            .filter(|summary| summary.full_path == "Core")
+            .count();
+        let polski_rows = summaries
+            .iter()
+            .filter(|summary| summary.full_path == "Core::Polski")
+            .count();
+        assert_eq!(core_rows, 1);
+        assert_eq!(polski_rows, 1);
     }
 
     #[tokio::test]
@@ -758,13 +885,12 @@ mod tests {
                 .await
                 .expect("generation count should load");
         // Staged cards removed.
-        let card_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM generation_cards WHERE generation_id = ?",
-        )
-        .bind(&expired.id)
-        .fetch_one(&provider.pool)
-        .await
-        .expect("card count should load");
+        let card_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM generation_cards WHERE generation_id = ?")
+                .bind(&expired.id)
+                .fetch_one(&provider.pool)
+                .await
+                .expect("card count should load");
 
         assert_eq!(generation_count, 1);
         assert_eq!(card_count, 0);

@@ -93,6 +93,37 @@ impl LocalStorageProvider {
         Ok((deck_id, card_ids.len()))
     }
 
+    pub(crate) async fn get_or_create_empty_deck_in_tx(
+        &self,
+        name: &str,
+        language_code: &str,
+        parent_deck_id: Option<&str>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<String, sqlx::Error> {
+        if let Some(deck_id) = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM decks WHERE user_id = ? AND name = ? \
+             AND IFNULL(parent_id, '') = IFNULL(?, '')",
+        )
+        .bind(&self.user_id)
+        .bind(name)
+        .bind(parent_deck_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        {
+            return Ok(deck_id);
+        }
+
+        let deck_data = NewDeckData {
+            name: name.to_string(),
+            language_code: language_code.to_string(),
+            generation_id: None,
+            parent_deck_id: parent_deck_id.map(str::to_string),
+            cards: vec![],
+        };
+        let (deck_id, _created_card_count) = self.save_new_deck_data_in_tx(&deck_data, tx).await?;
+        Ok(deck_id)
+    }
+
     pub async fn verify_deck_ownership(&self, deck_id: &str) -> Result<bool, sqlx::Error> {
         let count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM decks WHERE id = ? AND user_id = ?")
@@ -128,12 +159,11 @@ impl LocalStorageProvider {
         }
 
         if let Some(parent_id) = new_parent_id {
-            let parent_row = sqlx::query_as::<_, (String,)>(
-                "SELECT user_id FROM decks WHERE id = ?",
-            )
-            .bind(parent_id)
-            .fetch_optional(&mut *tx)
-            .await?;
+            let parent_row =
+                sqlx::query_as::<_, (String,)>("SELECT user_id FROM decks WHERE id = ?")
+                    .bind(parent_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
             let Some((parent_owner,)) = parent_row else {
                 return Err(MoveDeckError::ParentNotFound);
             };
