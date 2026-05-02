@@ -15,7 +15,9 @@ use crate::skill_tree::SkillNode;
 use crate::analyzer::{DynLexiconTracker, LexiconTracker, LibraryAnalyzer};
 
 use super::core::Pipeline;
-use super::types::{DynGeneratedCard, DynPromptPreview, to_panini_language_levels};
+use super::types::{
+    DynGeneratedBatch, DynGeneratedCard, DynPromptPreview, to_panini_language_levels,
+};
 
 /// Language-agnostic pipeline interface. The API layer works exclusively through this trait.
 /// The tree is injected at each call — the pipeline is stateless w.r.t. the skill tree.
@@ -35,13 +37,14 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        ui_locale: String,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>,
         pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
-    ) -> Result<Vec<DynGeneratedCard>>;
+    ) -> Result<DynGeneratedBatch>;
 
     /// Builds the deck name from the tree path: `Language::TreePath::CardModel`.
     fn build_deck_name_dyn(
@@ -59,6 +62,7 @@ pub trait DynPipeline: Send + Sync {
         num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        ui_locale: String,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
@@ -127,13 +131,14 @@ where
         num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        ui_locale: String,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
         llm_sem: Arc<Semaphore>,
         pp_sem: Arc<Semaphore>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
-    ) -> Result<Vec<DynGeneratedCard>> {
+    ) -> Result<DynGeneratedBatch> {
         let concrete = lexicon
             .as_ref()
             .and_then(|l| l.as_any().downcast_ref::<LexiconTracker<L::Morphology>>());
@@ -142,15 +147,17 @@ where
             num_cards,
             difficulty,
             learner_profile,
+            ui_locale,
             user_prompt,
             lexicon_options,
             request_context,
             concrete,
         );
-        let cards = self
+        let batch = self
             .generate_cards_batch(tree_root, &req, node_id, llm_sem, pp_sem)
             .await?;
-        Ok(cards
+        let cards = batch
+            .cards
             .into_iter()
             .map(|c| {
                 let metadata_json = serde_json::to_string(&c.metadata).unwrap_or_default();
@@ -172,7 +179,11 @@ where
                     metadata_json,
                 }
             })
-            .collect())
+            .collect();
+        Ok(DynGeneratedBatch {
+            suggested_deck_name: batch.suggested_deck_name,
+            cards,
+        })
     }
 
     fn build_deck_name_dyn(
@@ -195,6 +206,7 @@ where
         num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        ui_locale: String,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         lexicon: Option<Arc<dyn DynLexiconTracker>>,
@@ -207,6 +219,7 @@ where
             num_cards,
             difficulty,
             learner_profile,
+            ui_locale,
             user_prompt,
             lexicon_options,
             None,
@@ -267,7 +280,22 @@ where
             )?
         };
 
-        let schema_call_1 = crate::card_models::AnyCard::schema_json_value::<L>(card_model_id);
+        let card_schema = crate::card_models::AnyCard::schema_json_value::<L>(card_model_id);
+        let schema_call_1 = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "deck_title": {
+                    "type": "string",
+                    "description": "Short leaf deck title in the user's UI language. Do not include the full hierarchy or path separators.",
+                },
+                "cards": {
+                    "type": "array",
+                    "items": card_schema,
+                }
+            },
+            "required": ["deck_title", "cards"],
+            "additionalProperties": false,
+        });
         let schema_call_2 = panini_engine::composer::compose_schema(lang_def, &selected);
 
         Ok(DynPromptPreview {

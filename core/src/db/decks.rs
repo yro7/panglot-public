@@ -4,7 +4,7 @@ use uuid::Uuid;
 use super::LocalStorageProvider;
 use super::sql::{DECK_CLOSURE_CTE, DECK_SUMMARY_SELECT};
 use super::types::{DeckSummaryRecord, now_ms, row_to_deck_summary};
-use crate::storage::NewDeckData;
+use crate::storage::{NewCardEntry, NewDeckData};
 
 #[derive(Debug)]
 pub enum MoveDeckError {
@@ -45,24 +45,38 @@ impl LocalStorageProvider {
         .execute(&mut **tx)
         .await?;
 
-        if deck_data.cards.is_empty() {
-            return Ok((deck_id, 0));
+        let created_card_count = self
+            .save_cards_for_deck_in_tx(&deck_id, &deck_data.cards, tx)
+            .await?;
+
+        Ok((deck_id, created_card_count))
+    }
+
+    pub(crate) async fn save_cards_for_deck_in_tx(
+        &self,
+        deck_id: &str,
+        cards: &[NewCardEntry],
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<usize, sqlx::Error> {
+        if cards.is_empty() {
+            return Ok(0);
         }
 
-        let card_ids: Vec<String> = (0..deck_data.cards.len())
+        let now = now_ms();
+        let card_ids: Vec<String> = (0..cards.len())
             .map(|_| Uuid::now_v7().to_string())
             .collect();
 
         const CARDS_CHUNK: usize = 75;
         for (chunk_idx, id_chunk) in card_ids.chunks(CARDS_CHUNK).enumerate() {
             let offset = chunk_idx * CARDS_CHUNK;
-            let entries = &deck_data.cards[offset..offset + id_chunk.len()];
+            let entries = &cards[offset..offset + id_chunk.len()];
             let mut qb = QueryBuilder::<Sqlite>::new(
                 "INSERT INTO cards (id, deck_id, user_id, card_model_id, template_name, front_html, back_html, fields_json, metadata_json, audio_path, created_at) ",
             );
             qb.push_values(id_chunk.iter().zip(entries), |mut b, (id, entry)| {
                 b.push_bind(id)
-                    .push_bind(&deck_id)
+                    .push_bind(deck_id)
                     .push_bind(&self.user_id)
                     .push_bind(&entry.card_model_id)
                     .push_bind(&entry.template_name)
@@ -90,7 +104,24 @@ impl LocalStorageProvider {
             qb.build().execute(&mut **tx).await?;
         }
 
-        Ok((deck_id, card_ids.len()))
+        Ok(card_ids.len())
+    }
+
+    pub(crate) async fn deck_id_by_name_in_tx(
+        &self,
+        name: &str,
+        parent_deck_id: Option<&str>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT id FROM decks WHERE user_id = ? AND name = ? \
+             AND IFNULL(parent_id, '') = IFNULL(?, '')",
+        )
+        .bind(&self.user_id)
+        .bind(name)
+        .bind(parent_deck_id)
+        .fetch_optional(&mut **tx)
+        .await
     }
 
     pub(crate) async fn get_or_create_empty_deck_in_tx(
@@ -100,16 +131,7 @@ impl LocalStorageProvider {
         parent_deck_id: Option<&str>,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> Result<String, sqlx::Error> {
-        if let Some(deck_id) = sqlx::query_scalar::<_, String>(
-            "SELECT id FROM decks WHERE user_id = ? AND name = ? \
-             AND IFNULL(parent_id, '') = IFNULL(?, '')",
-        )
-        .bind(&self.user_id)
-        .bind(name)
-        .bind(parent_deck_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        {
+        if let Some(deck_id) = self.deck_id_by_name_in_tx(name, parent_deck_id, tx).await? {
             return Ok(deck_id);
         }
 

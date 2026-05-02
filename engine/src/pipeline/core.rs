@@ -148,7 +148,9 @@ where
         let user_content = format!(
             "Difficulty level: {}/10.{}\n\n\
              IMPORTANT: A previous attempt failed with the following error:\n{}\n\
-             Please generate exactly 1 valid card. Respond with valid JSON only, no markdown.",
+             Please generate exactly 1 valid card. For this retry, return only the single \
+             card object matching the schema, not a deck_title/cards batch wrapper. \
+             Respond with valid JSON only, no markdown.",
             req.difficulty,
             req.user_prompt
                 .as_deref()
@@ -247,6 +249,7 @@ where
         num_cards: u32,
         difficulty: u8,
         learner_profile: LearnerProfile,
+        ui_locale: String,
         user_prompt: Option<String>,
         lexicon_options: Option<crate::generator::LexiconOption>,
         request_context: Option<crate::llm_backend::RequestContext>,
@@ -278,6 +281,7 @@ where
             num_cards,
             difficulty,
             learner_profile,
+            ui_locale,
             user_prompt,
             transliteration: None,
             injected_vocabulary,

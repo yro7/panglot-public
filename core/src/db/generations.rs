@@ -41,8 +41,9 @@ impl LocalStorageProvider {
             "INSERT INTO generations \
              (id, user_id, language_iso, tree_definition_id, tree_node_id, concept_key, \
               card_model_id, card_count, difficulty, user_prompt, default_deck_name, \
+              suggested_deck_name, \
               materialized_deck_id, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
         )
         .bind(&generation.id)
         .bind(&self.user_id)
@@ -55,6 +56,7 @@ impl LocalStorageProvider {
         .bind(generation.difficulty)
         .bind(&generation.user_prompt)
         .bind(&generation.default_deck_name)
+        .bind(&generation.suggested_deck_name)
         .bind(generation.created_at)
         .execute(&mut *tx)
         .await?;
@@ -92,6 +94,7 @@ impl LocalStorageProvider {
         let row = sqlx::query(
             "SELECT id, language_iso, tree_definition_id, tree_node_id, concept_key, \
              card_model_id, card_count, difficulty, user_prompt, default_deck_name, \
+             suggested_deck_name, \
              materialized_deck_id, created_at \
              FROM generations WHERE id = ? AND user_id = ?",
         )
@@ -208,27 +211,31 @@ impl LocalStorageProvider {
             current_parent_id = Some(deck_id);
         }
 
+        let cards: Vec<NewCardEntry> = card_rows
+            .iter()
+            .map(|row| NewCardEntry {
+                front_html: row.get("front_html"),
+                back_html: row.get("back_html"),
+                card_model_id: card_model_id.clone(),
+                template_name: row.get("template_name"),
+                fields_json: row.get("fields_json"),
+                explanation: row.get("explanation_html"),
+                ipa: String::new(),
+                metadata_json: row.get("metadata_json"),
+                audio_path: row.get("audio_path"),
+            })
+            .collect();
+
+        let leaf_deck_name = self
+            .unique_deck_name_in_tx(&leaf_deck_name, current_parent_id.as_deref(), &mut tx)
+            .await?;
         let deck_data = NewDeckData {
             name: leaf_deck_name,
             language_code: language_iso,
             generation_id: Some(generation_id.to_string()),
             parent_deck_id: current_parent_id,
-            cards: card_rows
-                .iter()
-                .map(|row| NewCardEntry {
-                    front_html: row.get("front_html"),
-                    back_html: row.get("back_html"),
-                    card_model_id: card_model_id.clone(),
-                    template_name: row.get("template_name"),
-                    fields_json: row.get("fields_json"),
-                    explanation: row.get("explanation_html"),
-                    ipa: String::new(),
-                    metadata_json: row.get("metadata_json"),
-                    audio_path: row.get("audio_path"),
-                })
-                .collect(),
+            cards,
         };
-
         let (deck_id, created_card_count) =
             self.save_new_deck_data_in_tx(&deck_data, &mut tx).await?;
 
@@ -266,5 +273,41 @@ fn deck_path_parts(deck_name: &str) -> Vec<String> {
         vec![deck_name.trim().to_string()]
     } else {
         parts
+    }
+}
+
+impl LocalStorageProvider {
+    async fn unique_deck_name_in_tx(
+        &self,
+        base_name: &str,
+        parent_deck_id: Option<&str>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ) -> Result<String, sqlx::Error> {
+        let base_name = base_name.trim();
+        let base_name = if base_name.is_empty() {
+            "Deck"
+        } else {
+            base_name
+        };
+        if self
+            .deck_id_by_name_in_tx(base_name, parent_deck_id, tx)
+            .await?
+            .is_none()
+        {
+            return Ok(base_name.to_string());
+        }
+
+        for index in 2.. {
+            let candidate = format!("{base_name} ({index})");
+            if self
+                .deck_id_by_name_in_tx(&candidate, parent_deck_id, tx)
+                .await?
+                .is_none()
+            {
+                return Ok(candidate);
+            }
+        }
+
+        unreachable!("unbounded suffix search always returns")
     }
 }

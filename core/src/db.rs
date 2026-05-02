@@ -326,6 +326,7 @@ mod tests {
             difficulty: 5,
             user_prompt: None,
             default_deck_name: "Polski::ClozeTest".to_string(),
+            suggested_deck_name: Some("ClozeTest".to_string()),
             created_at: now_ms(),
             expires_at: now_ms() + 86_400_000,
             cards: vec![NewGenerationCard {
@@ -385,6 +386,7 @@ mod tests {
             difficulty: 0,
             user_prompt: None,
             default_deck_name: "Greetings".to_string(),
+            suggested_deck_name: Some("Greetings".to_string()),
             created_at: 1_700_000_000_000,
             expires_at: 1_700_086_400_000,
             cards: vec![NewGenerationCard {
@@ -447,6 +449,22 @@ mod tests {
             .expect("generation should materialize");
         assert_eq!(materialized.created_card_count, 1);
 
+        let repeated = test_generation_for_node("gen-hierarchy-1b", "accusative", "Accusative");
+        provider
+            .save_generation(&repeated)
+            .await
+            .expect("repeated generation should save");
+        let repeated_materialized = provider
+            .materialize_generation_to_deck(
+                &repeated.id,
+                "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest",
+                None,
+            )
+            .await
+            .expect("repeated generation should create a distinct leaf");
+        assert_ne!(repeated_materialized.deck_id, materialized.deck_id);
+        assert_eq!(repeated_materialized.created_card_count, 1);
+
         let second = test_generation_for_node("gen-hierarchy-2", "locative", "Locative");
         provider
             .save_generation(&second)
@@ -485,7 +503,7 @@ mod tests {
             })
             .expect("Accusative leaf should exist");
 
-        assert_eq!(core.counts.total_cards, 2);
+        assert_eq!(core.counts.total_cards, 3);
         assert_eq!(polski.parent_deck_id.as_deref(), Some(core.id.as_str()));
         assert_eq!(cases.parent_deck_id.as_deref(), Some(polski.id.as_str()));
         assert!(
@@ -502,12 +520,21 @@ mod tests {
                 })
                 .map(|summary| summary.id.as_str())
         );
+        assert_eq!(accusative_leaf.counts.total_cards, 1);
+        let repeated_accusative_leaf = summaries
+            .iter()
+            .find(|summary| {
+                summary.full_path
+                    == "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest (2)"
+            })
+            .expect("Repeated Accusative leaf should exist");
+        assert_eq!(repeated_accusative_leaf.counts.total_cards, 1);
 
         let parent_cards = provider
             .select_study_cards(&core.id, StudyMode::Review, 20)
             .await
             .expect("parent study cards should load");
-        assert_eq!(parent_cards.len(), 2);
+        assert_eq!(parent_cards.len(), 3);
 
         let core_rows = summaries
             .iter()
@@ -519,6 +546,22 @@ mod tests {
             .count();
         assert_eq!(core_rows, 1);
         assert_eq!(polski_rows, 1);
+        let accusative_leaf_rows = summaries
+            .iter()
+            .filter(|summary| {
+                summary.full_path
+                    == "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest"
+            })
+            .count();
+        assert_eq!(accusative_leaf_rows, 1);
+        let repeated_accusative_leaf_rows = summaries
+            .iter()
+            .filter(|summary| {
+                summary.full_path
+                    == "Core::Polski::Przypadki (Cases)::Biernik (Accusative)::ClozeTest (2)"
+            })
+            .count();
+        assert_eq!(repeated_accusative_leaf_rows, 1);
     }
 
     #[tokio::test]

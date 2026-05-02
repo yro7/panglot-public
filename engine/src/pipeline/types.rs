@@ -21,6 +21,15 @@ pub struct GeneratedCard<P: std::fmt::Debug + Clone + Serialize + for<'de> Deser
     pub metadata: CardMetadata<P, F>,
 }
 
+/// A generated batch with a model-proposed leaf deck name.
+pub struct GeneratedBatch<
+    P: std::fmt::Debug + Clone + Serialize + for<'de> Deserialize<'de>,
+    F = (),
+> {
+    pub suggested_deck_name: String,
+    pub cards: Vec<GeneratedCard<P, F>>,
+}
+
 /// Configuration for LLM call parameters (temperatures, token limits, timeouts).
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
@@ -47,6 +56,12 @@ pub struct DynGeneratedCard {
     pub source_node_name: String,
     pub ipa: String,
     pub audio_path: Option<String>,
+}
+
+/// A generated card batch with language-specific types erased.
+pub struct DynGeneratedBatch {
+    pub suggested_deck_name: String,
+    pub cards: Vec<DynGeneratedCard>,
 }
 
 /// Converts a list of `DynGeneratedCard` into a `NewDeckData` ready for storage/export.

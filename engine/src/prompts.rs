@@ -200,6 +200,8 @@ impl PromptConfig {
                     "path",
                     "level",
                     "context_description",
+                    "deck_title_iso",
+                    "deck_title_language",
                 ];
 
                 if !known_placeholders.contains(&placeholder.as_str()) {
@@ -224,6 +226,22 @@ fn load_yaml<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, PromptBuilde
 }
 
 // ----- Helper Functions -----
+
+fn app_locale_name(value: &str) -> String {
+    match value
+        .split('-')
+        .next()
+        .unwrap_or(value)
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "ar" => "Arabic".to_string(),
+        "de" => "German".to_string(),
+        "en" => "English".to_string(),
+        "fr" => "French".to_string(),
+        other => other.to_string(),
+    }
+}
 
 /// Wraps content in XML tags
 pub fn wrap_tag(tag: &str, content: &str) -> String {
@@ -285,6 +303,8 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
             .explanation_language_iso
             .clone();
         let ui_lang_name = lc_core::user::explanation_language_name_from_iso(&ui_lang_iso_code);
+        let deck_title_iso_code = self.request.ui_locale.trim().to_ascii_lowercase();
+        let deck_title_language_name = app_locale_name(&deck_title_iso_code);
 
         let directives = self.language.generation_directives().unwrap_or("");
 
@@ -323,6 +343,8 @@ impl<'a, L: Language> GeneratorContext<'a, L> {
         global_ctx.insert("difficulty", difficulty_val.as_str());
         global_ctx.insert("iso", ui_lang_iso_code.as_str());
         global_ctx.insert("name", &ui_lang_name);
+        global_ctx.insert("deck_title_iso", deck_title_iso_code.as_str());
+        global_ctx.insert("deck_title_language", deck_title_language_name.as_str());
         global_ctx.insert("prompt", prompt_str);
         global_ctx.insert("count", count_val.as_str());
 
@@ -515,6 +537,7 @@ mod tests {
                 explanation_language_iso: "eng".to_string(),
                 known_languages: Vec::new(),
             },
+            ui_locale: "fr".to_string(),
             user_prompt: Some("Use funny sentences.".to_string()),
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -541,12 +564,14 @@ mod tests {
         assert!(prompt.contains("Focus on the accusative case."));
         assert!(prompt.contains("Number of distinct cards to generate: 3"));
         assert!(prompt.contains("English"));
+        assert!(prompt.contains("locale fr"));
+        assert!(prompt.contains("French"));
         assert!(
             prompt.contains("eng"),
             "ISO 639-3 code should be dynamically resolved from 'English'"
         );
         assert!(prompt.contains("Use funny sentences."));
-        assert!(prompt.contains("EXACTLY 3 distinct objects"));
+        assert!(prompt.contains("EXACTLY 3 distinct card objects"));
         assert!(prompt.contains("<target_language>"));
         assert!(prompt.contains("</target_language>"));
         assert!(prompt.contains("<skill_context>"));
@@ -570,6 +595,7 @@ mod tests {
                     level: FluencyLevel::Fluent,
                 }],
             },
+            ui_locale: "fr".to_string(),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),
@@ -635,6 +661,7 @@ mod tests {
                 explanation_language_iso: "eng".to_string(),
                 known_languages: Vec::new(),
             },
+            ui_locale: "en".to_string(),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: Vec::<ExtractedFeature<langs::PolishMorphology>>::new(),

@@ -56,6 +56,7 @@ pub struct GenerationRecord {
     pub difficulty: i64,
     pub user_prompt: Option<String>,
     pub default_deck_name: String,
+    pub suggested_deck_name: Option<String>,
     pub materialized_deck_id: Option<String>,
     pub created_at: i64,
 }
@@ -134,6 +135,7 @@ pub struct NewGeneration {
     pub difficulty: i64,
     pub user_prompt: Option<String>,
     pub default_deck_name: String,
+    pub suggested_deck_name: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
     pub cards: Vec<NewGenerationCard>,
@@ -190,7 +192,9 @@ pub(super) fn row_to_deck_summary(row: &SqliteRow) -> DeckSummaryRecord {
         id: row.get("id"),
         parent_deck_id: row.get("parent_id"),
         name: row.get("name"),
-        full_path: row.get::<Option<String>, _>("full_path").unwrap_or_default(),
+        full_path: row
+            .get::<Option<String>, _>("full_path")
+            .unwrap_or_default(),
         target_language_iso: row.get("target_language"),
         counts: DeckCountsRecord {
             total_cards: row.get::<i64, _>("total_cards") as usize,
@@ -232,6 +236,7 @@ pub(super) fn row_to_generation(row: &SqliteRow) -> GenerationRecord {
         difficulty: row.get("difficulty"),
         user_prompt: row.get("user_prompt"),
         default_deck_name: row.get("default_deck_name"),
+        suggested_deck_name: row.get("suggested_deck_name"),
         materialized_deck_id: row.get("materialized_deck_id"),
         created_at: row.get("created_at"),
     }

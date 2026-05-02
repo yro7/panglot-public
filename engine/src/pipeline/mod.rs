@@ -10,6 +10,6 @@ pub use self::core::Pipeline;
 pub use builder::PipelineBuilder;
 pub use dyn_trait::DynPipeline;
 pub use types::{
-    DynGeneratedCard, DynPromptPreview, GeneratedCard, LexiconStatus, PipelineConfig,
-    cards_to_deck_data,
+    DynGeneratedBatch, DynGeneratedCard, DynPromptPreview, GeneratedBatch, GeneratedCard,
+    LexiconStatus, PipelineConfig, cards_to_deck_data,
 };

@@ -13,6 +13,7 @@ pub struct GenerationRequest<L: Language> {
     pub num_cards: u32,
     pub difficulty: u8,
     pub learner_profile: lc_core::user::LearnerProfile,
+    pub ui_locale: String,
     pub user_prompt: Option<String>,
     /// Reserved for roadmap: transliteration script to request from the LLM.
     pub transliteration: Option<String>,
@@ -62,6 +63,7 @@ mod tests {
                 explanation_language_iso: "fra".to_string(),
                 known_languages: Vec::new(),
             },
+            ui_locale: "fr".to_string(),
             user_prompt: None,
             transliteration: None,
             injected_vocabulary: vec![],

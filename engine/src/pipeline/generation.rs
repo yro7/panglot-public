@@ -10,7 +10,7 @@ use crate::llm_utils::clean_llm_json;
 use crate::skill_tree::SkillNode;
 
 use super::core::Pipeline;
-use super::types::GeneratedCard;
+use super::types::GeneratedBatch;
 
 impl<L: Language + Send + Sync> Pipeline<L>
 where
@@ -41,9 +41,12 @@ where
         skill_node_id: &str,
         llm_semaphore: Arc<Semaphore>,
         post_process_semaphore: Arc<Semaphore>,
-    ) -> Result<Vec<GeneratedCard<L::Morphology, L::GrammaticalFunction>>> {
+    ) -> Result<GeneratedBatch<L::Morphology, L::GrammaticalFunction>> {
         if req.num_cards == 0 {
-            return Ok(Vec::new());
+            return Ok(GeneratedBatch {
+                suggested_deck_name: String::new(),
+                cards: Vec::new(),
+            });
         }
 
         // --- Call 1: Content Generation (Batched) ---
@@ -60,16 +63,22 @@ where
 
         let item_schema = crate::card_models::AnyCard::schema_json_value::<L>(req.card_model_id);
         // LLM structured outputs (Anthropic tool_use and OpenAI JSON schema) strictly require
-        // the top-level schema to be an object, not an array. We wrap it in a `cards` property.
-        let array_schema = serde_json::json!({
+        // the top-level schema to be an object. The generator names the batch while cards stay
+        // under a `cards` property.
+        let batch_schema = serde_json::json!({
             "type": "object",
             "properties": {
+                "deck_title": {
+                    "type": "string",
+                    "description": "Short leaf deck title in the user's UI language. Do not include the full hierarchy or path separators."
+                },
                 "cards": {
                     "type": "array",
                     "items": item_schema,
                 }
             },
-            "required": ["cards"],
+            "required": ["deck_title", "cards"],
+            "additionalProperties": false,
         });
 
         let raw_json = {
@@ -82,7 +91,7 @@ where
                 .read()
                 .map_err(|e| anyhow::anyhow!("LLM backend lock poisoned: {}", e))?
                 .clone();
-            let rig_schema: schemars::Schema = serde_json::from_value(array_schema)?;
+            let rig_schema: schemars::Schema = serde_json::from_value(batch_schema)?;
 
             tokio::time::timeout(
                 self.llm_call_timeout,
@@ -114,8 +123,14 @@ where
             "Cleaned LLM content output"
         );
 
-        // --- Parse the wrapper object and extract the array of cards ---
+        // --- Parse the wrapper object and extract the suggested title + cards ---
         let mut parsed_root: serde_json::Value = serde_json::from_str(cleaned_json)?;
+        let suggested_deck_name = parsed_root
+            .get("deck_title")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         let json_array: Vec<serde_json::Value> =
             if let Some(arr) = parsed_root.get_mut("cards").and_then(|v| v.as_array_mut()) {
                 std::mem::take(arr)
@@ -181,6 +196,9 @@ where
 
         let generated_cards = futures::future::join_all(fetch_tasks).await;
 
-        Ok(generated_cards)
+        Ok(GeneratedBatch {
+            suggested_deck_name,
+            cards: generated_cards,
+        })
     }
 }
